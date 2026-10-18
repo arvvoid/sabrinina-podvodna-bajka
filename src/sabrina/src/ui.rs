@@ -390,7 +390,7 @@ fn draw(
             b.label(
                 rect(100.0, 94.0, 450.0, 30.0),
                 17.0,
-                tr("A REMAKE BY LUKA DEZULOVIC", lang),
+                tr("A REMAKE BY LUKA DEŽULOVIĆ", lang),
                 None,
             );
             b.label(
