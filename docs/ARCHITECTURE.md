@@ -26,6 +26,8 @@ Score feedback lives in the simulation snapshot, not the audio event queue; audi
 
 ## Rendering and animation
 
+Backend selection is fixed: Windows uses Direct3D 12, Linux uses Vulkan, and Apple targets use Metal. Renderer environment variables cannot select a different backend, and OpenGL support is not enabled. Windows x86_64 MSVC builds statically link DXC so rendering does not depend on a compiler DLL found on the player's machine or working directory. Keep DX12 indirect-call validation enabled; the Vulkan/Metal paths do not need it.
+
 Loading uses a plain full-viewport background with localized UI rather than text baked into splash artwork. Model dependency progress fills 90% of the bar; the menu opens only once the 77 animated character instances (Sabrina, 72 fish and four jellyfish) are ready. The language chooser lists all three native language names explicitly and supports the shared mouse/keyboard/controller navigation.
 
 `Actor` identifies a persistent entity root; `ActorVisual` holds its model and orientation. Each animated model has its own skeleton but shares meshes, textures, animation graphs and clip maps. Fish swap shared normal/damage material handles. Screen-size LODs retain the same skin and materials, with hysteresis to avoid flickering between levels.

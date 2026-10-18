@@ -54,32 +54,11 @@ fn main() {
             };
         }
     }
-    let backend = if cfg!(target_os = "macos") || cfg!(target_os = "ios") {
-        Backends::METAL
-    } else if cfg!(target_os = "windows") {
-        Backends::VULKAN | Backends::DX12
-    } else {
-        Backends::VULKAN
-    };
-    let backend = std::env::var("SABRINA_RENDERER")
-        .ok()
-        .map(|s| match s.as_str() {
-            "gl" => Backends::GL,
-            "dx12" => Backends::DX12,
-            "metal" => Backends::METAL,
-            _ => Backends::VULKAN,
-        })
-        .unwrap_or(backend);
-    let mut gpu = WgpuSettings {
-        backends: Some(backend),
-        ..default()
-    };
-    if !backend.contains(Backends::DX12) {
-        // The DX12-only indirect validation workaround requires compute support
-        // that native GL 3.3 lacks. Keep ordinary validation enabled.
-        gpu.instance_flags
-            .remove(bevy::render::settings::InstanceFlags::VALIDATION_INDIRECT_CALL);
-    }
+    let gpu = gpu_settings();
+    println!(
+        "RENDER CONFIG: {:?}, DX12 compiler {:?}",
+        gpu.backends, gpu.dx12_shader_compiler
+    );
     let external_assets = match std::env::var("SABRINA_ASSETS") {
         Ok(path) => {
             let directory = std::path::Path::new(&path)
@@ -126,8 +105,8 @@ fn main() {
         Startup,
         |adapter: Res<bevy::render::renderer::RenderAdapterInfo>| {
             println!(
-                "RENDER DEVICE: {} ({:?}), {}",
-                adapter.name, adapter.backend, adapter.driver_info
+                "RENDER DEVICE: {} ({:?}), driver {} {}",
+                adapter.name, adapter.backend, adapter.driver, adapter.driver_info
             );
         },
     );
@@ -171,4 +150,65 @@ fn main() {
         app.add_plugins(bevy::render::diagnostic::RenderDiagnosticsPlugin);
     }
     app.run();
+}
+
+fn gpu_settings() -> WgpuSettings {
+    let backend = if cfg!(target_os = "macos") || cfg!(target_os = "ios") {
+        Backends::METAL
+    } else if cfg!(target_os = "windows") {
+        Backends::DX12
+    } else {
+        Backends::VULKAN
+    };
+    let mut gpu = WgpuSettings {
+        backends: Some(backend),
+        ..default()
+    };
+    #[cfg(all(target_os = "windows", target_arch = "x86_64", target_env = "msvc"))]
+    {
+        gpu.dx12_shader_compiler = bevy::render::settings::Dx12Compiler::StaticDxc;
+    }
+    // WgpuSettings defaults also inspect WGPU_BACKEND. Keep the validation
+    // required by our actual backend even when that variable requests another.
+    if backend == Backends::DX12 {
+        gpu.instance_flags
+            .insert(bevy::render::settings::InstanceFlags::VALIDATION_INDIRECT_CALL);
+    } else {
+        gpu.instance_flags
+            .remove(bevy::render::settings::InstanceFlags::VALIDATION_INDIRECT_CALL);
+    }
+    gpu
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn renderer_is_native_without_backend_fallbacks() {
+        let gpu = gpu_settings();
+        let expected = if cfg!(target_os = "macos") || cfg!(target_os = "ios") {
+            Backends::METAL
+        } else if cfg!(target_os = "windows") {
+            Backends::DX12
+        } else {
+            Backends::VULKAN
+        };
+        assert_eq!(gpu.backends, Some(expected));
+        assert!(!gpu.backends.unwrap().contains(Backends::GL));
+        assert_eq!(
+            gpu.instance_flags
+                .contains(bevy::render::settings::InstanceFlags::VALIDATION_INDIRECT_CALL),
+            expected == Backends::DX12
+        );
+    }
+
+    #[cfg(all(target_os = "windows", target_arch = "x86_64", target_env = "msvc"))]
+    #[test]
+    fn windows_uses_embedded_dxc_without_a_runtime_dll() {
+        assert!(matches!(
+            gpu_settings().dx12_shader_compiler,
+            bevy::render::settings::Dx12Compiler::StaticDxc
+        ));
+    }
 }
