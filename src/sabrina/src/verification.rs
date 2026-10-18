@@ -66,7 +66,13 @@ fn drive(
     mut events: ResMut<FrameEvents>,
     mut exit: MessageWriter<AppExit>,
     texts: Query<&Text>,
+    controller_checks: (
+        Query<(&TextSpan, &TextColor)>,
+        Query<Entity, With<TestPad>>,
+        Res<crate::controls::Hints>,
+    ),
 ) {
+    let (spans, test_pads, hints) = controller_checks;
     if !options.verify
         || !ui.loaded
         || rigs.iter().count() < 1 + reef_sim::FISH_COUNT + reef_sim::JELLY_COUNT
@@ -87,7 +93,7 @@ fn drive(
         1 => {
             assert_eq!(ui.screen, Screen::Playing);
             check.initial = simulation.0.sabrina.motion.pos;
-            commands.spawn((Gamepad::default(), TestPad));
+            commands.spawn((Gamepad::default(), Name::new("Xbox Controller"), TestPad));
         }
         2..=40 => {
             keys.press(KeyCode::KeyW);
@@ -381,6 +387,46 @@ fn drive(
             println!(
                 "BEVY CHECK OK: language chooser selects Croatian and Italian with mouse and keyboard"
             );
+            crate::app::begin(
+                &mut simulation.0,
+                &mut ui,
+                &crate::settings::Preferences::default(),
+                true,
+            );
+        }
+        545 => {
+            assert_eq!(hints.style, crate::controls::Style::Xbox);
+            assert!(spans.iter().any(|(span, color)| {
+                span.0 == " · A"
+                    && color.0
+                        == crate::controls::Style::Xbox
+                            .binding(crate::controls::Control::Crystal)
+                            .color
+            }));
+            commands
+                .entity(test_pads.single().unwrap())
+                .insert(Name::new("DualSense Wireless Controller"));
+        }
+        550 => {
+            assert_eq!(hints.style, crate::controls::Style::PlayStation);
+            for symbol in [" · ×", " · □", " · ○"] {
+                assert!(spans.iter().any(|(span, _)| span.0 == symbol));
+            }
+            commands
+                .entity(test_pads.single().unwrap())
+                .remove::<Gamepad>();
+        }
+        555 => {
+            assert_eq!(hints.style, crate::controls::Style::Keyboard);
+            assert!(
+                !spans
+                    .iter()
+                    .any(|(span, _)| [" · A", " · ×", " · □", " · ○"].contains(&span.0.as_str()))
+            );
+            assert!(spans.iter().any(|(span, _)| span.0.contains("WASD")));
+            println!(
+                "BEVY CHECK OK: coloured Xbox/PlayStation hints and keyboard fallback update live"
+            );
             println!("BEVY INPUT INTEGRATION COMPLETE");
             exit.write(AppExit::Success);
         }
@@ -405,7 +451,9 @@ fn check_pose(
     )>,
     materials: Res<Assets<StandardMaterial>>,
     ui_images: Query<&ImageNode>,
-    ui_texts: Query<(&TextColor, Option<&TextShadow>)>,
+    ui_texts: Query<(&TextColor, Option<&TextShadow>), With<Text>>,
+    ui_fills: Query<&BackgroundColor>,
+    reef: Res<Assets<crate::visuals::ReefMaterial>>,
 ) {
     if !options.verify {
         return;
@@ -426,6 +474,39 @@ fn check_pose(
                 .all(|(color, shadow)| color.alpha() == 1.0 && shadow.is_some())
         );
         println!("BEVY CHECK OK: HUD backgrounds translucent; text opaque with contrast shadows");
+        assert!(
+            ui_fills
+                .iter()
+                .filter(|color| { (color.0.alpha() - crate::ui::HUD_METER_ALPHA).abs() < 0.001 })
+                .count()
+                >= 4
+        );
+        println!("BEVY CHECK OK: health and ability progress fills are semi-transparent");
+        assert_eq!(
+            reef.iter()
+                .filter(|(_, material)| material.base.alpha_mode == AlphaMode::Blend)
+                .count(),
+            1
+        );
+        assert_eq!(
+            reef.iter()
+                .filter(|(_, material)| material.base.alpha_mode == AlphaMode::Opaque)
+                .count(),
+            1
+        );
+        assert!(reef.iter().all(|(_, material)| material.extension.sabrina.w
+            == if material.base.alpha_mode == AlphaMode::Blend {
+                1.0
+            } else {
+                0.0
+            }));
+        println!("BEVY CHECK OK: only the near-left reef mesh enables the local player reveal");
+    }
+    if check.frame == 525 {
+        assert!(
+            reef.iter()
+                .all(|(_, material)| material.extension.sabrina.w == 0.0)
+        );
     }
     if check.frame == 480 {
         assert_eq!(

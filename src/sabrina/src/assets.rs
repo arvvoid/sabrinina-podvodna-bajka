@@ -358,6 +358,32 @@ pub(crate) fn finish_load(
     if options.verify {
         begin(&mut simulation.0, &mut ui, &preferences, true);
     }
+    if let Some(name) = match options.capture.as_deref() {
+        Some("xbox") => Some("Xbox Controller"),
+        Some("playstation") => Some("DualSense Wireless Controller"),
+        Some("generic-pad") => Some("Generic USB Controller"),
+        _ => None,
+    } {
+        commands.spawn((Gamepad::default(), Name::new(name)));
+    }
+    if options
+        .capture
+        .as_deref()
+        .is_some_and(|kind| kind.starts_with("occlusion"))
+    {
+        reef_sim::reset(
+            &mut simulation.0,
+            27,
+            reef_sim::Settings {
+                aquarium: true,
+                ..default()
+            },
+        );
+        simulation.0.sabrina.motion.pos = reef_sim::v(-10.0, 3.5);
+        for fish in &mut simulation.0.fish {
+            fish.life.active = false;
+        }
+    }
     info!("All 16 finished GLB assets loaded");
 }
 

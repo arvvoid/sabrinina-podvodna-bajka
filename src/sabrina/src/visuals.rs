@@ -70,6 +70,8 @@ impl Material for WaterMaterial {
 pub struct ReefExtension {
     #[uniform(100)]
     pub settings: Vec4,
+    #[uniform(101)]
+    pub sabrina: Vec4,
 }
 
 impl MaterialExtension for ReefExtension {
@@ -95,7 +97,7 @@ type CrystalMaterial = ExtendedMaterial<StandardMaterial, CrystalExtension>;
 #[derive(Component)]
 struct MagicLight;
 
-type ReefMaterial = ExtendedMaterial<StandardMaterial, ReefExtension>;
+pub(crate) type ReefMaterial = ExtendedMaterial<StandardMaterial, ReefExtension>;
 
 #[derive(Component, Clone, Copy)]
 pub(crate) enum Effect {
@@ -455,14 +457,20 @@ fn setup(
 fn bind_reef(
     mut commands: Commands,
     query: Query<
-        (Entity, &CharacterSurface, &MeshMaterial3d<StandardMaterial>),
+        (
+            Entity,
+            &CharacterSurface,
+            &MeshMaterial3d<StandardMaterial>,
+            &ChildOf,
+        ),
         Added<CharacterSurface>,
     >,
     standard: Res<Assets<StandardMaterial>>,
     mut reef: ResMut<Assets<ReefMaterial>>,
     mut crystal: ResMut<Assets<CrystalMaterial>>,
+    names: Query<&Name>,
 ) {
-    for (e, surface, handle) in &query {
+    for (e, surface, handle, parent) in &query {
         if surface.actor == Actor::Crystal
             && let Some(base) = standard.get(&handle.0)
         {
@@ -483,13 +491,21 @@ fn bind_reef(
             continue;
         }
         if let Some(base) = standard.get(&handle.0) {
+            let mut base = base.clone();
+            if names
+                .get(parent.parent())
+                .is_ok_and(|name| name.as_str() == "Reef_Near_Left")
+            {
+                base.alpha_mode = AlphaMode::Blend;
+            }
             commands
                 .entity(e)
                 .remove::<MeshMaterial3d<StandardMaterial>>()
                 .insert(MeshMaterial3d(reef.add(ExtendedMaterial {
-                    base: base.clone(),
+                    base,
                     extension: ReefExtension {
                         settings: Vec4::new(0.0, 1.0, 1.0, 0.0),
+                        sabrina: Vec4::ZERO,
                     },
                 })));
         }
@@ -933,6 +949,7 @@ fn sunlight_weight(shadow_layer: bool, quality: u8) -> f32 {
 fn lighting(
     preferences: Res<Preferences>,
     ui: Res<SessionUi>,
+    rendered: Res<Presentation>,
     mut sun: Query<(&Sun, &mut DirectionalLight, &mut Transform)>,
     options: Res<Options>,
     mut shadow_map: ResMut<DirectionalLightShadowMap>,
@@ -977,6 +994,20 @@ fn lighting(
         }
     }
     for (_, m) in reef.iter_mut() {
+        let position = rendered.0.sabrina.motion.pos;
+        m.extension.sabrina = Vec4::new(
+            position.x,
+            position.y,
+            0.0,
+            if ui.started
+                && m.base.alpha_mode == AlphaMode::Blend
+                && options.capture.as_deref() != Some("occlusion-solid")
+            {
+                1.0
+            } else {
+                0.0
+            },
+        );
         m.extension.settings = Vec4::new(
             ui.elapsed,
             if preferences.reduced_motion { 0.0 } else { 1.0 },

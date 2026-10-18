@@ -12,6 +12,7 @@ mod assets;
 mod audio;
 
 mod build_info;
+mod controls;
 
 mod embedded_assets;
 

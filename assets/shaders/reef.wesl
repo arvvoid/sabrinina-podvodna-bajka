@@ -7,6 +7,7 @@ import bevy_pbr::render::{
     pbr_functions::{apply_pbr_lighting, main_pass_post_lighting_processing},
 };
 @group(constants::MATERIAL_BIND_GROUP) @binding(100) var<uniform> settings: vec4<f32>;
+@group(constants::MATERIAL_BIND_GROUP) @binding(101) var<uniform> sabrina: vec4<f32>;
 
 @fragment
 fn fragment(in: VertexOutput, @builtin(front_facing) front: bool) -> FragmentOutput {
@@ -24,5 +25,9 @@ fn fragment(in: VertexOutput, @builtin(front_facing) front: bool) -> FragmentOut
     var output: FragmentOutput;
     output.color = apply_pbr_lighting(pbr);
     output.color = main_pass_post_lighting_processing(pbr, output.color);
+    // Only the named foreground mesh blends, and only close to Sabrina's silhouette.
+    let distance = length((world.xy - sabrina.xy) / vec2<f32>(2.8, 2.5));
+    let reveal = (1.0 - smoothstep(0.35, 1.0, distance)) * sabrina.w;
+    output.color.a *= 1.0 - 0.25 * reveal * step(sabrina.z + 0.2, world.z);
     return output;
 }

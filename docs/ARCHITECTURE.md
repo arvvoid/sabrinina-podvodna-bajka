@@ -38,11 +38,16 @@ Jellyfish skin uses alpha blending; the separate face remains opaque. Jellyfish 
 
 Water, reef caustics and crystal materials use WESL files authored in `assets/shaders/` and embedded in the executable. Quality settings select 3, 6 or 12 water-light samples. Shader constants are calculated once per frame.
 
+Only primitives under the `Reef_Near_Left` glTF node use alpha blending. The reef shader receives Sabrina's interpolated position and softens opacity from 100% to a minimum of 75% inside a small ellipse around her, only on geometry in front of her. The main reef remains opaque, and the reveal is disabled in the menu. Collision geometry is unchanged.
+
+`controls.rs` derives presentation-only hints from connected `Gamepad` components and their OS-provided names/vendor IDs. A recognized Sony controller uses PlayStation symbols; Xbox/XInput devices use Xbox letters; unknown devices use neutral positional labels. Hints stick to the selected connected pad until another pad is used or it disconnects. Without any pads they return to keyboard/mouse. No gameplay button mappings are changed. HUD buttons, footer and the localized guide share the same bindings and explicit font, including coloured glyphs.
+
 ## Code map
 
 | File in `src/sabrina/src/` | Responsibility |
 |---|---|
 | `app.rs` | Fixed update, input, actions and session transitions |
+| `controls.rs` | Controller identification, hotplug-aware bindings and button colours |
 | `presentation.rs` | Interpolated render snapshot |
 | `assets.rs` | Loading, shared resources, LODs, animation and attachments |
 | `embedded_assets.rs` | Default in-memory asset source backed by compiled-in bytes |
@@ -93,7 +98,7 @@ followed by `target/sabrina-build-tests`.
 
 ## Maintenance notes
 
-- In-game HUD panel/button backgrounds use 28% opacity so the reef stays visible. Text, icons and meter fills remain opaque; HUD text has a dark shadow for contrast. Menu/dialog backgrounds keep their original opacity.
+- In-game HUD panel/button backgrounds use 28% opacity and meter fills use 65%. Text and icons remain opaque; HUD text has a dark shadow for contrast. Menu/dialog backgrounds and the loading meter keep their original opacity.
 - The contact exporter reads and writes UTF-8 explicitly, including rustfmt's pipes, and emits LF line endings. This avoids Windows locale-dependent encoding failures in the copyright notice. Both CI workflows run regression tests with CP1252 defaults and real rustfmt.
 
 - UI layout is built by named screen helpers in `ui.rs`; `draw` handles rebuilding, while `actions` and `update` handle interaction and live HUD values. Pointer hit tests and the input verifier share the logical canvas dimensions.

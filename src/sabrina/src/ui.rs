@@ -4,6 +4,7 @@
 use crate::{
     app::{self, Options, PendingInput, Screen, SessionUi, Simulation},
     audio::AudioRequests,
+    controls::{Control, Hints, Style},
     settings::Preferences,
 };
 use bevy::{
@@ -18,6 +19,7 @@ use std::{collections::HashMap, sync::OnceLock};
 pub(crate) const CANVAS_WIDTH: f32 = 1600.0;
 pub(crate) const CANVAS_HEIGHT: f32 = 900.0;
 pub(crate) const HUD_BACKGROUND_ALPHA: f32 = 0.28;
+pub(crate) const HUD_METER_ALPHA: f32 = 0.65;
 
 fn table() -> &'static HashMap<String, [String; 3]> {
     static TRANSLATIONS: OnceLock<HashMap<String, [String; 3]>> = OnceLock::new();
@@ -128,6 +130,11 @@ pub struct ReefUiPlugin;
 impl Plugin for ReefUiPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Focus>()
+            .init_resource::<Hints>()
+            .add_systems(
+                PreUpdate,
+                crate::controls::update.after(bevy::input::InputSystems),
+            )
             .add_systems(PreUpdate, actions.after(crate::app::input))
             .add_systems(
                 Update,
@@ -144,6 +151,7 @@ struct Builder<'a, 'w, 's> {
     index: usize,
     font: Handle<Font>,
     background_alpha: f32,
+    controls: Style,
 }
 
 impl Builder<'_, '_, '_> {
@@ -230,6 +238,11 @@ impl Builder<'_, '_, '_> {
     }
 
     fn button(&mut self, r: Rect, text: &str, action: Action, primary: bool) {
+        let size = if self.background_alpha < 1.0 {
+            17.0
+        } else {
+            20.0
+        };
         let e = self.image(r, if primary { "button" } else { "button_teal" });
         self.commands.entity(e).insert(Hit {
             rect: r,
@@ -240,7 +253,7 @@ impl Builder<'_, '_, '_> {
         self.index += 1;
         let label = self.label(
             rect(r.x + 12.0, r.y + 12.0, r.w - 24.0, r.h - 16.0),
-            20.0,
+            size,
             tr(text, self.lang),
             None,
         );
@@ -257,6 +270,59 @@ impl Builder<'_, '_, '_> {
                 .entity(label)
                 .insert(TextColor(Color::srgb(0.20, 0.17, 0.18)));
         }
+        if self.background_alpha < 1.0 {
+            let control = match action {
+                Action::Song => Some(Control::Song),
+                Action::Wave => Some(Control::Wave),
+                Action::Pause => Some(Control::Pause),
+                _ => None,
+            };
+            if let Some(control) = control
+                && self.controls != Style::Generic
+            {
+                self.binding_span(label, control, size, true);
+            }
+        }
+    }
+
+    fn binding_span(&mut self, label: Entity, control: Control, size: f32, compact: bool) {
+        let mut binding = self.controls.binding(control);
+        if compact && self.controls == Style::Keyboard && matches!(control, Control::Wave) {
+            binding.label = "F";
+        }
+        self.commands.entity(label).with_children(|parent| {
+            parent.spawn((
+                TextSpan::new(format!(" · {}", tr(binding.label, self.lang))),
+                TextColor(binding.color),
+                TextFont {
+                    font: self.font.clone().into(),
+                    font_size: FontSize::Px(size),
+                    ..default()
+                },
+            ));
+        });
+    }
+
+    fn control_hints(&mut self, r: Rect, size: f32) {
+        for (index, (title, control)) in [
+            ("Swim", Control::Swim),
+            ("Crystal", Control::Crystal),
+            ("Song", Control::Song),
+            ("Wave", Control::Wave),
+            ("Pause", Control::Pause),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let width = r.w / 5.0;
+            let label = self.label(
+                rect(r.x + index as f32 * width, r.y, width, r.h),
+                size,
+                tr(title, self.lang),
+                None,
+            );
+            self.binding_span(label, control, size, false);
+        }
     }
 
     fn meter(&mut self, r: Rect, color: Color, key: &'static str) {
@@ -270,7 +336,15 @@ impl Builder<'_, '_, '_> {
         self.commands.entity(self.root).add_child(e);
         let e = self
             .commands
-            .spawn((r.node(), BackgroundColor(color), Meter(key, r.w)))
+            .spawn((
+                r.node(),
+                BackgroundColor(color.with_alpha(if self.background_alpha < 1.0 {
+                    HUD_METER_ALPHA
+                } else {
+                    1.0
+                })),
+                Meter(key, r.w),
+            ))
             .id();
         self.commands.entity(self.root).add_child(e);
     }
@@ -312,12 +386,13 @@ fn draw(
     window: Single<&Window, With<PrimaryWindow>>,
     mut scale: ResMut<UiScale>,
     options: Res<Options>,
+    hints: Res<Hints>,
 ) {
     let zoom = (window.width() / CANVAS_WIDTH).min(window.height() / CANVAS_HEIGHT);
     scale.0 = zoom;
     // Rebuild only when layout or settings change; HUD values update separately.
     let key = format!(
-        "{:?}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}",
+        "{:?}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{:?}",
         ui.screen,
         preferences.language,
         preferences.quality,
@@ -331,7 +406,8 @@ fn draw(
         preferences.voice,
         preferences.best,
         window.width(),
-        window.height()
+        window.height(),
+        hints.style
     );
     if key == focus.key {
         return;
@@ -365,6 +441,7 @@ fn draw(
         index: 0,
         font: server.load("fonts/DejaVuSans.ttf"),
         background_alpha: 1.0,
+        controls: hints.style,
     };
     let lang = preferences.language;
     if options
@@ -426,7 +503,6 @@ fn draw(
 
 fn draw_hud(builder: &mut Builder<'_, '_, '_>, screen: Screen) {
     builder.background_alpha = HUD_BACKGROUND_ALPHA;
-    let lang = builder.lang;
     builder.panel(rect(24.0, 22.0, 490.0, 160.0));
     builder.label(rect(48.0, 42.0, 450.0, 32.0), 24.0, "", Some("phase"));
     builder.label(rect(48.0, 80.0, 450.0, 28.0), 18.0, "", Some("stats"));
@@ -450,32 +526,14 @@ fn draw_hud(builder: &mut Builder<'_, '_, '_>, screen: Screen) {
     }
     builder.image(rect(240.0, 779.0, 58.0, 58.0), "shell");
     builder.image(rect(1315.0, 806.0, 58.0, 58.0), "star");
-    builder.label(
-        rect(210.0, 864.0, 1180.0, 32.0),
-        17.0,
-        tr(
-            "Mouse / WASD / stick · swim     Click / Space / A · crystal     Q / X · song     RMB / F / B · wave",
-            lang,
-        ),
-        None,
-    );
+    builder.control_hints(rect(40.0, 864.0, 1520.0, 32.0), 17.0);
     builder.label(rect(500.0, 130.0, 600.0, 90.0), 21.0, "", Some("score"));
     builder.label(rect(500.0, 225.0, 600.0, 160.0), 22.0, "", Some("reward"));
     builder.label(rect(350.0, 700.0, 900.0, 48.0), 23.0, "", Some("notice"));
     builder.label(rect(350.0, 748.0, 900.0, 36.0), 19.0, "", Some("caption"));
     if screen == Screen::Playing {
-        builder.button(
-            rect(1020.0, 24.0, 135.0, 50.0),
-            "Wave · F",
-            Action::Wave,
-            false,
-        );
-        builder.button(
-            rect(1170.0, 24.0, 225.0, 50.0),
-            "♪ Sing · Q / X",
-            Action::Song,
-            false,
-        );
+        builder.button(rect(1020.0, 24.0, 135.0, 50.0), "Wave", Action::Wave, false);
+        builder.button(rect(1170.0, 24.0, 225.0, 50.0), "Sing", Action::Song, false);
         builder.button(rect(1415.0, 24.0, 160.0, 50.0), "II", Action::Pause, false);
     }
     builder.background_alpha = 1.0;
@@ -714,7 +772,18 @@ fn draw_help_or_credits(builder: &mut Builder<'_, '_, '_>, screen: Screen) {
         None,
     );
     let text = if help {
-        tr("Combat guide", lang)
+        format!(
+            "{}\n\n{}",
+            tr(
+                if builder.controls == Style::Keyboard {
+                    "Keyboard help extras"
+                } else {
+                    "Controller help extras"
+                },
+                lang
+            ),
+            tr("Combat rules", lang)
+        )
     } else {
         [
             include_str!("../../../assets/credits/credits_en.txt"),
@@ -723,8 +792,11 @@ fn draw_help_or_credits(builder: &mut Builder<'_, '_, '_>, screen: Screen) {
         ][lang]
             .into()
     };
+    if help {
+        builder.control_hints(rect(280.0, 173.0, 1040.0, 52.0), 15.0);
+    }
     builder.label(
-        rect(280.0, 180.0, 1040.0, 500.0),
+        rect(280.0, if help { 235.0 } else { 180.0 }, 1040.0, 440.0),
         if help { 17.0 } else { 23.0 },
         text,
         None,
@@ -1175,7 +1247,7 @@ fn update(
                 if sabrina.wave.cooldown > 0.0 {
                     format!("{:.1} s", sabrina.wave.cooldown)
                 } else {
-                    tr("ready · F / B", language)
+                    tr("ready", language)
                 }
             ),
             "caption" => ui.caption.clone(),
@@ -1259,9 +1331,9 @@ fn update(
                 if sabrina.song.locked {
                     "Song recharging…"
                 } else if sabrina.song.active {
-                    "♪ Stop singing · Q / X"
+                    "Stop singing"
                 } else {
-                    "♪ Sing · Q / X"
+                    "Sing"
                 },
                 language,
             );

@@ -45,14 +45,18 @@ Scoring rewards actions, not waiting: **1 point per actual damage**, **100 per d
 
 Settings offer Gentle and Lively difficulty, encounter pacing and a peaceful, noncompetitive aquarium mode. The visitor-limit setting applies to rounds 1–9 only. Best scores from the old scoring rules are reset once; the saved best remains a local single-round record, not a normalized leaderboard across custom settings. The obsolete spoken instructions have been removed; the localized written guide describes the current rules. Character voices and song remain.
 
-| Action | Mouse / keyboard | Controller |
-|---|---|---|
-| Swim | Pointer, WASD / arrows | Left stick |
-| Crystal | Left click, Space / E | A / bottom button or right shoulder |
-| Song | Q or HUD button | X / left button |
-| Wave | Right click, F or HUD button | B / right button |
-| Pause | Escape | Start |
-| Fullscreen | F11 or Settings | Settings |
+| Action | Mouse / keyboard | Xbox | PlayStation |
+|---|---|---|---|
+| Swim | Pointer, WASD / arrows | Left stick | Left stick |
+| Crystal | Left click, Space / E | A (green), or right shoulder | × (blue), or right shoulder |
+| Song | Q or HUD button | X (blue) | □ (pink) |
+| Wave | Right click, F or HUD button | B (red) | ○ (red) |
+| Pause | Escape | Start / Menu | Options |
+| Fullscreen | F11 or Settings | Settings | Settings |
+
+HUD and help hints follow the connected controller, including button colours. With multiple controllers, hints follow the one most recently used; disconnecting all controllers restores keyboard/mouse hints. Unrecognized controllers use neutral bottom/left/right button labels. Detection uses the device name and USB vendor ID reported by the OS; remappers such as Steam Input may expose a different controller type. Keyboard/mouse input remains available while a controller is connected.
+
+HUD backgrounds and progress fills are semi-transparent. The lower-left foreground reef fades only slightly around Sabrina when it covers her (at most 25% transparent), leaving the rest of the scenery solid.
 
 English, Croatian and Italian are available through the main menu's **Language… / Jezik… / Lingua…** button. Select a language by name in the chooser; a checkmark identifies the selected language. Graphics, sound, controls and best score are saved locally. The loading screen uses localized text and asset-loading progress, then waits for character instances before opening the menu. The first launch uses fullscreen and Balanced graphics. Balanced has subtle soft shadows; High adds finer shadows and 2× MSAA; Light reduces effects and disables shadows.
 
@@ -143,6 +147,8 @@ python3 tools/export_rust_contacts.py --check
 For visual checks, use `--capture-game`, `--capture-visit`, `--capture-throw`, `--capture-combat` (bubble, visitor health and hit feedback), `--capture-pose-idle` or `--capture-graphics-high`. `--capture-school --fullhd` runs a 72-fish stress scene and reports frame times. Captures go to the system temporary directory and do not save preferences.
 
 `--capture-boot`, `--capture-language`, `--capture-victory` and `--capture-finale` preview the loading screen, language chooser, victory screen and four-visitor final round. `--capture-demo` runs a seeded, scripted 20-second gameplay scene for video recording, using normal movement and spell rules in a borderless window; it does not record video itself. None of these modes save preferences.
+
+`--capture-xbox`, `--capture-playstation` and `--capture-generic-pad` preview connected-device hints using synthetic controllers. `--capture-occlusion` and `--capture-occlusion-solid` compare the subtle foreground reveal with the solid reef.
 
 ## Next steps
 
