@@ -68,6 +68,10 @@ jobs:
           python tools/export_rust_contacts.py --check
           python -m unittest discover -s tests -p "test_package_release.py"
       - name: Build
+        env:
+          GITHUB_REF_TYPE: ${{ github.ref_type }}
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+          GITHUB_SHA: ${{ github.sha }}
         run: cargo build --locked --release -p sabrina --target ${{ matrix.target }}
       - name: Package
         env:

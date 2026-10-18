@@ -58,6 +58,19 @@ music, and the music slider controls both loops and the stinger. Magic effects
 cannot replace the stinger. The audio asset directory, including the FluidR3
 notice, is already included by both packaging paths.
 
+`src/sabrina/build.rs` embeds the UTC build date and 12-character commit hash.
+Local builds identify as `DEV`; tagged GitHub Actions builds display their
+release tag. The menu shows all three fields so test builds and packages are
+easy to identify. Git HEAD and the active ref are build-script inputs, keeping
+the hash current after commits without a clean rebuild, including packed refs
+and worktrees. Source and dependency-manifest changes refresh the build date;
+an unchanged cached binary keeps its original build date. The hash comes from
+the checked-out commit (with GitHub's SHA as a fallback when Git is unavailable).
+Source archives without Git metadata display `unknown` with a build warning,
+never a fabricated hash. Build-script rule/date tests can be run with
+`rustc --edition=2024 --test src/sabrina/build.rs -o target/sabrina-build-tests`
+followed by `target/sabrina-build-tests`.
+
 ## Maintenance notes
 
 - UI layout is built by named screen helpers in `ui.rs`; `draw` handles rebuilding, while `actions` and `update` handle interaction and live HUD values. Pointer hit tests and the input verifier share the logical canvas dimensions.

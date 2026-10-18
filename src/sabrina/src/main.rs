@@ -11,6 +11,8 @@ mod assets;
 
 mod audio;
 
+mod build_info;
+
 mod mipmaps;
 
 mod presentation;

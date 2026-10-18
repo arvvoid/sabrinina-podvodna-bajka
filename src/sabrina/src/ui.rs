@@ -521,6 +521,12 @@ fn draw_menu(builder: &mut Builder<'_, '_, '_>, preferences: &Preferences) {
         format!("{}{}", tr("Best visit: ", lang), preferences.best),
         None,
     );
+    builder.label(
+        rect(100.0, 798.0, 460.0, 28.0),
+        14.0,
+        crate::build_info::menu_label(),
+        None,
+    );
 }
 
 fn draw_pause(builder: &mut Builder<'_, '_, '_>) {
