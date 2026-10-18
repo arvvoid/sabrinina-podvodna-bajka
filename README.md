@@ -65,8 +65,8 @@ Linux uses Vulkan; Windows permits Vulkan and Direct3D 12; Apple targets use Met
 
 ## Working on the game
 
-- `rust/reef_sim/`: engine-independent components, game rules and fixed-step simulation.
-- `rust/sabrina/`: Bevy input, presentation, animation, rendering, audio and UI.
+- `src/reef_sim/`: engine-independent components, game rules and fixed-step simulation.
+- `src/sabrina/`: Bevy input, presentation, animation, rendering, audio and UI.
 - `assets/`: runtime models, embedded textures, audio, fonts, UI and WESL shaders.
 - `art/`: maintained Blender sources and contact samples.
 - `tools/`: build, export, packaging and validation scripts.

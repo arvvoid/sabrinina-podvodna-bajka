@@ -22,7 +22,7 @@ python3 tools/validate_models.py
 
 Substitute another character's filename to export it. Exporters use the saved artwork; they do not rebuild geometry or replace poses. Commit the source and GLB together. Only the game-ready Blender sources are maintained; original high-poly inputs and Blender backup files are not needed.
 
-Sabrina exports also sample arm contacts into `art/characters/sabrina.contacts.json` and regenerate `rust/reef_sim/src/generated_contacts.rs`. These samples follow the visible clips while keeping collision independent of rendering. `python3 tools/export_rust_contacts.py --check` checks the generated Rust file.
+Sabrina exports also sample arm contacts into `art/characters/sabrina.contacts.json` and regenerate `src/reef_sim/src/generated_contacts.rs`. These samples follow the visible clips while keeping collision independent of rendering. `python3 tools/export_rust_contacts.py --check` checks the generated Rust file.
 
 After changing fish or reef geometry, regenerate derived meshes:
 

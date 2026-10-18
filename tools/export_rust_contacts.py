@@ -53,7 +53,7 @@ def export(check=False):
         check=True,
         cwd=ROOT,
     ).stdout
-    target = ROOT / "rust/reef_sim/src/generated_contacts.rs"
+    target = ROOT / "src/reef_sim/src/generated_contacts.rs"
     if check:
         assert (
             target.read_text() == formatted

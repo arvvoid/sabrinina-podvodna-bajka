@@ -31,7 +31,7 @@ is the design reference. Its assets are not relicensed by this repository's
 MIT license.
 Review the applicable permissions before public redistribution.
 
-The synthesized accompaniment is defined in `rust/sabrina/src/audio.rs`; the
+The synthesized accompaniment is defined in `src/sabrina/src/audio.rs`; the
 source composition is covered by the code license. DejaVu Sans has its own
 license, included at `assets/fonts/LICENSE-DejaVu.txt`.
 

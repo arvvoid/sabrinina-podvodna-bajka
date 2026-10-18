@@ -24,7 +24,7 @@ Water, reef caustics and crystal materials use external WESL files in `assets/sh
 
 ## Code map
 
-| File in `rust/sabrina/src/` | Responsibility |
+| File in `src/sabrina/src/` | Responsibility |
 |---|---|
 | `app.rs` | Fixed update, input, actions and session transitions |
 | `presentation.rs` | Interpolated render snapshot |
