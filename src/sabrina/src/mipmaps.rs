@@ -181,7 +181,7 @@ mod tests {
         assert_eq!(image.texture_descriptor.mip_level_count, 3);
         let data = image.data.as_ref().unwrap();
         assert_eq!(data.len(), (15 + 2 + 1) * 4);
-        for p in data[60..].chunks_exact(4) {
+        for p in data[60..].as_chunks::<4>().0 {
             let normal = Vec3::new(p[0] as f32, p[1] as f32, p[2] as f32) / 255.0 * 2.0 - Vec3::ONE;
             assert!((normal.length() - 1.0).abs() < 0.01);
         }

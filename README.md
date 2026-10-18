@@ -2,6 +2,11 @@
 
 *Sabrinaâ€™s Underwater Fairy Tale*
 
+[![Rust 1.99.1](https://img.shields.io/badge/Rust-1.99.1-orange?logo=rust)](https://www.rust-lang.org/)
+[![Bevy 0.20.0](https://img.shields.io/badge/Bevy-0.20.0-blue)](https://bevy.org/)
+[![MIT License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Build targets](https://img.shields.io/badge/Build%20targets-Linux%20%7C%20Windows%20%7C%20macOS-lightgrey)](#build-and-run)
+
 A small underwater game about a mermaid, tropical fish and a hungry jellyfish. Swim through the reef, keep the fish safe with song and magic, or switch to quiet aquarium mode and enjoy the sea.
 
 ![Sabrina swimming among tropical fish in the underwater reef](docs/screenshots/gameplay.png)
@@ -62,7 +67,7 @@ English, Croatian and Italian are available through the main menu's **Languageâ€
 
 ## Build and run
 
-Install [Rust](https://rustup.rs/). The toolchain and dependencies are pinned in `rust-toolchain.toml` and `Cargo.lock` (Rust 1.97.1, Bevy 0.20.0).
+Install [Rust](https://rustup.rs/). The toolchain and dependencies are pinned in `rust-toolchain.toml` and `Cargo.lock` (Rust 1.99.1, Bevy 0.20.0).
 
 On Debian/Ubuntu, install the native dependencies:
 

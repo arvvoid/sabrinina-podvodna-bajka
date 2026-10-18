@@ -3,7 +3,7 @@ members = ["src/reef_sim", "src/sabrina"]
 resolver = "3"
 [workspace.package]
 edition = "2024"
-rust-version = "1.97.1"
+rust-version = "1.99.1"
 license = "MIT"
 [profile.dev]
 opt-level = 1
