@@ -1,0 +1,143 @@
+name: Desktop release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Package ${{ matrix.platform }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+            platform: linux-x86_64
+            executable: sabrina
+            format: gztar
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            platform: windows-x86_64
+            executable: sabrina.exe
+            format: zip
+          - os: macos-15
+            target: aarch64-apple-darwin
+            platform: macos-arm64
+            executable: sabrina
+            format: gztar
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate version tag
+        shell: bash
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?$ ]]; then
+            echo "::error::Use vMAJOR.MINOR.PATCH or vMAJOR.MINOR.PATCH-prerelease tags."
+            exit 1
+          fi
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.97.1
+          targets: ${{ matrix.target }}
+          components: rustfmt
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: release-${{ matrix.target }}
+      - name: Linux dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev libudev-dev libx11-dev libxrandr-dev libxi-dev libgl1-mesa-dev
+      - name: Validate source and assets
+        run: |
+          cargo fmt --all --check
+          cargo test --locked -p reef_sim
+          python tools/validate_models.py
+          python tools/validate_render_lods.py
+          python tools/export_rust_contacts.py --check
+          python -m unittest discover -s tests -p "test_package_release.py"
+      - name: Build
+        run: cargo build --locked --release -p sabrina --target ${{ matrix.target }}
+      - name: Package
+        env:
+          TAG: ${{ github.ref_name }}
+        shell: bash
+        run: |
+          python tools/package_release.py \
+            --binary "target/${{ matrix.target }}/release/${{ matrix.executable }}" \
+            --name "sabrina-${TAG}-${{ matrix.platform }}" \
+            --format "${{ matrix.format }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: package-${{ matrix.platform }}
+          path: dist/*
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: package-*
+          merge-multiple: true
+          path: release-assets
+      - name: Verify checksums
+        working-directory: release-assets
+        run: sha256sum --check -- *.sha256
+      - name: Write release notes
+        run: |
+          cat > release-notes.md <<'EOF'
+          ## Sabrina's Underwater Fairy Tale
+
+          An early working version of the standalone remake of the Scratch game
+          made with Sabrina. Expect ongoing refinement of models, animation and gameplay.
+
+          ### Downloads
+
+          - **Linux x86_64:** `.tar.gz` for Ubuntu 24.04 or compatible newer systems.
+            Requires Vulkan drivers, ALSA, libudev and X11 runtime libraries.
+          - **Windows x86_64:** `.zip`; extract and open `sabrina.exe`.
+          - **macOS Apple Silicon:** `.tar.gz`; unsigned and not notarized.
+
+          Extract the entire archive and keep the `assets` folder beside the executable.
+          On Linux/macOS, run `./sabrina` from the extracted folder.
+          Each archive has a SHA-256 checksum file. Packages include controls,
+          documentation and license notices. Windows/macOS runtime validation is
+          still ongoing; a successful build is not a playtest.
+
+          Android and iOS releases are planned, but are not included here.
+          Source code is MIT licensed; artwork and audio have separate restrictions.
+
+          ## Changelog
+
+          GitHub-generated changes since the previous release follow below.
+          EOF
+      - name: Publish release with generated changelog
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          flags=()
+          if [[ "$TAG" == *-* ]]; then
+            flags+=(--prerelease)
+          fi
+          gh release create "$TAG" release-assets/* \
+            --verify-tag --title "Sabrina's Underwater Fairy Tale ${TAG}" \
+            --notes-file release-notes.md --generate-notes "${flags[@]}"

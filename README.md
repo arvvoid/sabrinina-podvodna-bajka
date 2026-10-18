@@ -63,6 +63,19 @@ Linux uses Vulkan; Windows permits Vulkan and Direct3D 12; Apple targets use Met
 
 `./tools/package-bevy.sh` creates a portable directory under `dist/`. Runtime assets are found beside the executable or in the source tree; `SABRINA_ASSETS=/absolute/path` overrides this. Blender is needed only to edit artwork.
 
+## Tagged releases
+
+Push a version tag to build and publish a GitHub release:
+
+```sh
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+The release workflow builds Linux x86_64 (Ubuntu 24.04 baseline), Windows x86_64 and macOS Apple Silicon packages. Archives include the executable, runtime assets, instructions, documentation and license notices, with a separate SHA-256 checksum for each download. macOS packages are unsigned and not notarized. These are portable desktop packages, not Steam uploads or Android/iOS builds.
+
+Tags must use `vMAJOR.MINOR.PATCH`, optionally followed by a prerelease suffix such as `v0.1.0-beta.1`. Tags with a suffix publish as prereleases. All platform builds and checks must succeed before publication. Release notes include installation guidance and GitHub's automatically generated changelog since the previous release. Creating a release does not replace platform playtesting or artwork-permission review.
+
 ## Working on the game
 
 - `src/reef_sim/`: engine-independent components, game rules and fixed-step simulation.
