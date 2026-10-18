@@ -10,5 +10,6 @@ bevy = { version = "=0.20.0", default-features = false, features = ["std", "defa
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
-# Enable the native OpenGL ES fallback, not just the web target.
-bevy_render = { version = "=0.20.0", features = ["gles"] }
+[target.'cfg(all(target_os = "windows", target_arch = "x86_64", target_env = "msvc"))'.dependencies]
+# Ship the modern shader compiler inside the executable, not as a runtime DLL.
+bevy_render = { version = "=0.20.0", features = ["statically-linked-dxc"] }

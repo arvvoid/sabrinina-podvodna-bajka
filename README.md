@@ -87,7 +87,21 @@ The scripts use an optimized release build. Set `SABRINA_BUILD_JOBS=4` to limit 
 cargo run --locked --release -p sabrina
 ```
 
-Linux uses Vulkan; Windows permits Vulkan and Direct3D 12; Apple targets use Metal. `SABRINA_RENDERER=vulkan|dx12|metal|gl` overrides the backend. OpenGL is experimental and has not passed local runtime testing. Linux is the tested desktop platform; Windows/macOS runtime, physical controllers and mobile exports still need testing.
+### Graphics backend and testing matrix
+
+| OS / target | Graphics backend | Build / distribution status | Runtime testing |
+|---|---|---|---|
+| Linux x86_64 | Vulkan | Desktop release workflow target; Ubuntu 24.04 baseline | Established tested desktop platform; gameplay and visual checks |
+| Windows x86_64 (MSVC) | Direct3D 12 with embedded DXC | Desktop release workflow target; local release build verified | Tested on Windows 11 with an RTX 3070 Laptop GPU: rendered captures, live input/animation/effects checks and a 1080p 72-fish stress scene |
+| macOS Apple Silicon | Metal | Desktop release workflow target; unsigned and not notarized | Not runtime-tested yet |
+| Android (planned) | Vulkan | No mobile export available yet | Not tested |
+| iOS (planned) | Metal | No mobile export available yet | Not tested |
+
+The graphics backend is fixed per platform. There is no OpenGL fallback or backend override; the old `SABRINA_RENDERER` setting and `WGPU_BACKEND` do not change this selection. A device must support its platform's backend.
+
+Windows x86_64 MSVC builds embed the modern DXC shader compiler in the executable. No separate `dxcompiler.dll` or installed Windows SDK is needed to play. This avoids the legacy FXC rendering path, which produced dark silhouettes on the tested NVIDIA Windows machine. To build on Windows, install Rust and Visual Studio's **Desktop development with C++** workload, including a Windows SDK and the **C++ ATL for latest build tools** component, then run the Cargo command above in PowerShell.
+
+Windows verification also passed all 51 automated tests and strict Clippy checks. The High-quality 1080p 72-fish stress scene averaged 60.9 FPS, with no measured frames exceeding 25 ms on that machine. These results are hardware-specific, not a performance guarantee. Broader Windows hardware testing, macOS runtime, physical controllers and mobile exports still need testing; synthetic controller checks do not replace physical-controller testing.
 
 All runtime assets are embedded at compile time: the executable runs without an `assets/` directory or the source tree, and does not extract assets to disk. This applies to local and tagged release builds. Rebuild after changing assets, or set `SABRINA_ASSETS=/absolute/path/to/assets` to use an external asset tree while developing artwork. Blender is needed only to edit artwork.
 
@@ -162,7 +176,7 @@ For visual checks, use `--capture-game`, `--capture-visit`, `--capture-throw`, `
 ## Next steps
 
 - Refine animation, underwater lighting and encounter balance through playtesting.
-- Test Windows, macOS and physical controllers.
+- Broaden Windows hardware testing; test macOS and physical controllers.
 - Add touch input and measure mobile hardware before Android/iOS/TV releases.
 - Prepare store releases on Steam, Android and iOS once the game is ready.
 
