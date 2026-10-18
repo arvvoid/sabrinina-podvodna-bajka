@@ -1,11 +1,9 @@
 # Contributing
 
-Keep changes focused and explain what changes for the player. Run the checks in the README; inspect the game when changing animation, materials, UI or input.
+This game is shared here as open source, but it is a personal, solo project rather than a community-developed one. I am not currently seeking or accepting outside code contributions or pull requests.
 
-Gameplay belongs in `reef_sim`, without Bevy types or rendering dependencies. Use plain components and free systems. Preserve the fixed update order where systems depend on each other. Avoid allocations in simulation loops and measure before adding optimization.
+It started as a Scratch game I made with my daughter Sabrina when she was four. She is now five, and I might implement whatever wonderfully crazy idea she comes up with next! Development follows our curiosity and her imagination, rather than a community roadmap.
 
-Presentation belongs in `sabrina`; shader code lives in `assets/shaders/`. Share meshes, materials and animation graphs where possible. Comments should explain a constraint or a non-obvious choice, rather than repeat the code.
+You are welcome to explore the code, learn from it and make your own forks under the applicable license. Please do not expect changes from a fork to be merged into this project.
 
-Edit the maintained Blender files and commit their exports together. Keep generated contact samples and LODs current. Do not commit build outputs, screenshots from temporary checks, editor backups or credentials.
-
-Source contributions use the MIT license. Artwork and audio need explicit provenance and licensing; the code license does not cover them.
+The source code is MIT licensed; artwork, audio, character designs and branding are covered separately. See [LICENSE](LICENSE) and [ASSET_LICENSE.md](ASSET_LICENSE.md) for details.

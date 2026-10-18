@@ -4,13 +4,25 @@
 
 A small underwater game about a mermaid, tropical fish and a hungry jellyfish. Swim through the reef, keep the fish safe with song and magic, or switch to quiet aquarium mode and enjoy the sea.
 
-I started this game from an idea by Sabrina. The [original Scratch project](https://scratch.mit.edu/projects/1203591608/) became a 3D Godot prototype, then this Rust and Bevy remake. The side-on view, voices, crystal magic and peaceful pauses come from that original game.
+![Sabrina swimming among tropical fish in the underwater reef](docs/screenshots/gameplay.png)
+
+*The current Rust and Bevy remake — an early working version, not the finished game.*
+
+## How it started
+
+I made the [original Scratch game](https://scratch.mit.edu/projects/1203591608/) together with my daughter Sabrina, who was four at the time. Sabrina came up with the idea and design; I helped as her dad with teaching, technical help and explanations. Together, we built a little underwater world with swimming fish, a hungry jellyfish and a mermaid who protects the fish with magic.
+
+That Scratch project became a 3D Godot prototype, then this Rust and Bevy remake: a full standalone game growing out of our father-and-daughter project. The side-on view, voices, crystal magic and peaceful pauses come from that original game.
 
 **Development:** Luka Dežulović
 
 **Original idea:** Sabrina Dežulović
 
 The Godot prototype is preserved on [`legacy_godot`](https://github.com/arvvoid/sabrinina-podvodna-bajka/tree/legacy_godot). `main` contains the Bevy game.
+
+## Current status and release plans
+
+This is an initial working version. It is playable, but still needs more work, refinement and playtesting before it is ready for release. Once it is ready, I plan to publish it on **Steam, Android and iOS**. These are planned releases, not currently available versions; there is no release date yet.
 
 ## Playing
 
@@ -78,7 +90,7 @@ For visual checks, use `--capture-game`, `--capture-visit`, `--capture-throw`, `
 - Refine animation, underwater lighting and encounter balance through playtesting.
 - Test Windows, macOS and physical controllers.
 - Add touch input and measure mobile hardware before Android/iOS/TV releases.
-- Prepare a public source release, optional donations and an affordable Steam release.
+- Prepare store releases on Steam, Android and iOS once the game is ready.
 
 ## License
 
