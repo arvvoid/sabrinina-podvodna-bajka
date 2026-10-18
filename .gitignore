@@ -1,0 +1,27 @@
+# Builds and packaged releases
+/target/
+/build/
+/build-tests/
+/dist/
+/exports/
+/captures/
+
+# Local settings
+.env
+.env.*
+!.env.example
+.vscode/
+.idea/
+.DS_Store
+*~
+
+# Authoring tools
+*.blend1
+*.blend2
+__pycache__/
+*.pyc
+
+# Old local Godot caches (not part of the Bevy game)
+/game/
+/tools/godot
+/tools/*.zip

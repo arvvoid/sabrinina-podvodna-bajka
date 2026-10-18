@@ -1,0 +1,147 @@
+[
+  {
+    "asset": "clownfish",
+    "source": "art/characters/clownfish.blend",
+    "base_export": "assets/models/clownfish.glb",
+    "base_sha256": "d68019b4cffe97456292f9db3213d1921bcbfe051664381b2e091cfded939ae8",
+    "export": "assets/render_lods/clownfish.glb",
+    "triangles": {
+      "meshes[0]__LOD1": 2340,
+      "meshes[0]__LOD2": 936
+    }
+  },
+  {
+    "asset": "blue_tang",
+    "source": "art/characters/blue_tang.blend",
+    "base_export": "assets/models/blue_tang.glb",
+    "base_sha256": "08462450ca82c508e4fee3799e29def464635d5055fc8aa6d0becbe2b1941313",
+    "export": "assets/render_lods/blue_tang.glb",
+    "triangles": {
+      "meshes[0].005__LOD1": 2340,
+      "meshes[0].005__LOD2": 936
+    }
+  },
+  {
+    "asset": "butterflyfish",
+    "source": "art/characters/butterflyfish.blend",
+    "base_export": "assets/models/butterflyfish.glb",
+    "base_sha256": "b3b333c56b858fc97fe1f2be489c452b1f2dfcca355bf3e4fd181f7d6ada3fbd",
+    "export": "assets/render_lods/butterflyfish.glb",
+    "triangles": {
+      "meshes[0].006__LOD1": 2340,
+      "meshes[0].006__LOD2": 936
+    }
+  },
+  {
+    "asset": "bannerfish",
+    "source": "art/characters/bannerfish.blend",
+    "base_export": "assets/models/bannerfish.glb",
+    "base_sha256": "a11a31c21ae8a678edbd5d62e930966da1a0831b65ffd4df111aff40492cabd0",
+    "export": "assets/render_lods/bannerfish.glb",
+    "triangles": {
+      "meshes[0].010__LOD1": 2340,
+      "meshes[0].010__LOD2": 936
+    }
+  },
+  {
+    "asset": "parrotfish",
+    "source": "art/characters/parrotfish.blend",
+    "base_export": "assets/models/parrotfish.glb",
+    "base_sha256": "9d41a947e2addf3415d0e6ed81e0f55f3c54d5e521805c588d5cb9293ea797bd",
+    "export": "assets/render_lods/parrotfish.glb",
+    "triangles": {
+      "meshes[0].001__LOD1": 2340,
+      "meshes[0].001__LOD2": 936
+    }
+  },
+  {
+    "asset": "blue_wrasse",
+    "source": "art/characters/blue_wrasse.blend",
+    "base_export": "assets/models/blue_wrasse.glb",
+    "base_sha256": "e0a43073be67a1fb2ebbffe80e18a0a3cff5cad65d110c5f21eb15b27264c50e",
+    "export": "assets/render_lods/blue_wrasse.glb",
+    "triangles": {
+      "meshes[0].004__LOD1": 2340,
+      "meshes[0].004__LOD2": 936
+    }
+  },
+  {
+    "asset": "fire_goby",
+    "source": "art/characters/fire_goby.blend",
+    "base_export": "assets/models/fire_goby.glb",
+    "base_sha256": "013a7a8c633cb922673422379a0b26697b60d6e846a45962ddfe482f3b7fa9f1",
+    "export": "assets/render_lods/fire_goby.glb",
+    "triangles": {
+      "meshes[0].002__LOD1": 2340,
+      "meshes[0].002__LOD2": 936
+    }
+  },
+  {
+    "asset": "royal_tang",
+    "source": "art/characters/royal_tang.blend",
+    "base_export": "assets/models/royal_tang.glb",
+    "base_sha256": "1cdc3013bf697d8753a9b34ca45894888f5e8ab0a134c1578edd83b180c09074",
+    "export": "assets/render_lods/royal_tang.glb",
+    "triangles": {
+      "meshes[0].011__LOD1": 2340,
+      "meshes[0].011__LOD2": 936
+    }
+  },
+  {
+    "asset": "yellow_tang",
+    "source": "art/characters/yellow_tang.blend",
+    "base_export": "assets/models/yellow_tang.glb",
+    "base_sha256": "1f40a763e9c996f93de868a64643df840db8e8b238767001c60c9140bd5fa9ca",
+    "export": "assets/render_lods/yellow_tang.glb",
+    "triangles": {
+      "meshes[0].009__LOD1": 2340,
+      "meshes[0].009__LOD2": 936
+    }
+  },
+  {
+    "asset": "emperor_angelfish",
+    "source": "art/characters/emperor_angelfish.blend",
+    "base_export": "assets/models/emperor_angelfish.glb",
+    "base_sha256": "b786a24d9be762352e669f7c05794fd6ec059031e52f39e969a6250f2cfc468f",
+    "export": "assets/render_lods/emperor_angelfish.glb",
+    "triangles": {
+      "meshes[0].003__LOD1": 2340,
+      "meshes[0].003__LOD2": 936
+    }
+  },
+  {
+    "asset": "coral_anthias",
+    "source": "art/characters/coral_anthias.blend",
+    "base_export": "assets/models/coral_anthias.glb",
+    "base_sha256": "e8a6830edf88e6a16b3bd77077c87ad319a47c660474ae057efa9f92fd7572c9",
+    "export": "assets/render_lods/coral_anthias.glb",
+    "triangles": {
+      "meshes[0].008__LOD1": 2340,
+      "meshes[0].008__LOD2": 936
+    }
+  },
+  {
+    "asset": "cardinalfish",
+    "source": "art/characters/cardinalfish.blend",
+    "base_export": "assets/models/cardinalfish.glb",
+    "base_sha256": "c45a4d939a18847a30c792e5075b751220cde543b052605af8cd0cc42aede1d5",
+    "export": "assets/render_lods/cardinalfish.glb",
+    "triangles": {
+      "meshes[0].007__LOD1": 2340,
+      "meshes[0].007__LOD2": 936
+    }
+  },
+  {
+    "asset": "reef_ruins",
+    "source": "art/environments/reef_ruins.blend",
+    "base_export": "assets/environments/reef_ruins.glb",
+    "base_sha256": "59a1f4e10041bbff77a0603c1af17126d4022fed7862b477e04cbfac3f41594a",
+    "export": "assets/render_lods/reef_ruins.glb",
+    "triangles": {
+      "Reef_Ruins_Game_Mesh__LOD1": 53201,
+      "Reef_Ruins_Game_Mesh__LOD2": 21280,
+      "Reef_Ruins_Game_Mesh.001__LOD1": 6798,
+      "Reef_Ruins_Game_Mesh.001__LOD2": 2719
+    }
+  }
+]

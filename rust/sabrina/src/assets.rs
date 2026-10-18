@@ -1,0 +1,853 @@
+// SPDX-License-Identifier: MIT
+use crate::{
+    app::{Options, Screen, SessionUi, Simulation, begin},
+    presentation::Presentation,
+    settings::Preferences,
+};
+use bevy::{
+    app::AnimationSystems,
+    camera::{primitives::MeshAabb, visibility::NoFrustumCulling},
+    gltf::GltfMesh,
+    prelude::*,
+    transform::TransformSystems,
+    world_serialization::WorldInstanceReady,
+};
+use std::{collections::HashMap, sync::Arc};
+#[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Actor {
+    Sabrina,
+    Fish(usize),
+    Jelly(usize),
+    Crystal,
+    Reef,
+}
+#[derive(Component)]
+pub struct ActorVisual {
+    pub model: Option<Entity>,
+    pub variant: usize,
+    pub yaw: f32,
+}
+#[derive(Component, Clone)]
+pub struct RigSpec {
+    pub actor: Actor,
+    pub asset: usize,
+}
+#[derive(Component)]
+pub struct RigPlayer {
+    pub actor: Actor,
+    pub generation: u64,
+    pub clips: Arc<HashMap<String, (AnimationNodeIndex, f32)>>,
+    pub current: String,
+    pub phase: f32,
+    blend: f32,
+    outgoing: Vec<(AnimationNodeIndex, f32)>,
+}
+#[derive(Component)]
+pub struct CharacterSurface {
+    pub actor: Actor,
+    pub normal: Handle<StandardMaterial>,
+    pub hurt: Handle<StandardMaterial>,
+}
+#[derive(Component)]
+pub struct Palm;
+#[derive(Component)]
+struct FacialRig;
+#[derive(Component)]
+pub struct CorrectBone {
+    pub root: Entity,
+    pub name: String,
+    pub original: Option<Quat>,
+    pub rest_axis: Vec3,
+}
+#[derive(Resource, Default)]
+pub struct Library {
+    pub handles: Vec<Handle<Gltf>>,
+    pub ready: bool,
+    pub lods: HashMap<usize, Handle<Gltf>>,
+}
+pub const FILES: [&str; 16] = [
+    "models/sabrina.glb",
+    "models/clownfish.glb",
+    "models/blue_tang.glb",
+    "models/butterflyfish.glb",
+    "models/bannerfish.glb",
+    "models/parrotfish.glb",
+    "models/blue_wrasse.glb",
+    "models/fire_goby.glb",
+    "models/royal_tang.glb",
+    "models/yellow_tang.glb",
+    "models/emperor_angelfish.glb",
+    "models/coral_anthias.glb",
+    "models/cardinalfish.glb",
+    "models/jellyfish.glb",
+    "environments/reef_ruins.glb",
+    "props/ocean_crystal.glb",
+];
+type ClipMap = Arc<HashMap<String, (AnimationNodeIndex, f32)>>;
+#[derive(Resource, Default)]
+struct RigCache {
+    graphs: HashMap<usize, (Handle<AnimationGraph>, ClipMap)>,
+    materials: HashMap<
+        (AssetId<StandardMaterial>, u8),
+        (Handle<StandardMaterial>, Handle<StandardMaterial>),
+    >,
+}
+#[derive(Component)]
+pub struct RenderLod {
+    actor: Actor,
+    meshes: [Handle<Mesh>; 3],
+    diameter: f32,
+    level: usize,
+}
+fn select_lods(
+    w: Res<crate::presentation::Presentation>,
+    prefs: Res<Preferences>,
+    camera: Single<(&Camera, &Projection), With<Camera3d>>,
+    mut query: Query<(&mut RenderLod, &mut Mesh3d)>,
+) {
+    let (camera, projection) = *camera;
+    let Projection::Orthographic(ortho) = projection else {
+        return;
+    };
+    let Some(viewport) = camera.physical_viewport_size() else {
+        return;
+    };
+    let density = viewport.y as f32 / ortho.area.height();
+    for (mut lod, mut mesh) in &mut query {
+        let metric = match lod.actor {
+            Actor::Fish(i) => {
+                density
+                    * lod.diameter
+                    * w.0.fish[i].appearance.size
+                    * (0.3 + 0.7 * w.0.fish[i].appearance.birth)
+            }
+            _ => density,
+        };
+        let (low, high) = if lod.actor == Actor::Reef {
+            (if prefs.quality == 2 { 30.0 } else { 48.0 }, 100.0)
+        } else {
+            (65.0, 160.0)
+        };
+        let level = if metric < low {
+            2
+        } else if metric < high {
+            1
+        } else {
+            0
+        };
+        // Keep a margin around level boundaries to prevent rapid alternation.
+        let threshold = if level.max(lod.level) == 2 { low } else { high };
+        if level != lod.level && (metric - threshold).abs() > threshold * 0.08 {
+            mesh.0 = lod.meshes[level].clone();
+            lod.level = level;
+        }
+    }
+}
+pub struct CharacterPlugin;
+impl Plugin for CharacterPlugin {
+    fn build(&self, a: &mut App) {
+        a.init_resource::<Library>()
+            .init_resource::<RigCache>()
+            .add_systems(Startup, load)
+            .add_systems(Update, (finish_load, sync_models).chain())
+            .add_systems(
+                Update,
+                animate
+                    .after(crate::presentation::prepare)
+                    .after(sync_models),
+            )
+            .add_systems(Update, select_lods.after(crate::presentation::prepare))
+            .add_systems(Update, report_assets.after(select_lods))
+            .add_systems(PostUpdate, restore_bones.before(AnimationSystems))
+            .add_systems(
+                PostUpdate,
+                (correct_bones, facial_expression, attach_crystal)
+                    .chain()
+                    .after(AnimationSystems)
+                    .before(TransformSystems::Propagate),
+            );
+    }
+}
+fn load(server: Res<AssetServer>, mut library: ResMut<Library>) {
+    library.handles = FILES.iter().map(|&p| server.load(p)).collect();
+    for i in (1..=12).chain(std::iter::once(14)) {
+        let file = FILES[i].rsplit('/').next().unwrap();
+        library
+            .lods
+            .insert(i, server.load(format!("render_lods/{file}")));
+    }
+}
+pub(crate) fn finish_load(
+    mut c: Commands,
+    gltfs: Res<Assets<Gltf>>,
+    mut lib: ResMut<Library>,
+    mut u: ResMut<SessionUi>,
+    mut w: ResMut<Simulation>,
+    p: Res<Preferences>,
+    options: Res<Options>,
+    server: Res<AssetServer>,
+    gltf_meshes: Res<Assets<GltfMesh>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    materials: Res<Assets<bevy::gltf::GltfMaterial>>,
+    mut images: ResMut<Assets<Image>>,
+) {
+    if lib.ready
+        || !lib
+            .handles
+            .iter()
+            .chain(lib.lods.values())
+            .all(|h| gltfs.contains(h) && server.is_loaded_with_dependencies(h.id()))
+    {
+        return;
+    }
+    for handle in lib.lods.values() {
+        for mesh in &gltfs.get(handle).unwrap().meshes {
+            for primitive in &gltf_meshes.get(mesh).unwrap().primitives {
+                let mut mesh = meshes.get_mut(&primitive.mesh).unwrap();
+                if !mesh.contains_attribute(Mesh::ATTRIBUTE_TANGENT) {
+                    mesh.generate_tangents()
+                        .expect("Render LOD has normals and UVs");
+                }
+            }
+        }
+    }
+    crate::mipmaps::prepare(&lib, &gltfs, &materials, &mut images);
+    lib.ready = true;
+    u.loaded = true;
+    u.screen = Screen::Menu;
+    for actor in [Actor::Reef, Actor::Sabrina, Actor::Crystal]
+        .into_iter()
+        .chain((0..72).map(Actor::Fish))
+        .chain((0..3).map(Actor::Jelly))
+    {
+        c.spawn((
+            actor,
+            ActorVisual {
+                model: None,
+                variant: usize::MAX,
+                yaw: 0.0,
+            },
+            Transform::default(),
+            Visibility::default(),
+        ));
+    }
+    if let Some(kind) = &options.capture {
+        let short = kind
+            .strip_prefix("hr-")
+            .or_else(|| kind.strip_prefix("it-"))
+            .unwrap_or(kind);
+        match short {
+            "boot" => u.screen = Screen::Loading,
+            "menu" => {}
+            "settings" => u.screen = Screen::Settings,
+            "help" => u.screen = Screen::Help,
+            "credits" => u.screen = Screen::Credits,
+            _ => {
+                begin(&mut w.0, &mut u, &p, true);
+                if options.school {
+                    reef_sim::add_fish(&mut w.0, 72, false);
+                }
+                if matches!(short, "visit" | "crystal" | "throw" | "wave" | "song") {
+                    w.0.settings.aquarium = false;
+                    reef_sim::begin_visit(&mut w.0);
+                }
+            }
+        }
+    }
+    if options
+        .capture
+        .as_deref()
+        .is_some_and(|k| k.starts_with("graphics-") || k.starts_with("pose-") || k == "rig")
+    {
+        w.0.sabrina.motion.pos = reef_sim::v(0.0, 8.0);
+        w.0.sabrina.motion.velocity = reef_sim::v(4.0, 0.0);
+        w.0.sabrina.swimming.pitch = 0.05;
+        w.0.sabrina.swimming.yaw = 0.0;
+        w.0.sabrina.swimming.phase = 1.2;
+        w.0.sabrina.cooldown = 1000.0;
+        for f in &mut w.0.fish {
+            f.life.active = false;
+        }
+        if let Some(k) = &options.capture {
+            if k == "pose-idle" {
+                w.0.sabrina.motion.velocity = reef_sim::v(0.0, 0.0);
+                w.0.sabrina.swimming.pitch = 0.65;
+            }
+            if k.contains("dive") {
+                w.0.sabrina.swimming.pitch = -1.1;
+            }
+            if k.contains("climb") {
+                w.0.sabrina.swimming.pitch = 1.1;
+            }
+            if k.contains("left") {
+                w.0.sabrina.swimming.yaw = std::f32::consts::PI;
+            }
+        }
+    }
+    if options.capture.as_deref() == Some("throw") {
+        w.0.sabrina.motion.pos = reef_sim::v(-2.0, 8.0);
+        w.0.jelly[0].motion.pos = reef_sim::v(4.0, 9.0);
+        w.0.jelly[0].behaviour.state = reef_sim::JellyState::Hungry;
+        w.0.jelly[0].behaviour.turn_in = 100.0;
+    }
+    if options.verify {
+        begin(&mut w.0, &mut u, &p, true);
+    }
+    info!("All 16 finished GLB assets loaded");
+}
+fn sync_models(
+    mut c: Commands,
+    lib: Res<Library>,
+    gltfs: Res<Assets<Gltf>>,
+    w: Res<Simulation>,
+    mut roots: Query<(Entity, &Actor, &mut ActorVisual)>,
+) {
+    if !lib.ready {
+        return;
+    }
+    for (root, actor, mut view) in &mut roots {
+        let asset = match *actor {
+            Actor::Sabrina => 0,
+            Actor::Fish(i) => 1 + w.0.fish[i].appearance.species + if i % 2 == 0 { 0 } else { 6 },
+            Actor::Jelly(_) => 13,
+            Actor::Reef => 14,
+            Actor::Crystal => 15,
+        };
+        if view.variant == asset {
+            continue;
+        }
+        if let Some(old) = view.model {
+            c.entity(old).despawn();
+        }
+        let Some(gltf) = gltfs.get(&lib.handles[asset]) else {
+            continue;
+        };
+        let spec = RigSpec {
+            actor: *actor,
+            asset,
+        };
+        let scale = if *actor == Actor::Sabrina { 0.88 } else { 1.0 };
+        let model = c
+            .spawn((
+                WorldAssetRoot(gltf.scenes[0].clone()),
+                Transform::from_scale(Vec3::splat(scale)),
+                spec,
+            ))
+            .observe(rig_ready)
+            .id();
+        c.entity(root).add_child(model);
+        view.model = Some(model);
+        view.variant = asset;
+    }
+}
+fn rig_ready(
+    event: On<WorldInstanceReady>,
+    mut c: Commands,
+    specs: Query<&RigSpec>,
+    children: Query<&Children>,
+    players: Query<(), With<AnimationPlayer>>,
+    surfaces: Query<(
+        &MeshMaterial3d<StandardMaterial>,
+        Option<&bevy::gltf::GltfMaterialName>,
+    )>,
+    mesh_data: (
+        Query<&Mesh3d>,
+        Res<Assets<GltfMesh>>,
+        Res<Assets<Mesh>>,
+        Query<(), With<MorphWeights>>,
+    ),
+    transforms: Query<&Transform>,
+    parents: Query<&ChildOf>,
+    names: Query<&Name>,
+    gltfs: Res<Assets<Gltf>>,
+    clips: Res<Assets<AnimationClip>>,
+    lib: Res<Library>,
+    mut graphs: ResMut<Assets<AnimationGraph>>,
+    mut cache: ResMut<RigCache>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    let (mesh_handles, mesh_assets, meshes, morphs) = mesh_data;
+    let Ok(spec) = specs.get(event.entity) else {
+        return;
+    };
+    let Some(gltf) = gltfs.get(&lib.handles[spec.asset]) else {
+        return;
+    };
+    let (graph, map) = cache
+        .graphs
+        .entry(spec.asset)
+        .or_insert_with(|| {
+            let mut graph = AnimationGraph::new();
+            let mut map = HashMap::new();
+            for (name, clip) in &gltf.named_animations {
+                let node = graph.add_clip(clip.clone(), 1.0, graph.root);
+                let duration = clips.get(clip).map(|a| a.duration()).unwrap_or(1.2);
+                map.insert(name.to_string(), (node, duration));
+            }
+            (graphs.add(graph), Arc::new(map))
+        })
+        .clone();
+    for entity in children.iter_descendants(event.entity) {
+        if players.contains(entity) {
+            c.entity(entity).insert((
+                AnimationGraphHandle(graph.clone()),
+                RigPlayer {
+                    actor: spec.actor,
+                    generation: 0,
+                    clips: map.clone(),
+                    current: String::new(),
+                    phase: if let Actor::Jelly(i) = spec.actor {
+                        i as f32 * 0.47
+                    } else {
+                        0.0
+                    },
+                    blend: 1.0,
+                    outgoing: Vec::new(),
+                },
+            ));
+        }
+        if spec.actor == Actor::Crystal {
+            c.entity(entity)
+                .insert((bevy::light::NotShadowCaster, bevy::light::NotShadowReceiver));
+        }
+        if matches!(spec.actor, Actor::Fish(_) | Actor::Jelly(_)) {
+            // Small swimmers retain received reef lighting without adding a
+            // second skinned draw for every fish or dark patches on Sabrina.
+            c.entity(entity).insert(bevy::light::NotShadowCaster);
+        }
+        if let Ok(mesh) = mesh_handles.get(entity)
+            && let Some(lod_gltf) = lib.lods.get(&spec.asset).and_then(|h| gltfs.get(h))
+        {
+            for source in gltf.meshes.iter().filter_map(|h| mesh_assets.get(h)) {
+                if let Some(primitive) = source.primitives.iter().find(|p| p.mesh == mesh.0) {
+                    let lod_mesh = |level| {
+                        lod_gltf
+                            .named_meshes
+                            .get(format!("{}__LOD{level}", source.name).as_str())
+                            .and_then(|h| mesh_assets.get(h))
+                            .and_then(|m| m.primitives.get(primitive.index))
+                            .map(|p| p.mesh.clone())
+                    };
+                    if let (Some(middle), Some(small)) = (lod_mesh(1), lod_mesh(2)) {
+                        let diameter = meshes
+                            .get(&mesh.0)
+                            .and_then(|m| m.get_aabb())
+                            .map(|a| a.half_extents.max_element() * 2.0)
+                            .unwrap_or(2.0);
+                        c.entity(entity).insert(RenderLod {
+                            actor: spec.actor,
+                            meshes: [mesh.0.clone(), middle, small],
+                            diameter,
+                            level: 0,
+                        });
+                    }
+                }
+            }
+        }
+        if let Ok((handle, material_name)) = surfaces.get(entity) {
+            let variant = match spec.actor {
+                Actor::Sabrina => 1,
+                Actor::Jelly(i) => 2 + i as u8,
+                _ => 0,
+            };
+            let key = (handle.0.id(), variant);
+            if !cache.materials.contains_key(&key)
+                && let Some(source) = materials.get(&handle.0)
+            {
+                let mut material = source.clone();
+                if spec.actor == Actor::Sabrina {
+                    material.metallic = 0.04;
+                    material.perceptual_roughness = 0.62;
+                    material.reflectance = 0.28;
+                }
+                if let Actor::Jelly(k) = spec.actor
+                    && material_name.is_some_and(|name| name.0 == "Jelly_Skin")
+                {
+                    material.base_color = match k {
+                        0 => Color::linear_rgb(0.76, 1.18, 1.13),
+                        1 => Color::linear_rgb(1.48, 1.12, 0.84),
+                        _ => Color::linear_rgb(0.60, 1.65, 1.18),
+                    };
+                    // Blend the bell and tendrils; keep the separate face opaque.
+                    // Back-face culling avoids doubling opacity through the shell.
+                    material.base_color = material.base_color.with_alpha(0.56);
+                    material.alpha_mode = AlphaMode::Blend;
+                    material.cull_mode = Some(bevy::render::render_resource::Face::Back);
+                    material.metallic = 0.0;
+                    material.perceptual_roughness = 0.24;
+                    material.reflectance = 0.35;
+                }
+                let mut red = material.clone();
+                red.base_color = Color::srgb(1.0, 0.055, 0.09);
+                cache
+                    .materials
+                    .insert(key, (materials.add(material), materials.add(red)));
+            }
+            if let Some((normal, hurt)) = cache.materials.get(&key) {
+                c.entity(entity).insert((
+                    MeshMaterial3d(normal.clone()),
+                    CharacterSurface {
+                        actor: spec.actor,
+                        normal: normal.clone(),
+                        hurt: hurt.clone(),
+                    },
+                    NoFrustumCulling,
+                ));
+            }
+        }
+        if spec.actor == Actor::Sabrina && morphs.contains(entity) {
+            c.entity(entity).insert(FacialRig);
+        }
+        if spec.actor == Actor::Sabrina
+            && let Ok(name) = names.get(entity)
+        {
+            if name.as_str() == "Hand_R" {
+                c.entity(entity).insert(Palm);
+            }
+            if [
+                "Tail_1",
+                "Tail_2",
+                "Neck",
+                "Head",
+                "Hair_Back_1",
+                "Hair_Left_1",
+                "Hair_Right_1",
+                "Hair_Back_2",
+                "Hair_Back_3",
+                "Hair_Left_2",
+                "Hair_Left_3",
+                "Hair_Right_2",
+                "Hair_Right_3",
+            ]
+            .contains(&name.as_str())
+            {
+                let rot = relative_rotation(entity, event.entity, &transforms, &parents);
+                c.entity(entity).insert(CorrectBone {
+                    root: event.entity,
+                    name: name.to_string(),
+                    original: None,
+                    rest_axis: rot.inverse() * Vec3::Z,
+                });
+            }
+        }
+    }
+}
+fn relative_rotation(
+    mut e: Entity,
+    root: Entity,
+    transforms: &Query<&Transform>,
+    parents: &Query<&ChildOf>,
+) -> Quat {
+    let mut q = Quat::IDENTITY;
+    for _ in 0..64 {
+        if e == root {
+            break;
+        }
+        if let Ok(t) = transforms.get(e) {
+            q = t.rotation * q
+        }
+        let Ok(p) = parents.get(e) else { break };
+        e = p.parent();
+    }
+    q
+}
+fn animate(
+    w: Res<Presentation>,
+    u: Res<SessionUi>,
+    p: Res<Preferences>,
+    time: Res<Time>,
+    mut players: Query<(&mut AnimationPlayer, &mut RigPlayer)>,
+) {
+    let dt = if u.paused() {
+        0.0
+    } else {
+        time.delta_secs() * if p.reduced_motion { 0.25 } else { 1.0 }
+    };
+    for (mut player, mut rig) in &mut players {
+        let (name, phase, speed) = match rig.actor {
+            Actor::Sabrina => {
+                let s = &w.0.sabrina;
+                let names = [
+                    "Idle",
+                    "Swim",
+                    "Turn_Left",
+                    "Turn_Right",
+                    "Sing",
+                    "Wave",
+                    "Hurt",
+                    "Throw",
+                ];
+                (
+                    names[reef_sim::sabrina_pose(s) as usize],
+                    Some(reef_sim::sabrina_pose_phase(s)),
+                    1.0,
+                )
+            }
+            Actor::Fish(i) => {
+                let f = &w.0.fish[i];
+                if !f.life.active && f.life.pop_time <= 0.22 {
+                    continue;
+                }
+                (
+                    "Swim",
+                    None,
+                    (6.0 + f.swimming.speed * 5.0) * 1.2 / std::f32::consts::TAU,
+                )
+            }
+            Actor::Jelly(i) => {
+                let j = &w.0.jelly[i];
+                if j.behaviour.state == reef_sim::JellyState::Hidden {
+                    continue;
+                }
+                (
+                    if j.behaviour.eat_wait > 0.0 {
+                        "Nibble"
+                    } else if j.behaviour.state == reef_sim::JellyState::Leaving {
+                        "Drift"
+                    } else {
+                        "Pulse"
+                    },
+                    None,
+                    1.0,
+                )
+            }
+            _ => continue,
+        };
+        let Some(&(node, duration)) = rig.clips.get(name) else {
+            continue;
+        };
+        if rig.current != name {
+            rig.outgoing = player
+                .playing_animations()
+                .filter(|(n, _)| **n != node)
+                .map(|(n, a)| (*n, a.weight()))
+                .collect();
+            rig.blend = if rig.current.is_empty() { 1.0 } else { 0.0 };
+            player.play(node).repeat().set_speed(0.0);
+            rig.current = name.into();
+            rig.phase = 0.0;
+        }
+        if let Actor::Fish(i) = rig.actor
+            && rig.generation != w.0.fish[i].id.generation
+        {
+            rig.generation = w.0.fish[i].id.generation;
+            rig.phase = w.0.fish[i].swimming.tail_phase / std::f32::consts::TAU * 1.2;
+        }
+        // Explicit crossfades use game time, so pausing also freezes a blend.
+        rig.blend = (rig.blend + dt / 0.22).min(1.0);
+        let mut remaining = 1.0;
+        for &(old, weight) in &rig.outgoing {
+            if rig.blend >= 1.0 {
+                player.stop(old);
+            } else if let Some(a) = player.animation_mut(old) {
+                let w = weight * (1.0 - rig.blend);
+                a.set_weight(w);
+                let seek = a.seek_time();
+                let clip = rig.clips.iter().find(|(_, (n, _))| *n == old);
+                if let Some((name, (_, length))) = clip {
+                    let next = seek + dt * speed;
+                    a.set_seek_time(if name == "Throw" || name == "Wave" {
+                        next.min(length.next_down())
+                    } else {
+                        next.rem_euclid(*length)
+                    });
+                }
+                remaining -= w;
+            }
+        }
+        player.play(node).set_weight(remaining.max(0.0));
+        rig.phase = phase
+            .map(|x| (x * duration).min(duration.next_down()))
+            .unwrap_or((rig.phase + dt * speed) % duration);
+        player
+            .play(node)
+            .repeat()
+            .set_speed(0.0)
+            .set_seek_time(rig.phase);
+    }
+}
+fn restore_bones(mut q: Query<(&mut Transform, &mut CorrectBone)>) {
+    for (mut t, mut bone) in &mut q {
+        if let Some(rotation) = bone.original.take() {
+            t.rotation = rotation;
+        }
+    }
+}
+fn correct_bones(
+    w: Res<Presentation>,
+    p: Res<Preferences>,
+    mut set: ParamSet<(Query<&Transform>, Query<&mut Transform>)>,
+    parents: Query<&ChildOf>,
+    mut bones: Query<(Entity, &mut CorrectBone)>,
+) {
+    let s = &w.0.sabrina;
+    let effort = (s.motion.velocity.length() / 7.2).min(1.0);
+    let rest =
+        ((s.swimming.pitch - 0.2) / 0.45).clamp(0.0, 1.0) * (1.0 - (effort * 2.0).clamp(0.0, 1.0));
+    let time = w.0.session.time;
+    let motion = if p.reduced_motion { 0.25 } else { 1.0 };
+    let gaze = (-s.swimming.pitch * 0.55).clamp(-0.65, 0.06)
+        + motion * (0.018 * (time * 0.87).sin() + 0.009 * (time * 1.71).sin());
+    // Parent corrections are applied before child corrections, and restored before
+    // the next animation evaluation, including joints with optimized-out tracks.
+    for name in [
+        "Tail_1",
+        "Tail_2",
+        "Neck",
+        "Head",
+        "Hair_Back_1",
+        "Hair_Left_1",
+        "Hair_Right_1",
+        "Hair_Back_2",
+        "Hair_Left_2",
+        "Hair_Right_2",
+        "Hair_Back_3",
+        "Hair_Left_3",
+        "Hair_Right_3",
+    ] {
+        for (e, mut bone) in &mut bones {
+            if bone.name != name {
+                continue;
+            }
+            let angle = match name {
+                "Tail_1" => 0.30 * rest,
+                "Tail_2" => 0.10 * rest,
+                "Neck" => gaze * 0.35,
+                "Head" => gaze * 0.65,
+                _ => {
+                    if name.ends_with("_1") {
+                        -gaze
+                    } else {
+                        0.0
+                    }
+                }
+            };
+            let axis = if name.starts_with("Tail") {
+                bone.rest_axis
+            } else {
+                relative_rotation(e, bone.root, &set.p0(), &parents).inverse() * Vec3::Z
+            };
+            if let Ok(mut t) = set.p1().get_mut(e) {
+                bone.original = Some(t.rotation);
+                t.rotation *= Quat::from_axis_angle(axis.normalize_or_zero(), angle);
+                if name.starts_with("Hair_") {
+                    let segment = name.as_bytes()[name.len() - 1] as f32 - b'1' as f32;
+                    let offset = if name.contains("Left") {
+                        1.1
+                    } else if name.contains("Right") {
+                        2.4
+                    } else {
+                        0.0
+                    };
+                    let phase = time * 1.35 - segment * 0.95 + offset;
+                    // Small roots, freer tips: delayed independent currents keep
+                    // the scalp attached and avoid rigid synchronized hair motion.
+                    let amplitude = (0.025 + segment * 0.065) * (1.0 - effort * 0.25) * motion;
+                    t.rotation *= Quat::from_rotation_x(amplitude * phase.sin())
+                        * Quat::from_rotation_z(
+                            amplitude * 0.65 * (time * 0.91 - segment * 0.8 + offset + 0.6).sin(),
+                        );
+                }
+            }
+        }
+    }
+}
+
+fn facial_expression(w: Res<Presentation>, mut faces: Query<&mut MorphWeights, With<FacialRig>>) {
+    let time = w.0.session.time;
+    // Unequal intervals and a quick closing/slower opening feel less mechanical.
+    let cycle = time.rem_euclid(11.3);
+    let blink = [2.8, 7.7, 8.05]
+        .into_iter()
+        .map(|start| {
+            let t = cycle - start;
+            if (0.0..0.08).contains(&t) {
+                t / 0.08
+            } else if (0.08..0.22).contains(&t) {
+                1.0 - (t - 0.08) / 0.14
+            } else {
+                0.0
+            }
+        })
+        .fold(0.0_f32, f32::max);
+    let sing = w.0.sabrina.song.strength * (0.45 + 0.2 * (time * 4.7).sin());
+    for mut face in &mut faces {
+        let weights = face.weights_mut();
+        if weights.len() == 3 {
+            weights.copy_from_slice(&[blink, 0.35 + 0.1 * (time * 0.63).sin(), sing]);
+        }
+    }
+}
+
+// Use the rendered, blended skeleton for the held prop; collision samples remain
+// deterministic simulation data. Compose locals before transform propagation.
+fn attach_crystal(
+    w: Res<Presentation>,
+    palm: Query<Entity, With<Palm>>,
+    parents: Query<&ChildOf>,
+    mut set: ParamSet<(Query<&Transform>, Query<(&Actor, &mut Transform)>)>,
+) {
+    if w.0.crystal.magic.state != reef_sim::Spell::Charging {
+        return;
+    }
+    let Ok(mut e) = palm.single() else { return };
+    let mut point = Vec3::new(0.0, reef_sim::sabrina_palm_offset(), 0.0);
+    for _ in 0..64 {
+        if let Ok(t) = set.p0().get(e) {
+            point = t.transform_point(point);
+        }
+        let Ok(parent) = parents.get(e) else { break };
+        e = parent.parent();
+    }
+    let magic = &w.0.crystal.magic;
+    let origin = w.0.sabrina.motion.pos + magic.charge_offset;
+    let amount = (magic.time / 0.4).clamp(0.0, 1.0);
+    let amount = amount * amount * (3.0 - 2.0 * amount);
+    for (actor, mut t) in &mut set.p1() {
+        if *actor == Actor::Crystal {
+            t.translation = Vec3::new(origin.x, origin.y, magic.charge_depth).lerp(point, amount);
+        }
+    }
+}
+
+fn report_assets(
+    options: Res<Options>,
+    w: Res<Presentation>,
+    mut reported: Local<bool>,
+    lods: Query<(&RenderLod, &Mesh3d)>,
+    surfaces: Query<&CharacterSurface>,
+    meshes: Res<Assets<Mesh>>,
+) {
+    if *reported || (!options.verify && options.capture.is_none()) || w.0.session.time < 1.0 {
+        return;
+    }
+    let fish: Vec<_> = surfaces
+        .iter()
+        .filter(|s| matches!(s.actor, Actor::Fish(_)))
+        .collect();
+    if fish.len() != 72 {
+        return;
+    }
+    let unique: std::collections::HashSet<_> = fish.iter().map(|s| s.normal.id()).collect();
+    assert!(unique.len() <= 12, "Fish must reuse species materials");
+    assert_eq!(
+        lods.iter().count(),
+        74,
+        "Every fish and both reef meshes need render LODs"
+    );
+    let mut counts = [0; 3];
+    let mut triangles = 0;
+    for (lod, mesh) in &lods {
+        counts[lod.level] += 1;
+        let mesh = meshes.get(&mesh.0).unwrap();
+        assert!(mesh.contains_attribute(Mesh::ATTRIBUTE_TANGENT));
+        triangles += mesh.indices().unwrap().len() / 3;
+    }
+    println!(
+        "RENDER ASSETS: 72 fish share {} normal materials; LOD counts {:?}; {} fish/reef triangles",
+        unique.len(),
+        counts,
+        triangles
+    );
+    *reported = true;
+}

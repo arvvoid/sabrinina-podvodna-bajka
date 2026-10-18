@@ -1,0 +1,34 @@
+name: Rust gameplay and Bevy
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  rust:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.97.1
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Linux dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev libudev-dev libx11-dev libxrandr-dev libxi-dev libgl1-mesa-dev
+      - run: cargo fmt --all --check
+      - run: cargo test --locked --workspace
+      - run: cargo check --locked -p sabrina
+      - run: cargo clippy --locked --workspace --all-targets -- -D warnings
+      - name: Shared model contracts and pose samples
+        run: |
+          python tools/validate_models.py
+          python tools/validate_render_lods.py
+          python tools/export_rust_contacts.py --check

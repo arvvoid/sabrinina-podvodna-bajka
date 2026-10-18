@@ -1,0 +1,98 @@
+[
+  {
+    "file": "assets/audio/sting.ogg",
+    "source_sprite": "Mermaid",
+    "source_name": "MeduzaOpekla",
+    "source_asset": "9275ba9d4baa62c7040f1f55b2814447.wav",
+    "source_sha256": "d57dce387f40fa8811abd3dc5fd39abb081471003b9d9dfe5eccdab6bb7a194e",
+    "duration_seconds": 2.478313
+  },
+  {
+    "file": "assets/audio/help_en.ogg",
+    "source_sprite": "Mermaid",
+    "source_name": "sabrina_bajka_help_en",
+    "source_asset": "4b5fd2d88c7d7a267a8ae1a43ca27955.mp3",
+    "source_sha256": "3c73bed4ac5009a11d9e9b66a3baa31b5a8b1fb102ef774a95d3521c1facd95b",
+    "duration_seconds": 66.912
+  },
+  {
+    "file": "assets/audio/help_it.ogg",
+    "source_sprite": "Mermaid",
+    "source_name": "sabrina_bajka_help_it",
+    "source_asset": "eaef6f0b58126b31ca8fbf0b41990be2.mp3",
+    "source_sha256": "5d226f1af27001f5d75ff0aadb7ca605fca85646e40fad3e962823ee0d3efe95",
+    "duration_seconds": 64.92
+  },
+  {
+    "file": "assets/audio/help_hr.ogg",
+    "source_sprite": "Mermaid",
+    "source_name": "sabrina_bajka_help_hr",
+    "source_asset": "f48eadb5791d8fb69af346d51285b561.mp3",
+    "source_sha256": "06d746ad53153bce0f9854231d598fcdfc20e0b6d17f73c27632da97e5ecbd2f",
+    "duration_seconds": 66.96
+  },
+  {
+    "file": "assets/audio/siren_song.ogg",
+    "source_sprite": "Mermaid",
+    "source_name": "siren_song",
+    "source_asset": "6b37b0853bba9c9d9612864fdee12919.wav",
+    "source_sha256": "52fb028c3589bb0f3d1ddd70a30474ebab43bdceef156a5ba5f71a4cff903258",
+    "duration_seconds": 5.375125
+  },
+  {
+    "file": "assets/audio/jelly_arrive.ogg",
+    "source_sprite": "Jellyfish",
+    "source_name": "gladna_sam_gdje_ribice",
+    "source_asset": "6ea587b5623a2056256b5defba2808cf.mp3",
+    "source_sha256": "b1cc42b0d7f23ea666a2f87a88653ba1dd966a31280fd54a21c371aa556d4541",
+    "duration_seconds": 3.787781
+  },
+  {
+    "file": "assets/audio/jelly_eat.ogg",
+    "source_sprite": "Jellyfish",
+    "source_name": "ups_pijela_sam_te",
+    "source_asset": "313d75eecfe5a1e4835ae011de768838.mp3",
+    "source_sha256": "7680ddcb5fb171860daf43c66ffb98288c75f6b9c9b01247e0f643a0a4e453ea",
+    "duration_seconds": 1.750219
+  },
+  {
+    "file": "assets/audio/jelly_repelled.ogg",
+    "source_sprite": "Jellyfish",
+    "source_name": "gladna_sam_sirena_smeta",
+    "source_asset": "a19aff0061cc7cf974437099faafeae0.mp3",
+    "source_sha256": "224736a71271854a9925e90d8f5652ef5af68fcd671c0fb59d608f5496ecc72f",
+    "duration_seconds": 3.526531
+  },
+  {
+    "file": "assets/audio/jelly_leave.ogg",
+    "source_sprite": "Jellyfish",
+    "source_name": "pliva_dalje",
+    "source_asset": "e0dae7df1c0f2fa2f4fa46c8c94f219f.mp3",
+    "source_sha256": "9e6e84a68b47e7693c38ecea31a9eb028544f90f2ff12361893d7a7ba573bbbd",
+    "duration_seconds": 6.635125
+  },
+  {
+    "file": "assets/audio/magic_charge.ogg",
+    "source_sprite": "Crystal",
+    "source_name": "Magic Spell",
+    "source_asset": "1cb60ecdb1075c8769cb346d5c2a22c7.wav",
+    "source_sha256": "9d5053aa2801302397f621c4984bf1733b15c56c5985a163dae1b086d01d9862",
+    "duration_seconds": 1.983281
+  },
+  {
+    "file": "assets/audio/magic_collect.ogg",
+    "source_sprite": "Crystal",
+    "source_name": "collect",
+    "source_asset": "32514c51e03db680e9c63857b840ae78.wav",
+    "source_sha256": "a900fe16c193a1c7ae95a50d00b48baf254193e22f95b60346fc530b32fdfaa9",
+    "duration_seconds": 0.645719
+  },
+  {
+    "file": "assets/audio/magic_burst.ogg",
+    "source_sprite": "Crystal",
+    "source_name": "Boom Cloud",
+    "source_asset": "62d87dfb0f873735e59669d965bdbd7d.wav",
+    "source_sha256": "0daaab0e9284c1ca0537828a539a4d27ae514786abc650add032a9a3920b7f7b",
+    "duration_seconds": 4.012656
+  }
+]

@@ -1,0 +1,23 @@
+{
+  "source_name": "tropical fish 3d model.glb",
+  "sha256": "c6aec1183f5d02a0baabb835f2e140e5bb1b14923acd1c63c54060f509ab79db",
+  "provided_by": "Project owner",
+  "source_generator_metadata": "Tripo",
+  "source_triangles": 1883328,
+  "adaptation": "Separated twelve connected fish, reduced to 7800 triangles each, baked 512px color/normal maps, normalized size, weighted six-bone rigs and authored idle/swim loops. Legacy parrotfish/blue_wrasse slot names contain the supplied pink anthias/cyan chromis.",
+  "assets": [
+    "clownfish",
+    "blue_tang",
+    "butterflyfish",
+    "bannerfish",
+    "parrotfish",
+    "blue_wrasse",
+    "fire_goby",
+    "royal_tang",
+    "yellow_tang",
+    "emperor_angelfish",
+    "coral_anthias",
+    "cardinalfish"
+  ],
+  "license": "User-supplied artwork; reserved separately from MIT source. See ASSET_LICENSE.md."
+}

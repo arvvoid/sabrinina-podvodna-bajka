@@ -1,0 +1,397 @@
+{
+  "Game over": [
+    "Game over",
+    "Kraj igre",
+    "Fine della partita"
+  ],
+  "Sabrina needs a rest. Try again when you are ready.": [
+    "Sabrina needs a rest. Try again when you are ready.",
+    "Sabrini treba odmor. Pokušaj ponovno kada budeš spreman.",
+    "Sabrina ha bisogno di riposo. Riprova quando vuoi."
+  ],
+  "Swim again": [
+    "Swim again",
+    "Zaplivaj ponovno",
+    "Nuota ancora"
+  ],
+  "Back to our reef": [
+    "Back to our reef",
+    "Natrag na naš greben",
+    "Torna alla barriera"
+  ],
+  "Sabrina's\nUnderwater\nFairy Tale": [
+    "Sabrina's\nUnderwater\nFairy Tale",
+    "Sabrinina\npodvodna\nbajka",
+    "La fiaba\nsottomarina\ndi Sabrina"
+  ],
+  "A REMAKE BY LUKA DEZULOVIC": [
+    "A REMAKE BY LUKA DEZULOVIC",
+    "PRERADA: LUKA DEZULOVIC",
+    "UN REMAKE DI LUKA DEZULOVIC"
+  ],
+  "A living sea. A mischievous jellyfish.\nAnd a little mermaid with a magic crystal.": [
+    "A living sea. A mischievous jellyfish.\nAnd a little mermaid with a magic crystal.",
+    "Živo more. Nestašna meduza.\nI mala sirena s čarobnim kristalom.",
+    "Un mare vivo. Una medusa birichina.\nE una sirenetta con un cristallo magico."
+  ],
+  "Let's play": [
+    "Let's play",
+    "Igrajmo se",
+    "Giochiamo"
+  ],
+  "Quiet aquarium · no jellyfish": [
+    "Quiet aquarium · no jellyfish",
+    "Mirni akvarij · bez meduza",
+    "Acquario tranquillo · senza meduse"
+  ],
+  "Credits": [
+    "Credits",
+    "Autori",
+    "Crediti"
+  ],
+  "Settings": [
+    "Settings",
+    "Postavke",
+    "Impostazioni"
+  ],
+  "How to play": [
+    "How to play",
+    "Kako igrati",
+    "Come giocare"
+  ],
+  "Goodbye": [
+    "Goodbye",
+    "Doviđenja",
+    "Arrivederci"
+  ],
+  "Best visit: ": [
+    "Best visit: ",
+    "Najbolji posjet: ",
+    "Visita migliore: "
+  ],
+  "A little pause": [
+    "A little pause",
+    "Mali predah",
+    "Una piccola pausa"
+  ],
+  "Your fish will wait for you.": [
+    "Your fish will wait for you.",
+    "Ribice će te pričekati.",
+    "I pesciolini ti aspettano."
+  ],
+  "Continue swimming": [
+    "Continue swimming",
+    "Nastavi plivati",
+    "Continua a nuotare"
+  ],
+  "Return to the beginning": [
+    "Return to the beginning",
+    "Povratak na početak",
+    "Torna all'inizio"
+  ],
+  "Make yourself at home": [
+    "Make yourself at home",
+    "Uredi svoj mali svijet",
+    "Il tuo piccolo mondo"
+  ],
+  "Fullscreen: ": [
+    "Fullscreen: ",
+    "Cijeli zaslon: ",
+    "Schermo intero: "
+  ],
+  "on": [
+    "on",
+    "da",
+    "sì"
+  ],
+  "off": [
+    "off",
+    "ne",
+    "no"
+  ],
+  "Graphics: ": [
+    "Graphics: ",
+    "Grafika: ",
+    "Grafica: "
+  ],
+  "Light": [
+    "Light",
+    "Lagana",
+    "Leggera"
+  ],
+  "Balanced": [
+    "Balanced",
+    "Uravnotežena",
+    "Bilanciata"
+  ],
+  "High": [
+    "High",
+    "Visoka",
+    "Alta"
+  ],
+  "Motion: reduced": [
+    "Motion: reduced",
+    "Kretanje: smanjeno",
+    "Movimento: ridotto"
+  ],
+  "Motion: natural": [
+    "Motion: natural",
+    "Kretanje: prirodno",
+    "Movimento: naturale"
+  ],
+  "Gentle play": [
+    "Gentle play",
+    "Nježna igra",
+    "Gioco dolce"
+  ],
+  "Lively play": [
+    "Lively play",
+    "Živahnija igra",
+    "Gioco vivace"
+  ],
+  "Music": [
+    "Music",
+    "Glazba",
+    "Musica"
+  ],
+  "Magic & sound effects": [
+    "Magic & sound effects",
+    "Čarolija i zvučni efekti",
+    "Magia ed effetti sonori"
+  ],
+  "Original voices": [
+    "Original voices",
+    "Izvorni glasovi",
+    "Voci originali"
+  ],
+  "Quiet time: ": [
+    "Quiet time: ",
+    "Vrijeme odmora: ",
+    "Tempo tranquillo: "
+  ],
+  "At most ": [
+    "At most ",
+    "Najviše ",
+    "Al massimo "
+  ],
+  " jellyfish": [
+    " jellyfish",
+    " meduza",
+    " meduse"
+  ],
+  "Done": [
+    "Done",
+    "Gotovo",
+    "Fatto"
+  ],
+  "Play the original on Scratch ↗": [
+    "Play the original on Scratch ↗",
+    "Izvornik na Scratchu ↗",
+    "Gioca all’originale su Scratch ↗"
+  ],
+  "Back": [
+    "Back",
+    "Natrag",
+    "Indietro"
+  ],
+  "Listen again": [
+    "Listen again",
+    "Poslušaj ponovno",
+    "Ascolta di nuovo"
+  ],
+  "Pause / resume voice": [
+    "Pause / resume voice",
+    "Zaustavi / nastavi glas",
+    "Pausa / riprendi voce"
+  ],
+  "♪ Singing · Q / X": [
+    "♪ Singing · Q / X",
+    "♪ Pjevanje · Q / X",
+    "♪ Canto · Q / X"
+  ],
+  "♪ Sing · Q / X": [
+    "♪ Sing · Q / X",
+    "♪ Zapjevaj · Q / X",
+    "♪ Canta · Q / X"
+  ],
+  "Health · ": [
+    "Health · ",
+    "Zdravlje · ",
+    "Salute · "
+  ],
+  "A jellyfish is visiting!": [
+    "A jellyfish is visiting!",
+    "Meduza je u posjetu!",
+    "Una medusa in visita!"
+  ],
+  "A peaceful little sea": [
+    "A peaceful little sea",
+    "Mirno malo more",
+    "Un piccolo mare tranquillo"
+  ],
+  " fish   ·   ": [
+    " fish   ·   ",
+    " ribica   ·   ",
+    " pesci   ·   "
+  ],
+  "Score ": [
+    "Score ",
+    "Bodovi ",
+    "Punti "
+  ],
+  "Take your time": [
+    "Take your time",
+    "Bez žurbe",
+    "Senza fretta"
+  ],
+  "Next visit in ": [
+    "Next visit in ",
+    "Sljedeći posjet za ",
+    "Prossima visita tra "
+  ],
+  "Crystal · ": [
+    "Crystal · ",
+    "Kristal · ",
+    "Cristallo · "
+  ],
+  "ready": [
+    "ready",
+    "spreman",
+    "pronto"
+  ],
+  "Song · ": [
+    "Song · ",
+    "Pjesma · ",
+    "Canto · "
+  ],
+  " · recharging": [
+    " · recharging",
+    " · čeka punjenje",
+    " · ricarica"
+  ],
+  "Wave · ": [
+    "Wave · ",
+    "Val · ",
+    "Onda · "
+  ],
+  "ready · F / B": [
+    "ready · F / B",
+    "spreman · F / B",
+    "pronta · F / B"
+  ],
+  "Wave · F": [
+    "Wave · F",
+    "Val · F",
+    "Onda · F"
+  ],
+  "♪ Stop · Q / X": [
+    "♪ Stop · Q / X",
+    "♪ Prestani · Q / X",
+    "♪ Ferma · Q / X"
+  ],
+  "♪ Recharging": [
+    "♪ Recharging",
+    "♪ Obnavljanje",
+    "♪ Ricarica"
+  ],
+  "Mouse / WASD / stick · swim     Click / Space / A · crystal     Q / X · song     RMB / F / B · wave": [
+    "Mouse / WASD / stick · swim     Click / Space / A · crystal     Q / X · song     RMB / F / B · wave",
+    "Miš / WASD / palica · plivaj     Klik / Razmak / A · kristal     Q / X · pjesma     Desni klik / F / B · val",
+    "Mouse / WASD / levetta · nuota     Clic / Spazio / A · cristallo     Q / X · canto     Clic destro / F / B · onda"
+  ],
+  "The sea is peaceful again": [
+    "The sea is peaceful again",
+    "More je ponovno mirno",
+    "Il mare è di nuovo tranquillo"
+  ],
+  " points · ": [
+    " points · ",
+    " bodova · ",
+    " punti · "
+  ],
+  " fish safe": [
+    " fish safe",
+    " ribica na sigurnom",
+    " pesci al sicuro"
+  ],
+  "Swim, sing, and look after the fish": [
+    "Swim, sing, and look after the fish",
+    "Plivaj, pjevaj i čuvaj ribice",
+    "Nuota, canta e proteggi i pesci"
+  ],
+  "Swim with mouse, WASD / arrows, or the left controller stick.\n\nCRYSTAL · Click, Space / E or controller A charges a crystal. It returns touched fish to Sabrina with a brief protective bubble and sends a jellyfish away. Recharge: 2:30 in Gentle mode, 3:00 in Lively. Save it for danger!\n\nSONG · Q or controller X starts or stops singing. Only fish inside the pink ripples can hear you; even distant jellyfish sometimes hear it and approach. The circle shrinks as energy runs out. A full song lasts 12 seconds (10 in Lively); full recharge takes 20 seconds (24 in Lively). Stop early to save energy. If emptied, the song stays locked until completely full.\n\nWAVE · Right-click, F or controller B sends a water wave from your hands in the direction you face. It pushes a group of fish; jellyfish are unaffected. Recharge: 3 seconds (4 in Lively). Aim away from the jellyfish; swim slowly while singing to keep your school close.\n\nEach fish first rescued in a visit earns +80 by crystal and +20 by a wave directed away from a nearby jellyfish. Escorting a threatened fish to clear water with song earns +30 once per visit. A repelled jellyfish gives +300, with 80–115 per survivor and +60 per species. Casting costs no points; a sting costs up to 100. A sting costs health too. Health slowly recovers after 8 safe seconds. At zero health, the game ends.\n\nBetween visits, relax as new fish arrive. Quiet aquarium has no jellyfish. Settings control rest time, visitors, graphics and sound. Esc / Start pauses; F11 switches fullscreen.": [
+    "Swim with mouse, WASD / arrows, or the left controller stick.\n\nCRYSTAL · Click, Space / E or controller A charges a crystal. It returns touched fish to Sabrina with a brief protective bubble and sends a jellyfish away. Recharge: 2:30 in Gentle mode, 3:00 in Lively. Save it for danger!\n\nSONG · Q or controller X starts or stops singing. Only fish inside the pink ripples can hear you; even distant jellyfish sometimes hear it and approach. The circle shrinks as energy runs out. A full song lasts 12 seconds (10 in Lively); full recharge takes 20 seconds (24 in Lively). Stop early to save energy. If emptied, the song stays locked until completely full.\n\nWAVE · Right-click, F or controller B sends a water wave from your hands in the direction you face. It pushes a group of fish; jellyfish are unaffected. Recharge: 3 seconds (4 in Lively). Aim away from the jellyfish; swim slowly while singing to keep your school close.\n\nEach fish first rescued in a visit earns +80 by crystal and +20 by a wave directed away from a nearby jellyfish. Escorting a threatened fish to clear water with song earns +30 once per visit. A repelled jellyfish gives +300, with 80–115 per survivor and +60 per species. Casting costs no points; a sting costs up to 100. A sting costs health too. Health slowly recovers after 8 safe seconds. At zero health, the game ends.\n\nBetween visits, relax as new fish arrive. Quiet aquarium has no jellyfish. Settings control rest time, visitors, graphics and sound. Esc / Start pauses; F11 switches fullscreen.",
+    "Plivaj mišem, tipkama WASD / strelicama ili lijevom palicom kontrolera.\n\nKRISTAL · Klik, Razmak / E ili A puni kristal. Vraća dotaknute ribice Sabrini i tjera meduzu. Spašene ribice kratko štiti mjehurić. Obnova traje 2:30 u nježnom načinu, 3:00 u živahnom. Sačuvaj ga za opasnost!\n\nPJESMA · Q ili X uključuje i zaustavlja pjesmu. Čuju je ribice u ružičastom krugu, a ponekad i udaljene meduze. Krug se smanjuje kako nestaje energije. Puna pjesma traje 12 sekundi (10 u živahnom), obnova 20 (24 u živahnom). Stani ranije i sačuvaj energiju. Ako je potpuno potrošiš, mora se potpuno obnoviti.\n\nVAL · Desni klik, F ili B šalje val iz ruku u smjeru pogleda. Gura skupinu ribica, ali ne meduze. Obnova traje 3 sekunde (4 u živahnom). Usmjeri val od meduze; plivaj polako dok pjevaš.\n\nPrvo spašavanje ribice u posjetu donosi +80 kristalom i +20 valom koji je gura od obližnje meduze. Pjesma donosi +30 za pratnju ugrožene ribice na sigurno, jednom u posjetu. Otjerana meduza daje +300, uz 80–115 po preživjeloj ribici i +60 po vrsti. Čarolija ne troši bodove, ubod oduzima do 100 i zdravlje. Nakon 8 sigurnih sekundi zdravlje se polako obnavlja. Na nuli je kraj igre.\n\nIzmeđu posjeta uživaj u miru i novim ribicama. Mirni akvarij nema meduza. Postavke mijenjaju odmor, meduze, grafiku i zvuk. Esc / Start za predah; F11 za cijeli zaslon.",
+    "Nuota con mouse, WASD / frecce o levetta sinistra.\n\nCRISTALLO · Clic, Spazio / E o A carica il cristallo. Riporta i pesci toccati a Sabrina e allontana una medusa. Una bolla protegge brevemente i pesci salvati. Ricarica: 2:30 in modalità Dolce, 3:00 in Vivace. Conservalo per il pericolo!\n\nCANTO · Q o X avvia o ferma il canto. Solo i pesci nel cerchio rosa ti sentono, a volte anche le meduse lontane! Il cerchio si restringe mentre consumi energia. Un canto pieno dura 12 secondi (10 in Vivace); ricarica completa in 20 (24 in Vivace). Fermati prima per risparmiare energia. Se la esaurisci, devi aspettare la ricarica completa.\n\nONDA · Clic destro, F o B lancia un’onda dalle mani nella direzione dello sguardo. Spinge i pesci, ma non le meduse. Ricarica: 3 secondi (4 in Vivace). Mira lontano dalla medusa e nuota piano mentre canti.\n\nIl primo salvataggio di ogni pesce nella visita vale +80 con il cristallo e +20 con un’onda che allontana il pesce da una medusa vicina. Scortare col canto un pesce in pericolo al sicuro vale +30 una volta per visita. Una medusa allontanata vale +300, più 80–115 per sopravvissuto e +60 per specie. La magia non costa punti, una puntura fino a 100. Una puntura riduce anche la salute. Dopo 8 secondi senza punture si rigenera lentamente. A zero la partita finisce.\n\nTra le visite, rilassati mentre arrivano nuovi pesci. Acquario tranquillo non ha meduse. Regola riposo, meduse, grafica e suono nelle impostazioni. Esc / Start pausa; F11 schermo intero."
+  ],
+  "Sabrina's\nUnderwater Fairy Tale": [
+    "Sabrina's\nUnderwater Fairy Tale",
+    "Sabrinina\npodvodna bajka",
+    "La fiaba sottomarina\ndi Sabrina"
+  ],
+  "An idea by Sabrina Dezulovic became a little underwater game in Scratch. Luka Dezulovic is bringing its mermaid magic and peaceful aquarium to life in this 3D remake.": [
+    "An idea by Sabrina Dezulovic became a little underwater game in Scratch. Luka Dezulovic is bringing its mermaid magic and peaceful aquarium to life in this 3D remake.",
+    "Iz ideje Sabrine Dezulovic nastala je mala podvodna igra u Scratchu. Luka Dezulovic ovom 3D preradom oživljava njezinu sirensku čaroliju i mirni akvarij.",
+    "Da un’idea di Sabrina Dezulovic è nato un piccolo gioco sottomarino in Scratch. Luka Dezulovic ne fa rivivere la magia e il tranquillo acquario in questo remake 3D."
+  ],
+  "Please wait…": [
+    "Please wait…",
+    "Molimo pričekaj…",
+    "Attendi…"
+  ],
+  "Let the song recharge fully.": [
+    "Let the song recharge fully.",
+    "Pričekaj da se pjesma potpuno obnovi.",
+    "Lascia ricaricare completamente il canto."
+  ],
+  "The song is resting. It must recharge fully.": [
+    "The song is resting. It must recharge fully.",
+    "Pjesma se odmara. Mora se potpuno obnoviti.",
+    "Il canto riposa. Deve ricaricarsi completamente."
+  ],
+  "That mermaid and her crystal!": [
+    "That mermaid and her crystal!",
+    "Ta sirena i njezin kristal!",
+    "Quella sirena e il suo cristallo!"
+  ],
+  "A little sting. Sabrina will recover soon.": [
+    "A little sting. Sabrina will recover soon.",
+    "Mala opeklina. Sabrina će se brzo oporaviti.",
+    "Una piccola puntura. Sabrina si riprenderà presto."
+  ],
+  "I'm hungry! Where are my little fish?": [
+    "I'm hungry! Where are my little fish?",
+    "Gladna sam! Gdje su moje ribice?",
+    "Ho fame! Dove sono i miei pesciolini?"
+  ],
+  "Oops! I ate you!": [
+    "Oops! I ate you!",
+    "Ups! Pojela sam te!",
+    "Ops! Ti ho mangiato!"
+  ],
+  "The jellyfish is swimming away.": [
+    "The jellyfish is swimming away.",
+    "Meduza pliva dalje.",
+    "La medusa nuota via."
+  ],
+  "Please wait… bringing the reef to life": [
+    "Please wait… bringing the reef to life",
+    "Molimo pričekaj… greben oživljava",
+    "Attendi… la barriera prende vita"
+  ],
+  "Welcome to Sabrina's little sea": [
+    "Welcome to Sabrina's little sea",
+    "Dobro došli u Sabrinino malo more",
+    "Benvenuti nel piccolo mare di Sabrina"
+  ],
+  "Song recharging…": [
+    "Song recharging…",
+    "Pjesma se puni…",
+    "Il canto si ricarica…"
+  ],
+  "♪ Stop singing · Q / X": [
+    "♪ Stop · Q / X",
+    "♪ Stani · Q / X",
+    "♪ Ferma · Q / X"
+  ]
+}
