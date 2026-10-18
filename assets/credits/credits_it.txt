@@ -1,12 +1,12 @@
 La fiaba sottomarina di Sabrina — un remake 3D
 
 Sviluppo e remake
-Luka Dezulovic
+Luka Dežulović
 
 Idea originale
-Sabrina Dezulovic
+Sabrina Dežulović
 
-Il gioco è nato in Scratch da un’idea di Sabrina Dezulovic. Luka Dezulovic sta ricreando quel piccolo mondo sottomarino in 3D, conservando la magia della sirena, i pesci tropicali e i momenti tranquilli nell’acquario.
+Il gioco è nato in Scratch da un’idea di Sabrina Dežulović. Luka Dežulović sta ricreando quel piccolo mondo sottomarino in 3D, conservando la magia della sirena, i pesci tropicali e i momenti tranquilli nell’acquario.
 
 Gioca al progetto originale su Scratch:
 https://scratch.mit.edu/projects/1203591608/
