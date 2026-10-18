@@ -67,7 +67,7 @@ HUD backgrounds and progress fills are semi-transparent. The lower-left foregrou
 
 Enable **Show FPS counter** in Settings to display a small, smoothed frames-per-second counter in the upper-right corner, below the HUD buttons. It is off by default, works in menus and during play, and is saved with your preferences.
 
-English, Croatian and Italian are available through the main menu's **Language… / Jezik… / Lingua…** button. Select a language by name in the chooser; a checkmark identifies the selected language. Graphics, sound, controls and best score are saved locally. The loading screen uses localized text and asset-loading progress, then waits for character instances before opening the menu. The first launch uses fullscreen and Balanced graphics. Balanced has subtle soft shadows; High adds finer shadows and 2× MSAA; Light reduces effects and disables shadows. **V-sync** is on by default and uses relaxed FIFO where the driver supports it, so an occasional late frame does not halve the frame rate; turn it off in Settings to measure uncapped performance or reduce input latency (may tear).
+English, Croatian and Italian are available through the main menu's **Language… / Jezik… / Lingua…** button. Select a language by name in the chooser; a checkmark identifies the selected language. Graphics, sound, controls and best score are saved locally. The loading screen uses localized text and asset-loading progress, then waits for character instances before opening the menu. The first launch uses fullscreen and Balanced graphics. Balanced has subtle soft shadows; High adds finer shadows and 2× MSAA; Light reduces effects and disables shadows. **V-sync** is on by default. Vulkan uses relaxed FIFO where the driver supports it, so an occasional late frame does not halve the frame rate; Direct3D 12 has no relaxed mode, so a late frame waits for the next refresh. Turn V-sync off in Settings to measure uncapped performance, reduce input latency or avoid that wait on slower Windows PCs (may tear).
 
 ## Build and run
 
@@ -167,7 +167,7 @@ python3 tools/export_rust_contacts.py --check
 ./tools/run.sh --verify-input
 ```
 
-For visual checks, use `--capture-game`, `--capture-visit`, `--capture-throw`, `--capture-combat` (bubble, visitor health and hit feedback), `--capture-pose-idle` or `--capture-graphics-high`. `--capture-school --fullhd` runs a 72-fish stress scene and reports frame times. Captures go to the system temporary directory and do not save preferences.
+For visual checks, use `--capture-game`, `--capture-visit`, `--capture-throw`, `--capture-combat` (bubble, visitor health and hit feedback), `--capture-pose-idle` or `--capture-graphics-high`. `--capture-school --fullhd` runs a 72-fish stress scene and reports frame times plus per-pass CPU/GPU timings. Add `--direct-draw` to any run to disable Bevy's indirect drawing (normal draw calls instead), which also skips the indirect-argument validation pass wgpu requires on Direct3D 12; compare both on slow Windows PCs. Captures go to the system temporary directory and do not save preferences.
 
 `--capture-boot`, `--capture-language`, `--capture-victory` and `--capture-finale` preview the loading screen, language chooser, victory screen and four-visitor final round. `--capture-demo` runs a seeded, scripted 20-second gameplay scene for video recording, using normal movement and spell rules in a borderless window; it does not record video itself. None of these modes save preferences.
 

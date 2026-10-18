@@ -16,6 +16,7 @@ pub struct Options {
     pub verify: bool,
     pub fullhd: bool,
     pub capture_fxaa: bool,
+    pub direct_draw: bool,
 }
 
 impl Options {
@@ -30,6 +31,9 @@ impl Options {
             }
             if argument == "--verify-input" {
                 options.verify = true;
+            }
+            if argument == "--direct-draw" {
+                options.direct_draw = true;
             }
             if let Some(kind) = argument.strip_prefix("--capture-") {
                 options.capture = Some(kind.into());

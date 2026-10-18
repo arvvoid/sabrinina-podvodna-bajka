@@ -185,7 +185,7 @@ fn setup(
         brightness: 350.0,
         ..default()
     });
-    commands.spawn((
+    let mut camera = commands.spawn((
         Camera3d::default(),
         Hdr,
         bevy::core_pipeline::prepass::DepthPrepass,
@@ -220,6 +220,11 @@ fn setup(
             ..default()
         },
     ));
+    if options.direct_draw {
+        // Diagnostic A/B switch: plain draws avoid wgpu's per-frame DX12
+        // indirect-argument validation pass. Bevy requires it at spawn time.
+        camera.insert(bevy::render::view::NoIndirectDrawing);
+    }
     // Broad scattered light remains visible in shadow. Splitting the sunlight
     // limits shadow contrast without raising the brightness of lit skin/hair.
     for shadow_layer in [true, false] {

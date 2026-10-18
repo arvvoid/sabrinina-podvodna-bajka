@@ -56,8 +56,10 @@ fn main() {
     }
     let gpu = gpu_settings();
     println!(
-        "RENDER CONFIG: {:?}, DX12 compiler {:?}",
-        gpu.backends, gpu.dx12_shader_compiler
+        "RENDER CONFIG: {:?}, DX12 compiler {:?}, indirect drawing {}",
+        gpu.backends,
+        gpu.dx12_shader_compiler,
+        if options.direct_draw { "off" } else { "on" }
     );
     let external_assets = match std::env::var("SABRINA_ASSETS") {
         Ok(path) => {
