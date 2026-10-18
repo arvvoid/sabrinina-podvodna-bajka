@@ -16,14 +16,13 @@ spec.loader.exec_module(packager)
 
 
 class PackageReleaseTests(unittest.TestCase):
-    def test_archives_include_runtime_assets_licenses_and_checksums(self):
+    def test_archives_include_standalone_binary_licenses_and_checksums(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            for relative in packager.RUNTIME_FOLDERS:
-                folder = root / "assets" / relative
-                folder.mkdir(parents=True, exist_ok=True)
-                (folder / "sample").write_bytes(b"asset")
-            (root / "assets/ui/boot.png").write_bytes(b"image")
+            for relative in packager.ASSET_NOTICES:
+                notice = root / "assets" / relative
+                notice.parent.mkdir(parents=True, exist_ok=True)
+                notice.write_text("license")
             (root / "docs").mkdir()
             (root / "docs/guide.md").write_text("guide")
             for name in ("LICENSE", "ASSET_LICENSE.md", "README.md"):
@@ -42,10 +41,11 @@ class PackageReleaseTests(unittest.TestCase):
                             names = opened.getnames()
                             self.assertTrue(opened.getmember(f"sabrina-test/{executable}").mode & 0o111)
                     for relative in (
-                        executable, "assets/ui/boot.png", "assets/fonts/sample",
+                        executable, "licenses/LICENSE-DejaVu.txt", "licenses/LICENSE-FluidR3.txt",
                         "docs/guide.md", "LICENSE", "ASSET_LICENSE.md", "PLAY.txt",
                     ):
                         self.assertIn(f"sabrina-test/{relative}", names)
+                    self.assertFalse(any(name.startswith("sabrina-test/assets/") for name in names))
                     checksum = archive.with_name(archive.name + ".sha256").read_text()
                     self.assertEqual(
                         checksum, f"{hashlib.sha256(archive.read_bytes()).hexdigest()}  {archive.name}\n",

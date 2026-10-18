@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Copyright (c) 2026 Luka Dežulović
 # SPDX-License-Identifier: MIT
-"""Bundle a built executable, runtime assets and documentation for distribution."""
+"""Bundle the self-contained game executable with documentation and license notices."""
 
 import argparse
 import hashlib
@@ -10,9 +10,9 @@ import shutil
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
-RUNTIME_FOLDERS = (
-    "models", "render_lods", "environments", "props", "audio", "fonts",
-    "credits", "ui/reef_png", "shaders",
+ASSET_NOTICES = (
+    "fonts/LICENSE-DejaVu.txt",
+    "audio/LICENSE-FluidR3.txt",
 )
 
 
@@ -29,21 +29,23 @@ def package(binary, name, archive_format, output):
         folder = Path(temporary) / name
         folder.mkdir()
         shutil.copy2(binary, folder / binary.name)
-        for relative in RUNTIME_FOLDERS:
+        (folder / "licenses").mkdir()
+        for relative in ASSET_NOTICES:
             source = ROOT / "assets" / relative
-            if not source.is_dir():
+            if not source.is_file():
                 raise FileNotFoundError(source)
-            shutil.copytree(source, folder / "assets" / relative)
-        shutil.copy2(ROOT / "assets/ui/boot.png", folder / "assets/ui/boot.png")
+            shutil.copy2(source, folder / "licenses" / source.name)
         shutil.copytree(ROOT / "docs", folder / "docs")
         for filename in ("LICENSE", "ASSET_LICENSE.md", "README.md"):
             shutil.copy2(ROOT / filename, folder / filename)
         (folder / "PLAY.txt").write_text(
             "Sabrina's Underwater Fairy Tale\n\n"
-            "Extract the entire package before playing. Keep assets beside the executable.\n"
+            "All game assets are embedded in the executable; no assets folder is needed.\n"
+            "Keep the documentation and license notices when redistributing the package.\n"
             "Windows: open sabrina.exe.\n"
             "Linux/macOS: open a terminal in this folder and run ./sabrina.\n\n"
             "Linux requires Vulkan drivers, ALSA, libudev and X11 runtime libraries.\n"
+            "The executable is asset-self-contained, not fully statically linked.\n"
             "Linux builds target Ubuntu 24.04 or newer compatible distributions.\n"
             "macOS builds require Apple Silicon and are unsigned/not notarized.\n"
             "Follow your system's security guidance before opening downloaded software.\n\n"

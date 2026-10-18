@@ -39,3 +39,7 @@ Neither the soundfont nor FluidSynth is bundled or required at runtime.
 DejaVu Sans has its own license, included at `assets/fonts/LICENSE-DejaVu.txt`.
 
 Include applicable third-party license notices with distributed releases.
+Runtime assets and their notices are embedded in the executable. Desktop
+packages also place the DejaVu and FluidR3 notices in `licenses/`; retain these
+and the root license documents when redistributing. Embedding assets does not
+change any of the rights or restrictions described above.

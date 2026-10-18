@@ -98,7 +98,7 @@ struct MagicLight;
 type ReefMaterial = ExtendedMaterial<StandardMaterial, ReefExtension>;
 
 #[derive(Component, Clone, Copy)]
-enum Effect {
+pub(crate) enum Effect {
     Backdrop,
     Shaft(usize),
     Water,
@@ -576,9 +576,7 @@ fn actors(
                     sim::Spell::Flying | sim::Spell::Returning
                 );
                 let charging = crystal.magic.state == sim::Spell::Charging;
-                show = crystal.magic.state != sim::Spell::Burst
-                    && (crystal.magic.state != sim::Spell::Resting
-                        || rendered.0.sabrina.cooldown <= 0.0);
+                show = crystal.magic.state != sim::Spell::Burst;
                 transform.translation = Vec3::new(
                     crystal.motion.pos.x,
                     crystal.motion.pos.y,

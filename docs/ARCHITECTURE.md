@@ -14,7 +14,9 @@ Rendering interpolates previous and current simulation snapshots. Input runs bef
 
 `reef_sim/src/balance.rs` owns combat constants, bounded difficulty curves and score awards. Jellyfish start with 100 health; a crystal removes 40, a close wave 10. Only health actually removed scores, so repeated attacks cannot farm a defeated visitor. Zero health initiates a harmless retreat; elapsed time and eaten fish never do. Crystal hits apply a three-second harmless bubble, followed by return flight; misses also return. Gentle stores a generation-safe homing target, while Lively stores a fixed direction at cast time. Recharge starts at launch.
 
-Waves affect fish across their original cone, but visitors only within 2.5 world units, once per cast ID. Knockback decays independently of visitor steering and works during bubbles. Bubbles prevent movement, feeding and stings; visual drift does not feed back into gameplay. Health bars and bubble rings use pooled water-material quads.
+Waves affect fish across their original cone. Visitors are tested against their existing bell/tentacle capsules using a swept wave, once per cast ID. Reach is 2.5 world units from the cast's chest position to the body surface, not the visitor centre or Sabrina's later position. Starting the sweep at the chest avoids a point-blank dead zone; visitors centred behind the cast remain unaffected. Knockback decays independently of visitor steering and works during bubbles. Bubbles prevent movement, feeding and stings; visual drift does not feed back into gameplay. Health bars and bubble rings use pooled water-material quads.
+
+The returned crystal remains visible in its resting orbit throughout recharge. Resting glow, trails, sparks and the magic light remain off until cooldown ends; casting still requires a fully recharged crystal.
 
 Rescue awards share a fish's `rescued_cycle` across all abilities. Crystal rewards only collection within four units of an active, unbubbled threat. Wave rescue candidates must survive one second and reach six-unit clearance; song requires at least one second of escort from four-unit danger to six-unit clearance. Per-fish rescue flags prevent repeated ability switching from farming points. Recovery/scoring checks a fish wipeout before awarding round completion, even when the last visitor was defeated in the same tick. Births occur only in calm water without visitors.
 
@@ -30,7 +32,7 @@ Sabrina's authored clips blend over 0.22 seconds. Runtime neck, tail and hair co
 
 Jellyfish skin uses alpha blending; the separate face remains opaque. Jellyfish and small fish do not cast shadows. Balanced uses a 512-pixel filtered shadow map and 12% shadowed sunlight; High uses 1024 pixels and 22%, plus 2× MSAA. Unshadowed fill keeps the reef soft. Light disables shadows. Crystal and water effects do not cast shadows.
 
-Water, reef caustics and crystal materials use external WESL files in `assets/shaders/`. Quality settings select 3, 6 or 12 water-light samples. Shader constants are calculated once per frame.
+Water, reef caustics and crystal materials use WESL files authored in `assets/shaders/` and embedded in the executable. Quality settings select 3, 6 or 12 water-light samples. Shader constants are calculated once per frame.
 
 ## Code map
 
@@ -39,6 +41,7 @@ Water, reef caustics and crystal materials use external WESL files in `assets/sh
 | `app.rs` | Fixed update, input, actions and session transitions |
 | `presentation.rs` | Interpolated render snapshot |
 | `assets.rs` | Loading, shared resources, LODs, animation and attachments |
+| `embedded_assets.rs` | Default in-memory asset source backed by compiled-in bytes |
 | `mipmaps.rs` | Texture mip generation during loading |
 | `visuals.rs` | Camera, lighting, entities and pooled effects |
 | `ui.rs` | Menus, HUD, focus navigation and translations |
@@ -55,8 +58,21 @@ boundary that preserves bar length. Runtime playback does not
 synthesize MIDI. Calm and visitor loops crossfade; each visit restarts the combat
 track and triggers a dedicated one-shot arrival channel. Voices and song duck
 music, and the music slider controls both loops and the stinger. Magic effects
-cannot replace the stinger. The audio asset directory, including the FluidR3
-notice, is already included by both packaging paths.
+cannot replace the stinger. Audio and the FluidR3 notice are embedded; release
+packages also include the notice in `licenses/`.
+
+`build.rs` recursively inventories `assets/`, sorts paths and generates a static
+`include_bytes!` table. Cargo watches the asset tree, including additions and
+deletions. Before `DefaultPlugins` creates the asset server, `embedded_assets`
+registers Bevy's `MemoryAssetReader` as the default source. Original asset paths,
+GLB sub-assets, shaders and audio continue to use the same loading APIs. No
+runtime extraction or source-tree fallback is used. `SABRINA_ASSETS` explicitly
+selects a validated external directory for development instead.
+
+Both packaging paths ship the executable plus documentation and font/soundfont
+notices, without a separate asset tree. This is single-file asset delivery, not
+full static linkage: OS graphics/audio/windowing libraries and drivers are
+still required.
 
 `src/sabrina/build.rs` embeds the UTC build date and 12-character commit hash.
 Local builds identify as `DEV`; tagged GitHub Actions builds display their

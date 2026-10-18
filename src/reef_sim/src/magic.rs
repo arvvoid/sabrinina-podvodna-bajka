@@ -275,14 +275,27 @@ pub fn water_wave(world: &mut World, dt: f32, input: Input, events: &mut Events)
             continue;
         }
         let offset = jellyfish.motion.pos - wave.origin;
-        let ahead = offset.dot(wave.direction);
-        let sideways = (offset.x * wave.direction.y - offset.y * wave.direction.x).abs();
-        if (jellyfish.motion.pos - world.sabrina.motion.pos).length() <= WAVE_REACH
-            && ahead >= 0.0
-            && ahead <= front + 0.35
-            && ahead >= previous - 0.35
-            && sideways <= 0.8 + 0.38 * ahead
-        {
+        let chest = wave.origin - wave.direction * 0.75;
+        // Test the bell and tentacles, not just the visitor's centre. The wave
+        // starts at the chest so a very close visitor is not behind its hitbox.
+        let from = (previous - 0.75).max(0.0);
+        let to = (front + 0.75).min(WAVE_REACH);
+        let sweep = Capsule {
+            a: chest + wave.direction * from,
+            b: chest + wave.direction * to,
+            radius: 0.65 + 0.38 * front.min(WAVE_REACH),
+        };
+        let reach = Capsule {
+            a: chest,
+            b: chest,
+            radius: WAVE_REACH,
+        };
+        let hit = offset.dot(wave.direction) + 0.75 > 0.0
+            && from <= to
+            && jelly_body(jellyfish).iter().any(|&surface| {
+                contact_gap(reach, surface) <= 0.0 && contact_gap(sweep, surface) <= 0.0
+            });
+        if hit {
             jellyfish.behaviour.wave_hit = wave.cast_id;
             jellyfish.behaviour.knockback = wave.direction * 5.0;
             damage_jelly(world, index, WAVE_DAMAGE, false, events);

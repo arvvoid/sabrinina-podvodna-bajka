@@ -154,9 +154,9 @@ fn visitors_never_leave_because_of_time_or_eaten_count() {
 fn wave_only_hits_close_visitors_in_front_and_only_once() {
     for (position, hit) in [
         (v(2.0, 8.5), true),
-        (v(3.5, 8.5), false),
+        (v(5.0, 8.5), false),
         (v(-1.0, 8.5), false),
-        (v(1.5, 11.0), false),
+        (v(1.5, 14.0), false),
     ] {
         let mut world = encounter(true);
         world.sabrina.motion.pos = v(0.0, 8.0);
@@ -183,6 +183,67 @@ fn wave_only_hits_close_visitors_in_front_and_only_once() {
     }
 }
 
+#[test]
+fn close_wave_hits_visible_body_including_tentacles_and_pushes_in_real_steps() {
+    for side in [-1.0, 1.0] {
+        for (horizontal, vertical) in [(0.4, 0.5), (2.8, 0.5), (1.5, 2.4)] {
+            let mut world = encounter(true);
+            world.sabrina.motion.pos = v(0.0, 8.0);
+            world.sabrina.swimming.facing = side;
+            world.sabrina.swimming.yaw = if side < 0.0 {
+                -std::f32::consts::PI
+            } else {
+                0.0
+            };
+            world.sabrina.vitality.invulnerable = 10.0;
+            world.jelly[0].motion.pos = v(horizontal * side, 8.0 + vertical);
+            world.jelly[0].behaviour.bubble = 3.0;
+            let before = world.jelly[0].motion.pos;
+            step(
+                &mut world,
+                1.0 / 60.0,
+                Input {
+                    wave: true,
+                    ..Input::default()
+                },
+            );
+            for _ in 0..45 {
+                step(&mut world, 1.0 / 60.0, Input::default());
+            }
+            assert_eq!(
+                world.jelly[0].behaviour.health, 90.0,
+                "side {side}, offset {horizontal},{vertical}"
+            );
+            assert!((world.jelly[0].motion.pos.x - before.x) * side > 0.7);
+            assert_eq!(world.points.score, 10);
+        }
+    }
+}
+
+#[test]
+fn returned_crystal_orbits_while_cooldown_still_blocks_casts() {
+    let mut world = encounter(true);
+    world.crystal.magic.state = Spell::Returning;
+    world.crystal.motion.pos = world.sabrina.motion.pos + crystal_orbit(&world, 0.0).offset;
+    world.sabrina.cooldown = 8.0;
+    let mut events = Events::default();
+    crystal(&mut world, 1.0 / 60.0, Input::default(), &mut events);
+    assert_eq!(world.crystal.magic.state, Spell::Resting);
+    let before = world.crystal.motion.pos;
+    world.session.time += 1.0;
+    crystal(
+        &mut world,
+        1.0 / 60.0,
+        Input {
+            cast: true,
+            ..Input::default()
+        },
+        &mut events,
+    );
+    assert_eq!(world.crystal.magic.state, Spell::Resting);
+    assert!((world.crystal.motion.pos - before).length() > 0.2);
+    assert!(!events.cast);
+}
 #[test]
 fn safe_crystal_collection_and_empty_casts_award_nothing() {
     let mut world = encounter(true);

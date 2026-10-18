@@ -291,6 +291,22 @@ fn drive(
             );
         }
         410 => {
+            reef_sim::reset(&mut simulation.0, 27, reef_sim::Settings::default());
+            reef_sim::begin_visit(&mut simulation.0);
+            ui.screen = Screen::Playing;
+            simulation.0.sabrina.motion.pos = reef_sim::v(0.0, 8.0);
+            simulation.0.jelly[0].motion.pos = reef_sim::v(1.5, 10.4);
+            simulation.0.jelly[0].behaviour.state = reef_sim::JellyState::Hungry;
+            simulation.0.jelly[0].behaviour.bubble = 3.0;
+            check.initial = simulation.0.jelly[0].motion.pos;
+            keys.press(KeyCode::KeyF);
+        }
+        450 => {
+            assert_eq!(simulation.0.jelly[0].behaviour.health, 90.0);
+            assert!(simulation.0.jelly[0].motion.pos.x > check.initial.x + 0.7);
+            println!("BEVY CHECK OK: close wave hits tentacles and pushes jellyfish");
+        }
+        470 => {
             println!("BEVY INPUT INTEGRATION COMPLETE");
             exit.write(AppExit::Success);
         }
@@ -303,6 +319,9 @@ fn check_pose(
     mut check: ResMut<Check>,
     palms: Query<&GlobalTransform, With<Palm>>,
     actors: Query<(&Actor, &GlobalTransform)>,
+    actor_visibility: Query<(&Actor, &Visibility)>,
+    effects: Query<(&crate::visuals::Effect, &Visibility)>,
+    simulation: Res<Simulation>,
     bones: Query<(Entity, &Transform), With<bevy::animation::AnimationTargetId>>,
     faces: Query<&MorphWeights>,
     named_transforms: Query<(Entity, &Name, &Transform)>,
@@ -314,6 +333,34 @@ fn check_pose(
 ) {
     if !options.verify {
         return;
+    }
+    if check.frame == 375 {
+        assert_eq!(simulation.0.crystal.magic.state, reef_sim::Spell::Resting);
+        assert!(simulation.0.sabrina.cooldown > 0.0);
+        assert!(actor_visibility.iter().any(|(actor, visibility)| {
+            matches!(actor, Actor::Crystal) && *visibility == Visibility::Visible
+        }));
+        for (effect, visibility) in &effects {
+            if matches!(
+                effect,
+                crate::visuals::Effect::Spark(_)
+                    | crate::visuals::Effect::Trail(_)
+                    | crate::visuals::Effect::Glow
+            ) {
+                assert_eq!(*visibility, Visibility::Hidden);
+            }
+        }
+        println!(
+            "BEVY CHECK OK: returned crystal visible in orbit with no ready particles during cooldown"
+        );
+    }
+    if check.frame == 450 {
+        assert_eq!(simulation.0.crystal.magic.state, reef_sim::Spell::Resting);
+        assert_eq!(simulation.0.sabrina.cooldown, 0.0);
+        assert!(effects.iter().any(|(effect, visibility)| {
+            matches!(effect, crate::visuals::Effect::Spark(_)) && *visibility == Visibility::Visible
+        }));
+        println!("BEVY CHECK OK: ready orbiting crystal has particles");
     }
     if check.frame == 330 {
         check.idle_hair = named_transforms

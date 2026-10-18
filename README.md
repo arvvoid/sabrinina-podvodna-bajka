@@ -28,8 +28,8 @@ This is an initial working version. It is playable, but still needs more work, r
 
 Fish arrive during peaceful intervals. Each visiting jellyfish has **100 health** and stays until its health reaches zero, then retreats. There is no timeout or eaten-fish limit. **Losing all fish during a round, or all Sabrina's health, ends the game.** Jellyfish still grow as they eat; Sabrina recovers health after a safe period.
 
-- **Crystal:** 40 damage and a 3-second air bubble. A bubbled jellyfish cannot swim, sting or eat, but waves can still push it. The crystal returns like a boomerang after a hit or miss; it recharges in 12 seconds from launch. Gentle mode auto-aims; Lively uses a straight skillshot aimed by swimming before casting (horizontal while stationary).
-- **Wave:** pushes fish away as before. Within 2.5 world units it also pushes a jellyfish and deals 10 damage, once per visitor per cast. Recharge: 3 seconds.
+- **Crystal:** 40 damage and a 3-second air bubble. A bubbled jellyfish cannot swim, sting or eat, but waves can still push it. The crystal returns like a boomerang after a hit or miss; it recharges in 12 seconds from launch. Once returned, it immediately resumes orbiting, without glow or particles until ready to throw again. Gentle mode auto-aims; Lively uses a straight skillshot aimed by swimming before casting (horizontal while stationary).
+- **Wave:** pushes fish away as before. Within 2.5 world units of the cast position it also pushes a jellyfish and deals 10 damage, once per visitor per cast. This checks the bell and tentacles, not just the centre, including at point-blank range. Recharge: 3 seconds.
 - **Song:** gathers nearby fish, but can also attract jellyfish. Its reach shrinks with energy; exhausting it requires a complete recharge.
 - **Progression:** each round slightly increases visitor speed and the probability of multiple visitors, up to the selected visitor limit. Speed growth is bounded; health and damage stay consistent.
 
@@ -68,7 +68,9 @@ cargo run --locked --release -p sabrina
 
 Linux uses Vulkan; Windows permits Vulkan and Direct3D 12; Apple targets use Metal. `SABRINA_RENDERER=vulkan|dx12|metal|gl` overrides the backend. OpenGL is experimental and has not passed local runtime testing. Linux is the tested desktop platform; Windows/macOS runtime, physical controllers and mobile exports still need testing.
 
-`./tools/package-bevy.sh` creates a portable directory under `dist/`. Runtime assets are found beside the executable or in the source tree; `SABRINA_ASSETS=/absolute/path` overrides this. Blender is needed only to edit artwork.
+All runtime assets are embedded at compile time: the executable runs without an `assets/` directory or the source tree, and does not extract assets to disk. This applies to local and tagged release builds. Rebuild after changing assets, or set `SABRINA_ASSETS=/absolute/path/to/assets` to use an external asset tree while developing artwork. Blender is needed only to edit artwork.
+
+`./tools/package-bevy.sh` creates a portable directory under `dist/` containing the executable and accompanying documentation/license notices. The game is **asset-self-contained, not fully statically linked**: Linux still needs system libraries such as glibc, ALSA and libudev, and all platforms need their graphics drivers and OS windowing/audio support. Keep the accompanying notices when redistributing.
 
 ## Tagged releases
 
@@ -79,7 +81,7 @@ git tag v0.1.0
 git push origin v0.1.0
 ```
 
-The release workflow builds Linux x86_64 (Ubuntu 24.04 baseline), Windows x86_64 and macOS Apple Silicon packages. Archives include the executable, runtime assets, instructions, documentation and license notices, with a separate SHA-256 checksum for each download. macOS packages are unsigned and not notarized. These are portable desktop packages, not Steam uploads or Android/iOS builds.
+The release workflow builds Linux x86_64 (Ubuntu 24.04 baseline), Windows x86_64 and macOS Apple Silicon packages. Archives include the asset-embedded executable, instructions, documentation and license notices, with a separate SHA-256 checksum for each download. Assets are not duplicated beside the executable. macOS packages are unsigned and not notarized. These are portable desktop packages, not Steam uploads or Android/iOS builds.
 
 Tags must use `vMAJOR.MINOR.PATCH`, optionally followed by a prerelease suffix such as `v0.1.0-beta.1`. Tags with a suffix publish as prereleases. All platform builds and checks must succeed before publication. Release notes include installation guidance and GitHub's automatically generated changelog since the previous release. Creating a release does not replace platform playtesting or artwork-permission review.
 

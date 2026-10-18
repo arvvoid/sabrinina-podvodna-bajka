@@ -80,8 +80,54 @@ fn watch_git_path(root: &Path, name: &str) {
     }
 }
 
+fn embedded_assets(root: &Path) {
+    fn collect(directory: &Path, files: &mut Vec<PathBuf>) {
+        for entry in std::fs::read_dir(directory).expect("Cannot read asset directory") {
+            let entry = entry.expect("Cannot read asset entry");
+            let kind = entry.file_type().expect("Cannot inspect asset entry");
+            assert!(
+                !kind.is_symlink(),
+                "Embedded assets must not be symlinks: {:?}",
+                entry.path()
+            );
+            if kind.is_dir() {
+                collect(&entry.path(), files);
+            } else if kind.is_file() {
+                files.push(entry.path());
+            }
+        }
+    }
+    let assets = root
+        .join("../../assets")
+        .canonicalize()
+        .expect("Missing runtime assets");
+    println!("cargo:rerun-if-changed={}", assets.display());
+    let mut files = Vec::new();
+    collect(&assets, &mut files);
+    files.sort();
+    assert!(!files.is_empty(), "Cannot build without runtime assets");
+    let mut source = String::from("pub const FILES: &[(&str, &[u8])] = &[\n");
+    for file in files {
+        let relative = file
+            .strip_prefix(&assets)
+            .expect("Asset outside root")
+            .to_str()
+            .expect("Asset path must be UTF-8")
+            .replace('\\', "/");
+        source.push_str(&format!(
+            "({relative:?}, include_bytes!({:?})),\n",
+            file.to_str().expect("Asset path must be UTF-8")
+        ));
+    }
+    source.push_str("];\n");
+    let output = PathBuf::from(env::var_os("OUT_DIR").expect("Cargo sets OUT_DIR"));
+    std::fs::write(output.join("embedded_assets.rs"), source)
+        .expect("Cannot generate embedded asset table");
+}
+
 fn main() {
     let root = PathBuf::from(env::var_os("CARGO_MANIFEST_DIR").expect("Cargo sets manifest dir"));
+    embedded_assets(&root);
     for source in [
         "build.rs",
         "src",

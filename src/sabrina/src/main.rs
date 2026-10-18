@@ -13,6 +13,8 @@ mod audio;
 
 mod build_info;
 
+mod embedded_assets;
+
 mod mipmaps;
 
 mod presentation;
@@ -77,16 +79,25 @@ fn main() {
         gpu.instance_flags
             .remove(bevy::render::settings::InstanceFlags::VALIDATION_INDIRECT_CALL);
     }
-    let asset_path = std::env::var("SABRINA_ASSETS").unwrap_or_else(|_| {
-        let packaged = std::env::current_exe()
-            .ok()
-            .and_then(|p| p.parent().map(|p| p.join("assets")));
-        packaged
-            .filter(|p| p.is_dir())
-            .unwrap_or_else(|| format!("{}/../../assets", env!("CARGO_MANIFEST_DIR")).into())
-            .to_string_lossy()
-            .into_owned()
-    });
+    let external_assets = match std::env::var("SABRINA_ASSETS") {
+        Ok(path) => {
+            let directory = std::path::Path::new(&path)
+                .canonicalize()
+                .expect("SABRINA_ASSETS must point to an existing asset directory");
+            assert!(
+                directory.is_dir(),
+                "SABRINA_ASSETS must point to a directory"
+            );
+            Some(
+                directory
+                    .into_os_string()
+                    .into_string()
+                    .expect("SABRINA_ASSETS path must be UTF-8"),
+            )
+        }
+        Err(std::env::VarError::NotPresent) => None,
+        Err(error) => panic!("Invalid SABRINA_ASSETS: {error}"),
+    };
     let time_update = if options.verify {
         bevy::time::TimeUpdateStrategy::ManualDuration(std::time::Duration::from_secs_f64(
             1.0 / 60.0,
@@ -106,6 +117,9 @@ fn main() {
     };
     let diagnostics = options.capture.is_some();
     let mut app = App::new();
+    if external_assets.is_none() {
+        embedded_assets::register(&mut app);
+    }
     app.add_systems(
         Startup,
         |adapter: Res<bevy::render::renderer::RenderAdapterInfo>| {
@@ -123,7 +137,7 @@ fn main() {
         .add_plugins(
             DefaultPlugins
                 .set(AssetPlugin {
-                    file_path: asset_path,
+                    file_path: external_assets.unwrap_or_else(|| "assets".into()),
                     ..default()
                 })
                 .set(WindowPlugin {

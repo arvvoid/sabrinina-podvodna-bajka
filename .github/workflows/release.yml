@@ -119,7 +119,9 @@ jobs:
           - **Windows x86_64:** `.zip`; extract and open `sabrina.exe`.
           - **macOS Apple Silicon:** `.tar.gz`; unsigned and not notarized.
 
-          Extract the entire archive and keep the `assets` folder beside the executable.
+          All game assets are embedded in the executable; no `assets` folder is needed.
+          The game still uses operating-system libraries and graphics drivers.
+          Keep the included documentation and license notices when redistributing.
           On Linux/macOS, run `./sabrina` from the extracted folder.
           Each archive has a SHA-256 checksum file. Packages include controls,
           documentation and license notices. Windows/macOS runtime validation is
