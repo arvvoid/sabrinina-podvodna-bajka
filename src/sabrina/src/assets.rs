@@ -1,4 +1,6 @@
+// Copyright (c) 2026 Luka Dežulović
 // SPDX-License-Identifier: MIT
+//! Shared glTF resources, per-actor rigs and presentation-only pose corrections.
 use crate::{
     app::{Options, Screen, SessionUi, Simulation, begin},
     presentation::Presentation,
@@ -13,6 +15,7 @@ use bevy::{
     world_serialization::WorldInstanceReady,
 };
 use std::{collections::HashMap, sync::Arc};
+
 #[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Actor {
     Sabrina,
@@ -21,17 +24,20 @@ pub enum Actor {
     Crystal,
     Reef,
 }
+
 #[derive(Component)]
 pub struct ActorVisual {
     pub model: Option<Entity>,
     pub variant: usize,
     pub yaw: f32,
 }
+
 #[derive(Component, Clone)]
 pub struct RigSpec {
     pub actor: Actor,
     pub asset: usize,
 }
+
 #[derive(Component)]
 pub struct RigPlayer {
     pub actor: Actor,
@@ -42,16 +48,20 @@ pub struct RigPlayer {
     blend: f32,
     outgoing: Vec<(AnimationNodeIndex, f32)>,
 }
+
 #[derive(Component)]
 pub struct CharacterSurface {
     pub actor: Actor,
     pub normal: Handle<StandardMaterial>,
     pub hurt: Handle<StandardMaterial>,
 }
+
 #[derive(Component)]
 pub struct Palm;
+
 #[derive(Component)]
 struct FacialRig;
+
 #[derive(Component)]
 pub struct CorrectBone {
     pub root: Entity,
@@ -59,12 +69,14 @@ pub struct CorrectBone {
     pub original: Option<Quat>,
     pub rest_axis: Vec3,
 }
+
 #[derive(Resource, Default)]
 pub struct Library {
     pub handles: Vec<Handle<Gltf>>,
     pub ready: bool,
     pub lods: HashMap<usize, Handle<Gltf>>,
 }
+
 pub const FILES: [&str; 16] = [
     "models/sabrina.glb",
     "models/clownfish.glb",
@@ -83,7 +95,9 @@ pub const FILES: [&str; 16] = [
     "environments/reef_ruins.glb",
     "props/ocean_crystal.glb",
 ];
+
 type ClipMap = Arc<HashMap<String, (AnimationNodeIndex, f32)>>;
+
 #[derive(Resource, Default)]
 struct RigCache {
     graphs: HashMap<usize, (Handle<AnimationGraph>, ClipMap)>,
@@ -92,6 +106,7 @@ struct RigCache {
         (Handle<StandardMaterial>, Handle<StandardMaterial>),
     >,
 }
+
 #[derive(Component)]
 pub struct RenderLod {
     actor: Actor,
@@ -99,8 +114,9 @@ pub struct RenderLod {
     diameter: f32,
     level: usize,
 }
+
 fn select_lods(
-    w: Res<crate::presentation::Presentation>,
+    rendered: Res<crate::presentation::Presentation>,
     prefs: Res<Preferences>,
     camera: Single<(&Camera, &Projection), With<Camera3d>>,
     mut query: Query<(&mut RenderLod, &mut Mesh3d)>,
@@ -118,8 +134,8 @@ fn select_lods(
             Actor::Fish(i) => {
                 density
                     * lod.diameter
-                    * w.0.fish[i].appearance.size
-                    * (0.3 + 0.7 * w.0.fish[i].appearance.birth)
+                    * rendered.0.fish[i].appearance.size
+                    * (0.3 + 0.7 * rendered.0.fish[i].appearance.birth)
             }
             _ => density,
         };
@@ -143,10 +159,12 @@ fn select_lods(
         }
     }
 }
+
 pub struct CharacterPlugin;
+
 impl Plugin for CharacterPlugin {
-    fn build(&self, a: &mut App) {
-        a.init_resource::<Library>()
+    fn build(&self, app: &mut App) {
+        app.init_resource::<Library>()
             .init_resource::<RigCache>()
             .add_systems(Startup, load)
             .add_systems(Update, (finish_load, sync_models).chain())
@@ -168,6 +186,7 @@ impl Plugin for CharacterPlugin {
             );
     }
 }
+
 fn load(server: Res<AssetServer>, mut library: ResMut<Library>) {
     library.handles = FILES.iter().map(|&p| server.load(p)).collect();
     for i in (1..=12).chain(std::iter::once(14)) {
@@ -177,13 +196,14 @@ fn load(server: Res<AssetServer>, mut library: ResMut<Library>) {
             .insert(i, server.load(format!("render_lods/{file}")));
     }
 }
+
 pub(crate) fn finish_load(
-    mut c: Commands,
+    mut commands: Commands,
     gltfs: Res<Assets<Gltf>>,
     mut lib: ResMut<Library>,
-    mut u: ResMut<SessionUi>,
-    mut w: ResMut<Simulation>,
-    p: Res<Preferences>,
+    mut ui: ResMut<SessionUi>,
+    mut simulation: ResMut<Simulation>,
+    preferences: Res<Preferences>,
     options: Res<Options>,
     server: Res<AssetServer>,
     gltf_meshes: Res<Assets<GltfMesh>>,
@@ -213,14 +233,14 @@ pub(crate) fn finish_load(
     }
     crate::mipmaps::prepare(&lib, &gltfs, &materials, &mut images);
     lib.ready = true;
-    u.loaded = true;
-    u.screen = Screen::Menu;
+    ui.loaded = true;
+    ui.screen = Screen::Menu;
     for actor in [Actor::Reef, Actor::Sabrina, Actor::Crystal]
         .into_iter()
         .chain((0..72).map(Actor::Fish))
         .chain((0..3).map(Actor::Jelly))
     {
-        c.spawn((
+        commands.spawn((
             actor,
             ActorVisual {
                 model: None,
@@ -237,19 +257,19 @@ pub(crate) fn finish_load(
             .or_else(|| kind.strip_prefix("it-"))
             .unwrap_or(kind);
         match short {
-            "boot" => u.screen = Screen::Loading,
+            "boot" => ui.screen = Screen::Loading,
             "menu" => {}
-            "settings" => u.screen = Screen::Settings,
-            "help" => u.screen = Screen::Help,
-            "credits" => u.screen = Screen::Credits,
+            "settings" => ui.screen = Screen::Settings,
+            "help" => ui.screen = Screen::Help,
+            "credits" => ui.screen = Screen::Credits,
             _ => {
-                begin(&mut w.0, &mut u, &p, true);
+                begin(&mut simulation.0, &mut ui, &preferences, true);
                 if options.school {
-                    reef_sim::add_fish(&mut w.0, 72, false);
+                    reef_sim::add_fish(&mut simulation.0, 72, false);
                 }
                 if matches!(short, "visit" | "crystal" | "throw" | "wave" | "song") {
-                    w.0.settings.aquarium = false;
-                    reef_sim::begin_visit(&mut w.0);
+                    simulation.0.settings.aquarium = false;
+                    reef_sim::begin_visit(&mut simulation.0);
                 }
             }
         }
@@ -259,47 +279,48 @@ pub(crate) fn finish_load(
         .as_deref()
         .is_some_and(|k| k.starts_with("graphics-") || k.starts_with("pose-") || k == "rig")
     {
-        w.0.sabrina.motion.pos = reef_sim::v(0.0, 8.0);
-        w.0.sabrina.motion.velocity = reef_sim::v(4.0, 0.0);
-        w.0.sabrina.swimming.pitch = 0.05;
-        w.0.sabrina.swimming.yaw = 0.0;
-        w.0.sabrina.swimming.phase = 1.2;
-        w.0.sabrina.cooldown = 1000.0;
-        for f in &mut w.0.fish {
+        simulation.0.sabrina.motion.pos = reef_sim::v(0.0, 8.0);
+        simulation.0.sabrina.motion.velocity = reef_sim::v(4.0, 0.0);
+        simulation.0.sabrina.swimming.pitch = 0.05;
+        simulation.0.sabrina.swimming.yaw = 0.0;
+        simulation.0.sabrina.swimming.phase = 1.2;
+        simulation.0.sabrina.cooldown = 1000.0;
+        for f in &mut simulation.0.fish {
             f.life.active = false;
         }
         if let Some(k) = &options.capture {
             if k == "pose-idle" {
-                w.0.sabrina.motion.velocity = reef_sim::v(0.0, 0.0);
-                w.0.sabrina.swimming.pitch = 0.65;
+                simulation.0.sabrina.motion.velocity = reef_sim::v(0.0, 0.0);
+                simulation.0.sabrina.swimming.pitch = 0.65;
             }
             if k.contains("dive") {
-                w.0.sabrina.swimming.pitch = -1.1;
+                simulation.0.sabrina.swimming.pitch = -1.1;
             }
             if k.contains("climb") {
-                w.0.sabrina.swimming.pitch = 1.1;
+                simulation.0.sabrina.swimming.pitch = 1.1;
             }
             if k.contains("left") {
-                w.0.sabrina.swimming.yaw = std::f32::consts::PI;
+                simulation.0.sabrina.swimming.yaw = std::f32::consts::PI;
             }
         }
     }
     if options.capture.as_deref() == Some("throw") {
-        w.0.sabrina.motion.pos = reef_sim::v(-2.0, 8.0);
-        w.0.jelly[0].motion.pos = reef_sim::v(4.0, 9.0);
-        w.0.jelly[0].behaviour.state = reef_sim::JellyState::Hungry;
-        w.0.jelly[0].behaviour.turn_in = 100.0;
+        simulation.0.sabrina.motion.pos = reef_sim::v(-2.0, 8.0);
+        simulation.0.jelly[0].motion.pos = reef_sim::v(4.0, 9.0);
+        simulation.0.jelly[0].behaviour.state = reef_sim::JellyState::Hungry;
+        simulation.0.jelly[0].behaviour.turn_in = 100.0;
     }
     if options.verify {
-        begin(&mut w.0, &mut u, &p, true);
+        begin(&mut simulation.0, &mut ui, &preferences, true);
     }
     info!("All 16 finished GLB assets loaded");
 }
+
 fn sync_models(
-    mut c: Commands,
+    mut commands: Commands,
     lib: Res<Library>,
     gltfs: Res<Assets<Gltf>>,
-    w: Res<Simulation>,
+    simulation: Res<Simulation>,
     mut roots: Query<(Entity, &Actor, &mut ActorVisual)>,
 ) {
     if !lib.ready {
@@ -308,7 +329,9 @@ fn sync_models(
     for (root, actor, mut view) in &mut roots {
         let asset = match *actor {
             Actor::Sabrina => 0,
-            Actor::Fish(i) => 1 + w.0.fish[i].appearance.species + if i % 2 == 0 { 0 } else { 6 },
+            Actor::Fish(i) => {
+                1 + simulation.0.fish[i].appearance.species + if i % 2 == 0 { 0 } else { 6 }
+            }
             Actor::Jelly(_) => 13,
             Actor::Reef => 14,
             Actor::Crystal => 15,
@@ -317,7 +340,7 @@ fn sync_models(
             continue;
         }
         if let Some(old) = view.model {
-            c.entity(old).despawn();
+            commands.entity(old).despawn();
         }
         let Some(gltf) = gltfs.get(&lib.handles[asset]) else {
             continue;
@@ -327,7 +350,7 @@ fn sync_models(
             asset,
         };
         let scale = if *actor == Actor::Sabrina { 0.88 } else { 1.0 };
-        let model = c
+        let model = commands
             .spawn((
                 WorldAssetRoot(gltf.scenes[0].clone()),
                 Transform::from_scale(Vec3::splat(scale)),
@@ -335,14 +358,15 @@ fn sync_models(
             ))
             .observe(rig_ready)
             .id();
-        c.entity(root).add_child(model);
+        commands.entity(root).add_child(model);
         view.model = Some(model);
         view.variant = asset;
     }
 }
+
 fn rig_ready(
     event: On<WorldInstanceReady>,
-    mut c: Commands,
+    mut commands: Commands,
     specs: Query<&RigSpec>,
     children: Query<&Children>,
     players: Query<(), With<AnimationPlayer>>,
@@ -389,7 +413,7 @@ fn rig_ready(
         .clone();
     for entity in children.iter_descendants(event.entity) {
         if players.contains(entity) {
-            c.entity(entity).insert((
+            commands.entity(entity).insert((
                 AnimationGraphHandle(graph.clone()),
                 RigPlayer {
                     actor: spec.actor,
@@ -407,13 +431,14 @@ fn rig_ready(
             ));
         }
         if spec.actor == Actor::Crystal {
-            c.entity(entity)
+            commands
+                .entity(entity)
                 .insert((bevy::light::NotShadowCaster, bevy::light::NotShadowReceiver));
         }
         if matches!(spec.actor, Actor::Fish(_) | Actor::Jelly(_)) {
             // Small swimmers retain received reef lighting without adding a
             // second skinned draw for every fish or dark patches on Sabrina.
-            c.entity(entity).insert(bevy::light::NotShadowCaster);
+            commands.entity(entity).insert(bevy::light::NotShadowCaster);
         }
         if let Ok(mesh) = mesh_handles.get(entity)
             && let Some(lod_gltf) = lib.lods.get(&spec.asset).and_then(|h| gltfs.get(h))
@@ -434,7 +459,7 @@ fn rig_ready(
                             .and_then(|m| m.get_aabb())
                             .map(|a| a.half_extents.max_element() * 2.0)
                             .unwrap_or(2.0);
-                        c.entity(entity).insert(RenderLod {
+                        commands.entity(entity).insert(RenderLod {
                             actor: spec.actor,
                             meshes: [mesh.0.clone(), middle, small],
                             diameter,
@@ -484,7 +509,7 @@ fn rig_ready(
                     .insert(key, (materials.add(material), materials.add(red)));
             }
             if let Some((normal, hurt)) = cache.materials.get(&key) {
-                c.entity(entity).insert((
+                commands.entity(entity).insert((
                     MeshMaterial3d(normal.clone()),
                     CharacterSurface {
                         actor: spec.actor,
@@ -496,13 +521,13 @@ fn rig_ready(
             }
         }
         if spec.actor == Actor::Sabrina && morphs.contains(entity) {
-            c.entity(entity).insert(FacialRig);
+            commands.entity(entity).insert(FacialRig);
         }
         if spec.actor == Actor::Sabrina
             && let Ok(name) = names.get(entity)
         {
             if name.as_str() == "Hand_R" {
-                c.entity(entity).insert(Palm);
+                commands.entity(entity).insert(Palm);
             }
             if [
                 "Tail_1",
@@ -522,7 +547,7 @@ fn rig_ready(
             .contains(&name.as_str())
             {
                 let rot = relative_rotation(entity, event.entity, &transforms, &parents);
-                c.entity(entity).insert(CorrectBone {
+                commands.entity(entity).insert(CorrectBone {
                     root: event.entity,
                     name: name.to_string(),
                     original: None,
@@ -532,41 +557,50 @@ fn rig_ready(
         }
     }
 }
+
 fn relative_rotation(
-    mut e: Entity,
+    mut entity: Entity,
     root: Entity,
     transforms: &Query<&Transform>,
     parents: &Query<&ChildOf>,
 ) -> Quat {
-    let mut q = Quat::IDENTITY;
+    let mut rotation = Quat::IDENTITY;
     for _ in 0..64 {
-        if e == root {
+        if entity == root {
             break;
         }
-        if let Ok(t) = transforms.get(e) {
-            q = t.rotation * q
+        if let Ok(transform) = transforms.get(entity) {
+            rotation = transform.rotation * rotation
         }
-        let Ok(p) = parents.get(e) else { break };
-        e = p.parent();
+        let Ok(parent) = parents.get(entity) else {
+            break;
+        };
+        entity = parent.parent();
     }
-    q
+    rotation
 }
+
 fn animate(
-    w: Res<Presentation>,
-    u: Res<SessionUi>,
-    p: Res<Preferences>,
+    rendered: Res<Presentation>,
+    ui: Res<SessionUi>,
+    preferences: Res<Preferences>,
     time: Res<Time>,
     mut players: Query<(&mut AnimationPlayer, &mut RigPlayer)>,
 ) {
-    let dt = if u.paused() {
+    let dt = if ui.paused() {
         0.0
     } else {
-        time.delta_secs() * if p.reduced_motion { 0.25 } else { 1.0 }
+        time.delta_secs()
+            * if preferences.reduced_motion {
+                0.25
+            } else {
+                1.0
+            }
     };
     for (mut player, mut rig) in &mut players {
         let (name, phase, speed) = match rig.actor {
             Actor::Sabrina => {
-                let s = &w.0.sabrina;
+                let s = &rendered.0.sabrina;
                 let names = [
                     "Idle",
                     "Swim",
@@ -584,7 +618,7 @@ fn animate(
                 )
             }
             Actor::Fish(i) => {
-                let f = &w.0.fish[i];
+                let f = &rendered.0.fish[i];
                 if !f.life.active && f.life.pop_time <= 0.22 {
                     continue;
                 }
@@ -595,7 +629,7 @@ fn animate(
                 )
             }
             Actor::Jelly(i) => {
-                let j = &w.0.jelly[i];
+                let j = &rendered.0.jelly[i];
                 if j.behaviour.state == reef_sim::JellyState::Hidden {
                     continue;
                 }
@@ -628,10 +662,10 @@ fn animate(
             rig.phase = 0.0;
         }
         if let Actor::Fish(i) = rig.actor
-            && rig.generation != w.0.fish[i].id.generation
+            && rig.generation != rendered.0.fish[i].id.generation
         {
-            rig.generation = w.0.fish[i].id.generation;
-            rig.phase = w.0.fish[i].swimming.tail_phase / std::f32::consts::TAU * 1.2;
+            rig.generation = rendered.0.fish[i].id.generation;
+            rig.phase = rendered.0.fish[i].swimming.tail_phase / std::f32::consts::TAU * 1.2;
         }
         // Explicit crossfades use game time, so pausing also freezes a blend.
         rig.blend = (rig.blend + dt / 0.22).min(1.0);
@@ -640,8 +674,8 @@ fn animate(
             if rig.blend >= 1.0 {
                 player.stop(old);
             } else if let Some(a) = player.animation_mut(old) {
-                let w = weight * (1.0 - rig.blend);
-                a.set_weight(w);
+                let blend_weight = weight * (1.0 - rig.blend);
+                a.set_weight(blend_weight);
                 let seek = a.seek_time();
                 let clip = rig.clips.iter().find(|(_, (n, _))| *n == old);
                 if let Some((name, (_, length))) = clip {
@@ -652,7 +686,7 @@ fn animate(
                         next.rem_euclid(*length)
                     });
                 }
-                remaining -= w;
+                remaining -= blend_weight;
             }
         }
         player.play(node).set_weight(remaining.max(0.0));
@@ -666,26 +700,32 @@ fn animate(
             .set_seek_time(rig.phase);
     }
 }
-fn restore_bones(mut q: Query<(&mut Transform, &mut CorrectBone)>) {
-    for (mut t, mut bone) in &mut q {
+
+fn restore_bones(mut bones: Query<(&mut Transform, &mut CorrectBone)>) {
+    for (mut transform, mut bone) in &mut bones {
         if let Some(rotation) = bone.original.take() {
-            t.rotation = rotation;
+            transform.rotation = rotation;
         }
     }
 }
+
 fn correct_bones(
-    w: Res<Presentation>,
-    p: Res<Preferences>,
+    rendered: Res<Presentation>,
+    preferences: Res<Preferences>,
     mut set: ParamSet<(Query<&Transform>, Query<&mut Transform>)>,
     parents: Query<&ChildOf>,
     mut bones: Query<(Entity, &mut CorrectBone)>,
 ) {
-    let s = &w.0.sabrina;
+    let s = &rendered.0.sabrina;
     let effort = (s.motion.velocity.length() / 7.2).min(1.0);
     let rest =
         ((s.swimming.pitch - 0.2) / 0.45).clamp(0.0, 1.0) * (1.0 - (effort * 2.0).clamp(0.0, 1.0));
-    let time = w.0.session.time;
-    let motion = if p.reduced_motion { 0.25 } else { 1.0 };
+    let time = rendered.0.session.time;
+    let motion = if preferences.reduced_motion {
+        0.25
+    } else {
+        1.0
+    };
     let gaze = (-s.swimming.pitch * 0.55).clamp(-0.65, 0.06)
         + motion * (0.018 * (time * 0.87).sin() + 0.009 * (time * 1.71).sin());
     // Parent corrections are applied before child corrections, and restored before
@@ -753,8 +793,11 @@ fn correct_bones(
     }
 }
 
-fn facial_expression(w: Res<Presentation>, mut faces: Query<&mut MorphWeights, With<FacialRig>>) {
-    let time = w.0.session.time;
+fn facial_expression(
+    rendered: Res<Presentation>,
+    mut faces: Query<&mut MorphWeights, With<FacialRig>>,
+) {
+    let time = rendered.0.session.time;
     // Unequal intervals and a quick closing/slower opening feel less mechanical.
     let cycle = time.rem_euclid(11.3);
     let blink = [2.8, 7.7, 8.05]
@@ -770,7 +813,7 @@ fn facial_expression(w: Res<Presentation>, mut faces: Query<&mut MorphWeights, W
             }
         })
         .fold(0.0_f32, f32::max);
-    let sing = w.0.sabrina.song.strength * (0.45 + 0.2 * (time * 4.7).sin());
+    let sing = rendered.0.sabrina.song.strength * (0.45 + 0.2 * (time * 4.7).sin());
     for mut face in &mut faces {
         let weights = face.weights_mut();
         if weights.len() == 3 {
@@ -781,13 +824,14 @@ fn facial_expression(w: Res<Presentation>, mut faces: Query<&mut MorphWeights, W
 
 // Use the rendered, blended skeleton for the held prop; collision samples remain
 // deterministic simulation data. Compose locals before transform propagation.
+
 fn attach_crystal(
-    w: Res<Presentation>,
+    rendered: Res<Presentation>,
     palm: Query<Entity, With<Palm>>,
     parents: Query<&ChildOf>,
     mut set: ParamSet<(Query<&Transform>, Query<(&Actor, &mut Transform)>)>,
 ) {
-    if w.0.crystal.magic.state != reef_sim::Spell::Charging {
+    if rendered.0.crystal.magic.state != reef_sim::Spell::Charging {
         return;
     }
     let Ok(mut e) = palm.single() else { return };
@@ -799,8 +843,8 @@ fn attach_crystal(
         let Ok(parent) = parents.get(e) else { break };
         e = parent.parent();
     }
-    let magic = &w.0.crystal.magic;
-    let origin = w.0.sabrina.motion.pos + magic.charge_offset;
+    let magic = &rendered.0.crystal.magic;
+    let origin = rendered.0.sabrina.motion.pos + magic.charge_offset;
     let amount = (magic.time / 0.4).clamp(0.0, 1.0);
     let amount = amount * amount * (3.0 - 2.0 * amount);
     for (actor, mut t) in &mut set.p1() {
@@ -812,13 +856,14 @@ fn attach_crystal(
 
 fn report_assets(
     options: Res<Options>,
-    w: Res<Presentation>,
+    rendered: Res<Presentation>,
     mut reported: Local<bool>,
     lods: Query<(&RenderLod, &Mesh3d)>,
     surfaces: Query<&CharacterSurface>,
     meshes: Res<Assets<Mesh>>,
 ) {
-    if *reported || (!options.verify && options.capture.is_none()) || w.0.session.time < 1.0 {
+    if *reported || (!options.verify && options.capture.is_none()) || rendered.0.session.time < 1.0
+    {
         return;
     }
     let fish: Vec<_> = surfaces

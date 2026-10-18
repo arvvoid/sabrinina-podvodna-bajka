@@ -1,20 +1,24 @@
+// Copyright (c) 2026 Luka Dežulović
 // SPDX-License-Identifier: MIT
 use reef_sim::{presentation::interpolate, *};
+
 fn near(a: f32, b: f32) {
     assert!((a - b).abs() < 0.0001, "{a} != {b}");
 }
+
 fn world() -> World {
-    let mut w = World::default();
+    let mut world = World::default();
     reset(
-        &mut w,
+        &mut world,
         27,
         Settings {
             aquarium: true,
             ..Settings::default()
         },
     );
-    w
+    world
 }
+
 #[test]
 fn movement_and_pose_are_continuous_at_variable_render_rates() {
     // Constant motion makes the exact answer independent of sample placement.
@@ -49,6 +53,7 @@ fn movement_and_pose_are_continuous_at_variable_render_rates() {
         }
     }
 }
+
 #[test]
 fn cyclic_pose_crosses_loop_boundary_in_forward_direction() {
     let mut a = world();
@@ -59,6 +64,7 @@ fn cyclic_pose_crosses_loop_boundary_in_forward_direction() {
     near(render.sabrina.swimming.phase, std::f32::consts::TAU + 0.01);
     assert!(sabrina_pose_phase(&render.sabrina) < 0.01);
 }
+
 #[test]
 fn new_entity_and_new_spell_do_not_blend_with_old_state() {
     let a = world();
@@ -75,6 +81,7 @@ fn new_entity_and_new_spell_do_not_blend_with_old_state() {
     assert_eq!(render.crystal.motion.pos, b.crystal.motion.pos);
     near(render.sabrina.wave.time, 0.01);
 }
+
 #[test]
 fn spells_fish_and_jelly_share_the_same_fraction() {
     let mut a = world();

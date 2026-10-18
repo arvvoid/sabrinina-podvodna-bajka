@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Luka Dežulović
 // SPDX-License-Identifier: MIT
 //! One interpolated state shared by models, skeletons and attached effects.
 use crate::app::{SessionUi, Simulation};
@@ -6,6 +7,7 @@ use reef_sim as sim;
 
 #[derive(Resource, Default)]
 pub struct Previous(pub Option<sim::World>);
+
 #[derive(Resource, Default)]
 pub struct Presentation(pub sim::World);
 

@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Luka Dežulović
 // SPDX-License-Identifier: MIT
 //! Drives actual Bevy input resources through the same live systems used by play.
 use crate::{
@@ -5,6 +6,7 @@ use crate::{
     assets::{Actor, Palm, RigPlayer},
 };
 use bevy::{input::mouse::AccumulatedMouseMotion, prelude::*, window::PrimaryWindow};
+
 #[derive(Resource, Default)]
 struct Check {
     frame: u32,
@@ -14,12 +16,15 @@ struct Check {
     paused_face: Vec<f32>,
     idle_hair: Vec<(Entity, Quat)>,
 }
+
 #[derive(Component)]
 struct TestPad;
+
 pub struct VerificationPlugin;
+
 impl Plugin for VerificationPlugin {
-    fn build(&self, a: &mut App) {
-        a.init_resource::<Check>()
+    fn build(&self, app: &mut App) {
+        app.init_resource::<Check>()
             .add_systems(
                 PreUpdate,
                 drive
@@ -32,29 +37,32 @@ impl Plugin for VerificationPlugin {
             );
     }
 }
-fn pixel(window: &Window, p: Vec2) -> Vec2 {
-    let z = (window.width() / 1600.0).min(window.height() / 900.0);
-    p * z
+
+fn pixel(window: &Window, point: Vec2) -> Vec2 {
+    let scale =
+        (window.width() / crate::ui::CANVAS_WIDTH).min(window.height() / crate::ui::CANVAS_HEIGHT);
+    point * scale
         + Vec2::new(
-            (window.width() - 1600.0 * z) / 2.0,
-            (window.height() - 900.0 * z) / 2.0,
+            (window.width() - crate::ui::CANVAS_WIDTH * scale) / 2.0,
+            (window.height() - crate::ui::CANVAS_HEIGHT * scale) / 2.0,
         )
 }
+
 fn drive(
-    mut c: Commands,
+    mut commands: Commands,
     options: Res<Options>,
     mut check: ResMut<Check>,
-    mut w: ResMut<Simulation>,
-    mut u: ResMut<SessionUi>,
+    mut simulation: ResMut<Simulation>,
+    mut ui: ResMut<SessionUi>,
     mut keys: ResMut<ButtonInput<KeyCode>>,
     mut mouse: ResMut<ButtonInput<MouseButton>>,
     mut motion: ResMut<AccumulatedMouseMotion>,
     mut window: Single<&mut Window, With<PrimaryWindow>>,
-    mut pad: Query<&mut Gamepad, With<TestPad>>,
+    mut gamepads: Query<&mut Gamepad, With<TestPad>>,
     rigs: Query<&RigPlayer>,
     mut exit: MessageWriter<AppExit>,
 ) {
-    if !options.verify || !u.loaded || rigs.iter().count() < 76 {
+    if !options.verify || !ui.loaded || rigs.iter().count() < 76 {
         return;
     }
     check.frame += 1;
@@ -62,128 +70,128 @@ fn drive(
     keys.reset_all();
     mouse.reset_all();
     motion.delta = Vec2::ZERO;
-    if let Ok(mut p) = pad.single_mut() {
-        p.digital_mut().reset_all();
-        p.analog_mut().set(GamepadAxis::LeftStickX, 0.0);
-        p.analog_mut().set(GamepadAxis::LeftStickY, 0.0);
+    if let Ok(mut gamepad) = gamepads.single_mut() {
+        gamepad.digital_mut().reset_all();
+        gamepad.analog_mut().set(GamepadAxis::LeftStickX, 0.0);
+        gamepad.analog_mut().set(GamepadAxis::LeftStickY, 0.0);
     }
     match frame {
         1 => {
-            assert_eq!(u.screen, Screen::Playing);
-            check.initial = w.0.sabrina.motion.pos;
-            c.spawn((Gamepad::default(), TestPad));
+            assert_eq!(ui.screen, Screen::Playing);
+            check.initial = simulation.0.sabrina.motion.pos;
+            commands.spawn((Gamepad::default(), TestPad));
         }
         2..=40 => {
             keys.press(KeyCode::KeyW);
         }
         41 => {
-            assert!(w.0.sabrina.motion.pos.y > check.initial.y + 0.5);
+            assert!(simulation.0.sabrina.motion.pos.y > check.initial.y + 0.5);
             println!("BEVY CHECK OK: keyboard swimming");
             keys.press(KeyCode::KeyQ);
         }
         45 => {
-            assert!(w.0.sabrina.song.active);
-            assert!(w.0.sabrina.song.energy < 100.0);
+            assert!(simulation.0.sabrina.song.active);
+            assert!(simulation.0.sabrina.song.energy < 100.0);
             println!("BEVY CHECK OK: keyboard song");
             keys.press(KeyCode::KeyQ);
         }
         50 => {
-            assert!(!w.0.sabrina.song.active);
+            assert!(!simulation.0.sabrina.song.active);
             keys.press(KeyCode::KeyF);
         }
         55 => {
-            assert!(w.0.sabrina.wave.active);
+            assert!(simulation.0.sabrina.wave.active);
             println!("BEVY CHECK OK: keyboard wave");
-            w.0.sabrina.wave.active = false;
+            simulation.0.sabrina.wave.active = false;
             keys.press(KeyCode::Space);
         }
         60 => {
-            assert_eq!(w.0.crystal.magic.state, reef_sim::Spell::Charging);
+            assert_eq!(simulation.0.crystal.magic.state, reef_sim::Spell::Charging);
             println!("BEVY CHECK OK: crystal hand wind-up");
         }
         150 => {
-            assert!(w.0.sabrina.cooldown > 140.0);
+            assert!(simulation.0.sabrina.cooldown > 140.0);
             println!("BEVY CHECK OK: crystal launch and recharge");
-            check.initial = w.0.sabrina.motion.pos;
+            check.initial = simulation.0.sabrina.motion.pos;
         }
         151..=190 => {
-            if let Ok(mut p) = pad.single_mut() {
-                p.analog_mut().set(GamepadAxis::LeftStickX, 1.0);
+            if let Ok(mut gamepad) = gamepads.single_mut() {
+                gamepad.analog_mut().set(GamepadAxis::LeftStickX, 1.0);
             }
         }
         191 => {
-            assert!(w.0.sabrina.motion.pos.x > check.initial.x + 0.5);
+            assert!(simulation.0.sabrina.motion.pos.x > check.initial.x + 0.5);
             println!("BEVY CHECK OK: controller swimming");
-            if let Ok(mut p) = pad.single_mut() {
-                p.digital_mut().press(GamepadButton::West);
+            if let Ok(mut gamepad) = gamepads.single_mut() {
+                gamepad.digital_mut().press(GamepadButton::West);
             }
         }
         196 => {
-            assert!(w.0.sabrina.song.active);
+            assert!(simulation.0.sabrina.song.active);
             println!("BEVY CHECK OK: controller song");
-            w.0.sabrina.wave.cooldown = 0.0;
-            if let Ok(mut p) = pad.single_mut() {
-                p.digital_mut().press(GamepadButton::East);
+            simulation.0.sabrina.wave.cooldown = 0.0;
+            if let Ok(mut gamepad) = gamepads.single_mut() {
+                gamepad.digital_mut().press(GamepadButton::East);
             }
         }
         201 => {
-            assert!(w.0.sabrina.wave.active);
+            assert!(simulation.0.sabrina.wave.active);
             println!("BEVY CHECK OK: controller wave");
             keys.press(KeyCode::Escape);
         }
         205 => {
-            assert_eq!(u.screen, Screen::Pause);
-            check.paused_time = w.0.session.time;
+            assert_eq!(ui.screen, Screen::Pause);
+            check.paused_time = simulation.0.session.time;
         }
         235 => {
-            assert_eq!(w.0.session.time, check.paused_time);
+            assert_eq!(simulation.0.session.time, check.paused_time);
             println!("BEVY CHECK OK: pause freezes gameplay");
             keys.press(KeyCode::Escape);
         }
         240 => {
-            assert_eq!(u.screen, Screen::Playing);
-            check.initial = w.0.sabrina.motion.pos;
-            let p = pixel(&window, Vec2::new(1350.0, 300.0));
-            window.set_cursor_position(Some(p));
+            assert_eq!(ui.screen, Screen::Playing);
+            check.initial = simulation.0.sabrina.motion.pos;
+            let pointer_position = pixel(&window, Vec2::new(1350.0, 300.0));
+            window.set_cursor_position(Some(pointer_position));
             motion.delta = Vec2::new(10.0, 0.0);
         }
         280 => {
-            assert!(w.0.sabrina.motion.pos.x > check.initial.x);
+            assert!(simulation.0.sabrina.motion.pos.x > check.initial.x);
             println!("BEVY CHECK OK: mouse swimming");
-            w.0.sabrina.wave.cooldown = 0.0;
-            w.0.sabrina.wave.active = false;
-            w.0.sabrina.throw_time = -1.0;
-            w.0.sabrina.cooldown = 0.0;
-            w.0.crystal.magic.state = reef_sim::Spell::Resting;
-            let p = pixel(&window, Vec2::new(1080.0, 48.0));
-            window.set_cursor_position(Some(p));
+            simulation.0.sabrina.wave.cooldown = 0.0;
+            simulation.0.sabrina.wave.active = false;
+            simulation.0.sabrina.throw_time = -1.0;
+            simulation.0.sabrina.cooldown = 0.0;
+            simulation.0.crystal.magic.state = reef_sim::Spell::Resting;
+            let pointer_position = pixel(&window, Vec2::new(1080.0, 48.0));
+            window.set_cursor_position(Some(pointer_position));
             mouse.press(MouseButton::Left);
         }
         285 => {
-            assert!(w.0.sabrina.wave.active);
-            assert_eq!(w.0.crystal.magic.state, reef_sim::Spell::Resting);
+            assert!(simulation.0.sabrina.wave.active);
+            assert_eq!(simulation.0.crystal.magic.state, reef_sim::Spell::Resting);
             println!("BEVY CHECK OK: HUD wave does not cast crystal");
-            w.0.sabrina.vitality.health = 10.0;
-            w.0.sabrina.vitality.invulnerable = 0.0;
-            w.0.jelly[0].behaviour.state = reef_sim::JellyState::Hungry;
-            w.0.jelly[0].motion.pos = w.0.sabrina.motion.pos;
+            simulation.0.sabrina.vitality.health = 10.0;
+            simulation.0.sabrina.vitality.invulnerable = 0.0;
+            simulation.0.jelly[0].behaviour.state = reef_sim::JellyState::Hungry;
+            simulation.0.jelly[0].motion.pos = simulation.0.sabrina.motion.pos;
         }
         290 => {
-            assert_eq!(u.screen, Screen::GameOver);
+            assert_eq!(ui.screen, Screen::GameOver);
             keys.press(KeyCode::Escape);
         }
         295 => {
-            assert_eq!(u.screen, Screen::GameOver);
+            assert_eq!(ui.screen, Screen::GameOver);
             println!("BEVY CHECK OK: game-over cannot be dismissed with pause");
-            let p = pixel(&window, Vec2::new(800.0, 530.0));
-            window.set_cursor_position(Some(p));
+            let pointer_position = pixel(&window, Vec2::new(800.0, 530.0));
+            window.set_cursor_position(Some(pointer_position));
             mouse.press(MouseButton::Left);
         }
         300 => {
-            assert_eq!(u.screen, Screen::Playing);
-            assert_eq!(w.0.sabrina.vitality.health, 100.0);
+            assert_eq!(ui.screen, Screen::Playing);
+            assert_eq!(simulation.0.sabrina.vitality.health, 100.0);
             println!("BEVY CHECK OK: retry resets the session");
-            u.pointer_mode = false;
+            ui.pointer_mode = false;
         }
         410 => {
             println!("BEVY INPUT INTEGRATION COMPLETE");

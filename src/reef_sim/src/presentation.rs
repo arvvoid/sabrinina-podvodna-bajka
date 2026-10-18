@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Luka Dežulović
 // SPDX-License-Identifier: MIT
 //! Read-only render sampling. Never feed this state back into gameplay systems.
 use crate::*;
@@ -5,9 +6,11 @@ use crate::*;
 fn mix(a: f32, b: f32, t: f32) -> f32 {
     a + (b - a) * t
 }
+
 fn vector(a: V2, b: V2, t: f32) -> V2 {
     a + (b - a) * t
 }
+
 fn motion(a: Motion, b: Motion, t: f32) -> Motion {
     Motion {
         pos: vector(a.pos, b.pos, t),

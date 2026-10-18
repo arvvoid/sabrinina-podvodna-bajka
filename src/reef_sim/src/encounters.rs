@@ -1,114 +1,129 @@
+// Copyright (c) 2026 Luka Dežulović
 // SPDX-License-Identifier: MIT
 //! Peaceful intervals, visitor scheduling, recovery and scoring.
 use crate::*;
-pub fn begin_visit(w: &mut World) {
-    if w.settings.aquarium {
+
+pub fn begin_visit(world: &mut World) {
+    if world.settings.aquarium {
         return;
     }
-    w.session.water = Water::Visit;
-    w.session.cycle += 1;
-    w.points.score = 0;
-    w.points.visit_rescues = 0;
-    w.session.visit_time = 0.0;
-    w.points.visit_start_fish = alive(w);
+    world.session.water = Water::Visit;
+    world.session.cycle += 1;
+    world.points.score = 0;
+    world.points.visit_rescues = 0;
+    world.session.visit_time = 0.0;
+    world.points.visit_start_fish = alive(world);
     let mut count = 1;
-    if w.session.cycle >= 3
-        && w.settings.visitor_limit > 1
-        && (w.session.cycle % 3 == 0 || w.rng.range(0.0, 1.0) < 0.25)
+    if world.session.cycle >= 3
+        && world.settings.visitor_limit > 1
+        && (world.session.cycle % 3 == 0 || world.rng.range(0.0, 1.0) < 0.25)
     {
         count = 2
     }
-    if w.session.cycle >= 6 && w.settings.visitor_limit > 2 && w.session.cycle % 4 == 0 {
+    if world.session.cycle >= 6 && world.settings.visitor_limit > 2 && world.session.cycle % 4 == 0
+    {
         count = 3
     }
     for i in 0..JELLY_COUNT {
-        w.jelly[i] = JellyEntity::default();
+        world.jelly[i] = JellyEntity::default();
         if i >= count {
             continue;
         }
-        let id = allocate_entity(w, EntityKind::Jelly, i as i32);
-        let j = &mut w.jelly[i];
-        j.id = id;
-        j.behaviour.state = JellyState::Arriving;
-        j.behaviour.exit_side = if i % 2 == 0 { 1 } else { -1 };
-        j.motion.pos = v(j.behaviour.exit_side as f32 * 18.0, w.rng.range(5.0, 14.0));
-        j.motion.direction = v(-j.behaviour.exit_side as f32, w.rng.range(-0.2, 0.2));
-        j.behaviour.hunger = if w.settings.gentle { 90.0 } else { 120.0 };
-        j.behaviour.kind = (w.session.cycle + i as i32) % 3;
-        j.behaviour.phase = w.rng.range(0.0, 6.28);
-        j.behaviour.turn_in = 4.0;
+        let id = allocate_entity(world, EntityKind::Jelly, i as i32);
+        let jellyfish = &mut world.jelly[i];
+        jellyfish.id = id;
+        jellyfish.behaviour.state = JellyState::Arriving;
+        jellyfish.behaviour.exit_side = if i % 2 == 0 { 1 } else { -1 };
+        jellyfish.motion.pos = v(
+            jellyfish.behaviour.exit_side as f32 * 18.0,
+            world.rng.range(5.0, 14.0),
+        );
+        jellyfish.motion.direction = v(
+            -jellyfish.behaviour.exit_side as f32,
+            world.rng.range(-0.2, 0.2),
+        );
+        jellyfish.behaviour.hunger = if world.settings.gentle { 90.0 } else { 120.0 };
+        jellyfish.behaviour.kind = (world.session.cycle + i as i32) % 3;
+        jellyfish.behaviour.phase = world.rng.range(0.0, 6.28);
+        jellyfish.behaviour.turn_in = 4.0;
     }
 }
-pub fn send_home(j: &mut JellyEntity) {
-    j.behaviour.state = JellyState::Leaving;
-    j.behaviour.time = 0.0;
-    j.behaviour.exit_side = if j.motion.pos.x < 0.0 { -1 } else { 1 };
+
+pub fn send_home(jellyfish: &mut JellyEntity) {
+    jellyfish.behaviour.state = JellyState::Leaving;
+    jellyfish.behaviour.time = 0.0;
+    jellyfish.behaviour.exit_side = if jellyfish.motion.pos.x < 0.0 { -1 } else { 1 };
 }
-pub fn finish_visit(w: &mut World, e: &mut Events) {
-    w.points.last_survivors = alive(w);
+
+pub fn finish_visit(world: &mut World, events: &mut Events) {
+    world.points.last_survivors = alive(world);
     let mut kinds = [false; SPECIES_COUNT];
-    for f in &w.fish {
-        if f.life.active {
-            kinds[f.appearance.species] = true
+    for fish in &world.fish {
+        if fish.life.active {
+            kinds[fish.appearance.species] = true
         }
     }
-    w.points.last_variety = kinds.iter().filter(|&&x| x).count() as i32;
-    w.points.score +=
-        w.points.last_survivors * (75 + 5 * w.session.cycle.min(8)) + w.points.last_variety * 60;
-    w.points.last_score = w.points.score;
-    w.points.total_score += w.points.score;
-    w.points.best_score = w.points.best_score.max(w.points.score);
-    w.session.water = Water::Calm;
-    w.session.rest_remaining = w.settings.rest_seconds * w.rng.range(0.85, 1.2);
-    e.visit_ended = true;
+    world.points.last_variety = kinds.iter().filter(|&&x| x).count() as i32;
+    world.points.score += world.points.last_survivors * (75 + 5 * world.session.cycle.min(8))
+        + world.points.last_variety * 60;
+    world.points.last_score = world.points.score;
+    world.points.total_score += world.points.score;
+    world.points.best_score = world.points.best_score.max(world.points.score);
+    world.session.water = Water::Calm;
+    world.session.rest_remaining = world.settings.rest_seconds * world.rng.range(0.85, 1.2);
+    events.visit_ended = true;
 }
-pub fn population_and_visits(w: &mut World, dt: f32, e: &mut Events) {
-    let visitors = w
+
+pub fn population_and_visits(world: &mut World, dt: f32, events: &mut Events) {
+    // Leaving visitors still block births until they disappear offscreen.
+    let visitors = world
         .jelly
         .iter()
-        .any(|j| j.behaviour.state != JellyState::Hidden);
+        .any(|jellyfish| jellyfish.behaviour.state != JellyState::Hidden);
     if !visitors {
-        w.session.spawn_in -= dt;
-        if w.session.spawn_in <= 0.0 {
-            let count = w.rng.range(1.0, 4.99) as i32;
-            e.spawned = add_fish(w, count, true);
-            w.session.spawn_in = w.rng.range(9.0, 18.0)
+        world.session.spawn_in -= dt;
+        if world.session.spawn_in <= 0.0 {
+            let count = world.rng.range(1.0, 4.99) as i32;
+            events.spawned = add_fish(world, count, true);
+            world.session.spawn_in = world.rng.range(9.0, 18.0)
         }
-        if alive(w) == 0 {
-            e.spawned += add_fish(w, 3, true);
-            w.session.spawn_in = 5.0
+        if alive(world) == 0 {
+            events.spawned += add_fish(world, 3, true);
+            world.session.spawn_in = 5.0
         }
     }
-    if w.settings.aquarium {
-        if w.session.water == Water::Visit {
-            w.session.water = Water::Calm;
-            w.session.rest_remaining = w.settings.rest_seconds;
-            for j in &mut w.jelly {
-                if j.behaviour.state != JellyState::Hidden {
-                    send_home(j)
+    if world.settings.aquarium {
+        if world.session.water == Water::Visit {
+            world.session.water = Water::Calm;
+            world.session.rest_remaining = world.settings.rest_seconds;
+            for jellyfish in &mut world.jelly {
+                if jellyfish.behaviour.state != JellyState::Hidden {
+                    send_home(jellyfish)
                 }
             }
         }
-    } else if w.session.water == Water::Calm {
-        w.session.rest_remaining -= dt;
-        if w.session.rest_remaining <= 0.0 {
-            if alive(w) >= 10 {
-                begin_visit(w);
-                e.visit_started = true
+    } else if world.session.water == Water::Calm {
+        world.session.rest_remaining -= dt;
+        if world.session.rest_remaining <= 0.0 {
+            if alive(world) >= 10 {
+                begin_visit(world);
+                events.visit_started = true
             } else {
-                w.session.rest_remaining = 5.0
+                world.session.rest_remaining = 5.0
             }
         }
     } else {
-        w.session.visit_time += dt
+        world.session.visit_time += dt
     }
 }
-pub fn recovery_and_scoring(w: &mut World, dt: f32, e: &mut Events) {
-    if !w.session.game_over && w.sabrina.vitality.heal_delay <= 0.0 {
-        w.sabrina.vitality.health =
-            (w.sabrina.vitality.health + dt * if w.settings.gentle { 1.2 } else { 0.8 }).min(100.0)
+
+pub fn recovery_and_scoring(world: &mut World, dt: f32, events: &mut Events) {
+    if !world.session.game_over && world.sabrina.vitality.heal_delay <= 0.0 {
+        world.sabrina.vitality.health = (world.sabrina.vitality.health
+            + dt * if world.settings.gentle { 1.2 } else { 0.8 })
+        .min(100.0)
     }
-    if !w.session.game_over && w.session.water == Water::Visit && hungry(w) == 0 {
-        finish_visit(w, e)
+    if !world.session.game_over && world.session.water == Water::Visit && hungry(world) == 0 {
+        finish_visit(world, events)
     }
 }

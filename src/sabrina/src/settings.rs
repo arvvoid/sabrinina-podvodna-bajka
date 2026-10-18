@@ -1,7 +1,10 @@
+// Copyright (c) 2026 Luka Dežulović
 // SPDX-License-Identifier: MIT
+//! Local preferences and one-time import of settings from the Godot prototype.
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+
 #[derive(Resource, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Preferences {
@@ -17,6 +20,7 @@ pub struct Preferences {
     pub effects: f32,
     pub voice: f32,
 }
+
 impl Default for Preferences {
     fn default() -> Self {
         Self {
@@ -34,6 +38,7 @@ impl Default for Preferences {
         }
     }
 }
+
 impl Preferences {
     pub fn path() -> PathBuf {
         let home = PathBuf::from(std::env::var_os("HOME").unwrap_or_default());
@@ -66,7 +71,7 @@ impl Preferences {
             base.join("godot/app_userdata/Sabrinina podvodna bajka/settings.cfg"),
         )
         .ok()?;
-        let mut p = Self::default();
+        let mut preferences = Self::default();
         let mut section = "";
         for line in data.lines().map(str::trim) {
             if line.starts_with('[') && line.ends_with(']') {
@@ -80,7 +85,7 @@ impl Preferences {
             macro_rules! read {
                 ($field:ident) => {
                     if let Ok(v) = value.parse() {
-                        p.$field = v;
+                        preferences.$field = v;
                     }
                 };
             }
@@ -99,23 +104,25 @@ impl Preferences {
                 _ => {}
             }
         }
-        Some(p)
+        Some(preferences)
     }
+
     pub fn load() -> Self {
-        let mut p: Self = std::fs::read(Self::path())
+        let mut preferences: Self = std::fs::read(Self::path())
             .ok()
             .and_then(|s| serde_json::from_slice(&s).ok())
             .or_else(Self::legacy)
             .unwrap_or_default();
-        p.language %= 3;
-        p.quality %= 3;
-        p.rest = p.rest.clamp(25.0, 150.0);
-        p.visitors = p.visitors.clamp(1, 3);
-        p.music = p.music.clamp(0.0, 1.0);
-        p.effects = p.effects.clamp(0.0, 1.0);
-        p.voice = p.voice.clamp(0.0, 1.0);
-        p
+        preferences.language %= 3;
+        preferences.quality %= 3;
+        preferences.rest = preferences.rest.clamp(25.0, 150.0);
+        preferences.visitors = preferences.visitors.clamp(1, 3);
+        preferences.music = preferences.music.clamp(0.0, 1.0);
+        preferences.effects = preferences.effects.clamp(0.0, 1.0);
+        preferences.voice = preferences.voice.clamp(0.0, 1.0);
+        preferences
     }
+
     pub fn save(&self) {
         if std::env::args().any(|a| a == "--verify-input" || a.starts_with("--capture-")) {
             return;
@@ -133,6 +140,7 @@ impl Preferences {
             warn!("Cannot save preferences: {e}")
         }
     }
+
     pub fn simulation(&self, aquarium: bool) -> reef_sim::Settings {
         reef_sim::Settings {
             gentle: self.gentle,

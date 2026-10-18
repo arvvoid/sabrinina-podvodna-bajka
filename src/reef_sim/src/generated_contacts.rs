@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Luka Dežulović
 // SPDX-License-Identifier: MIT
 // Baked Blender poses; regenerate with tools/export_rust_contacts.py.
 pub const PALM_OFFSET: f32 = 0.11512497;

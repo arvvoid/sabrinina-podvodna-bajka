@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Copyright (c) 2026 Luka Dežulović
 # SPDX-License-Identifier: MIT
 """Generate Rust collision samples from the Blender contact export."""
 
@@ -25,6 +26,7 @@ def export(check=False):
     ]
     assert len(data["arms"]) == 8
     lines = [
+        "// Copyright (c) 2026 Luka Dežulović",
         "// SPDX-License-Identifier: MIT",
         "// Baked Blender poses; regenerate with tools/export_rust_contacts.py.",
         f"pub const PALM_OFFSET: f32 = {data['palm_offset']:.8f};",

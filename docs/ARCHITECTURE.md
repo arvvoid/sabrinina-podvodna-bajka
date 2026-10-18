@@ -37,3 +37,10 @@ Water, reef caustics and crystal materials use external WESL files in `assets/sh
 | `verification.rs` | Live input and pause checks |
 
 Use simulation tests for rule changes, model validators for asset changes, and live input/capture checks for presentation. Benchmark release builds and record the actual GPU, resolution and quality setting. Frame-time percentiles are more useful than a single FPS reading.
+
+## Maintenance notes
+
+- UI layout is built by named screen helpers in `ui.rs`; `draw` handles rebuilding, while `actions` and `update` handle interaction and live HUD values. Pointer hit tests and the input verifier share the logical canvas dimensions.
+- Keep simulation slot iteration, random draws, expression order and fixed-system order stable during readability refactors. Interpolated presentation must never become input to gameplay.
+- `generated_contacts.rs` is generated data, not handwritten source. Edit Blender poses or `tools/export_rust_contacts.py` and regenerate it; the generator also owns its copyright header.
+- Source files carry the project's copyright notice and MIT SPDX identifier. These notices do not change the separate artwork and audio terms in `ASSET_LICENSE.md`.

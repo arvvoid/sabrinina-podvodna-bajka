@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Luka Dežulović
 # SPDX-License-Identifier: MIT
 """Export the opened, artist-edited .blend; never regenerate its geometry or keys.
 Usage: blender --background art/characters/sabrina.blend --python tools/blender/export_character.py

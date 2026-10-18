@@ -1,28 +1,33 @@
+// Copyright (c) 2026 Luka Dežulović
 // SPDX-License-Identifier: MIT
 use reef_sim::*;
+
 fn world() -> World {
-    let mut w = World::default();
-    reset(&mut w, 27, Settings::default());
-    w
+    let mut world = World::default();
+    reset(&mut world, 27, Settings::default());
+    world
 }
-fn advance(w: &mut World, n: usize) {
+
+fn advance(world: &mut World, n: usize) {
     for _ in 0..n {
-        step(w, 1.0 / 60.0, Input::default());
+        step(world, 1.0 / 60.0, Input::default());
     }
 }
+
 #[test]
 fn generation_handles_reject_reused_slots() {
-    let mut w = world();
-    let old = w.fish[0].id;
-    assert!(find_fish(&w, old).is_some());
-    w.fish[0].life.active = false;
-    assert_eq!(add_fish(&mut w, 1, false), 1);
-    assert!(find_fish(&w, old).is_none());
-    let current = w.fish[0].id;
-    reset(&mut w, 27, Settings::default());
-    assert!(find_fish(&w, current).is_none());
-    assert!(find_jelly(&w, current).is_none());
+    let mut world = world();
+    let old = world.fish[0].id;
+    assert!(find_fish(&world, old).is_some());
+    world.fish[0].life.active = false;
+    assert_eq!(add_fish(&mut world, 1, false), 1);
+    assert!(find_fish(&world, old).is_none());
+    let current = world.fish[0].id;
+    reset(&mut world, 27, Settings::default());
+    assert!(find_fish(&world, current).is_none());
+    assert!(find_jelly(&world, current).is_none());
 }
+
 #[test]
 fn population_waits_until_last_visitor_disappears() {
     for state in [
@@ -31,181 +36,189 @@ fn population_waits_until_last_visitor_disappears() {
         JellyState::Leaving,
     ] {
         for empty in [true, false] {
-            let mut w = world();
+            let mut world = world();
             if empty {
-                for f in &mut w.fish {
-                    f.life.active = false;
+                for fish in &mut world.fish {
+                    fish.life.active = false;
                 }
             }
-            w.jelly[2].behaviour.state = state;
-            w.jelly[2].motion.pos = v(12.0, 12.0);
-            w.session.spawn_in = 0.0;
-            let count = alive(&w);
-            let mut e = Events::default();
-            encounters::population_and_visits(&mut w, 1.0 / 60.0, &mut e);
-            assert_eq!(alive(&w), count);
-            assert_eq!(w.session.spawn_in, 0.0);
-            assert_eq!(e.spawned, 0);
-            w.jelly[2].behaviour.state = JellyState::Hidden;
-            encounters::population_and_visits(&mut w, 1.0 / 60.0, &mut e);
-            assert!(alive(&w) > count);
+            world.jelly[2].behaviour.state = state;
+            world.jelly[2].motion.pos = v(12.0, 12.0);
+            world.session.spawn_in = 0.0;
+            let count = alive(&world);
+            let mut events = Events::default();
+            encounters::population_and_visits(&mut world, 1.0 / 60.0, &mut events);
+            assert_eq!(alive(&world), count);
+            assert_eq!(world.session.spawn_in, 0.0);
+            assert_eq!(events.spawned, 0);
+            world.jelly[2].behaviour.state = JellyState::Hidden;
+            encounters::population_and_visits(&mut world, 1.0 / 60.0, &mut events);
+            assert!(alive(&world) > count);
         }
     }
 }
+
 #[test]
 fn song_exhaustion_requires_a_complete_recharge() {
-    let mut w = world();
-    assert!(toggle_song(&mut w));
-    let initial = song_radius(&w);
-    advance(&mut w, 60);
-    assert!(song_radius(&w) > initial);
-    advance(&mut w, 720);
-    assert!(w.sabrina.song.locked);
-    assert!(!toggle_song(&mut w));
-    advance(&mut w, 1201);
-    assert_eq!(w.sabrina.song.energy, 100.0);
-    assert!(!w.sabrina.song.locked);
-    assert!(toggle_song(&mut w));
+    let mut world = world();
+    assert!(toggle_song(&mut world));
+    let initial = song_radius(&world);
+    advance(&mut world, 60);
+    assert!(song_radius(&world) > initial);
+    advance(&mut world, 720);
+    assert!(world.sabrina.song.locked);
+    assert!(!toggle_song(&mut world));
+    advance(&mut world, 1201);
+    assert_eq!(world.sabrina.song.energy, 100.0);
+    assert!(!world.sabrina.song.locked);
+    assert!(toggle_song(&mut world));
 }
+
 #[test]
 fn voluntary_song_stop_can_restart_before_full() {
-    let mut w = world();
-    toggle_song(&mut w);
-    advance(&mut w, 60);
-    toggle_song(&mut w);
-    assert!(!w.sabrina.song.locked);
-    assert!(toggle_song(&mut w));
+    let mut world = world();
+    toggle_song(&mut world);
+    advance(&mut world, 60);
+    toggle_song(&mut world);
+    assert!(!world.sabrina.song.locked);
+    assert!(toggle_song(&mut world));
 }
+
 #[test]
 fn soft_contacts_resolve_overlapping_fish_without_rewards() {
-    let mut w = world();
-    for f in &mut w.fish {
-        f.life.active = false;
+    let mut world = world();
+    for fish in &mut world.fish {
+        fish.life.active = false;
     }
     for i in 0..2 {
-        w.fish[i].life.active = true;
-        w.fish[i].motion.pos = v(0.0, 9.0);
-        w.fish[i].motion.velocity = v(0.0, 0.0);
+        world.fish[i].life.active = true;
+        world.fish[i].motion.pos = v(0.0, 9.0);
+        world.fish[i].motion.velocity = v(0.0, 0.0);
     }
-    soft_contacts(&mut w);
-    assert!((w.fish[0].motion.pos - w.fish[1].motion.pos).length() > 0.4);
-    assert_eq!(w.points.score, 0);
-    assert_eq!(w.sabrina.vitality.health, 100.0);
+    soft_contacts(&mut world);
+    assert!((world.fish[0].motion.pos - world.fish[1].motion.pos).length() > 0.4);
+    assert_eq!(world.points.score, 0);
+    assert_eq!(world.sabrina.vitality.health, 100.0);
 }
+
 #[test]
 fn wave_pushes_fish_once_and_does_not_push_jellyfish() {
-    let mut w = world();
-    w.sabrina.motion.pos = v(0.0, 8.0);
-    for f in &mut w.fish {
-        f.life.active = false;
+    let mut world = world();
+    world.sabrina.motion.pos = v(0.0, 8.0);
+    for fish in &mut world.fish {
+        fish.life.active = false;
     }
-    w.fish[0].life.active = true;
-    w.fish[0].motion.pos = v(2.0, 8.5);
-    w.jelly[0].behaviour.state = JellyState::Hungry;
-    w.jelly[0].motion.pos = v(1.0, 8.0);
-    let before = w.jelly[0].motion.pos;
-    let mut e = Events::default();
+    world.fish[0].life.active = true;
+    world.fish[0].motion.pos = v(2.0, 8.5);
+    world.jelly[0].behaviour.state = JellyState::Hungry;
+    world.jelly[0].motion.pos = v(1.0, 8.0);
+    let before = world.jelly[0].motion.pos;
+    let mut events = Events::default();
     magic::water_wave(
-        &mut w,
+        &mut world,
         0.016,
         Input {
             wave: true,
             ..Input::default()
         },
-        &mut e,
+        &mut events,
     );
-    assert!(e.wave_cast);
+    assert!(events.wave_cast);
     for _ in 0..25 {
-        magic::water_wave(&mut w, 0.016, Input::default(), &mut e);
+        magic::water_wave(&mut world, 0.016, Input::default(), &mut events);
     }
-    assert!(w.fish[0].contact.impulse.x > 4.0);
-    assert_eq!(w.jelly[0].motion.pos, before);
-    let cast = w.sabrina.wave.cast_id;
+    assert!(world.fish[0].contact.impulse.x > 4.0);
+    assert_eq!(world.jelly[0].motion.pos, before);
+    let cast = world.sabrina.wave.cast_id;
     magic::water_wave(
-        &mut w,
+        &mut world,
         0.016,
         Input {
             wave: true,
             ..Input::default()
         },
-        &mut e,
+        &mut events,
     );
-    assert_eq!(w.sabrina.wave.cast_id, cast);
+    assert_eq!(world.sabrina.wave.cast_id, cast);
 }
+
 #[test]
 fn all_contacting_fish_are_eaten_and_grow_the_visitor() {
-    let mut w = world();
-    w.sabrina.motion.pos = v(-12.0, 14.0);
-    for f in &mut w.fish {
-        f.life.active = false;
+    let mut world = world();
+    world.sabrina.motion.pos = v(-12.0, 14.0);
+    for fish in &mut world.fish {
+        fish.life.active = false;
     }
-    let j = &mut w.jelly[0];
-    j.behaviour.state = JellyState::Hungry;
-    j.motion.pos = v(0.0, 8.0);
-    j.behaviour.turn_in = 10.0;
-    let before = jelly_scale(j);
+    let jellyfish = &mut world.jelly[0];
+    jellyfish.behaviour.state = JellyState::Hungry;
+    jellyfish.motion.pos = v(0.0, 8.0);
+    jellyfish.behaviour.turn_in = 10.0;
+    let before = jelly_scale(jellyfish);
     for i in 0..3 {
-        w.fish[i].life.active = true;
-        w.fish[i].motion.pos = v(i as f32 * 0.1, 8.0);
+        world.fish[i].life.active = true;
+        world.fish[i].motion.pos = v(i as f32 * 0.1, 8.0);
     }
-    let mut e = Events::default();
-    jellyfish::jellyfish_and_contacts(&mut w, 0.0, &mut e);
-    assert_eq!(e.eaten, 3);
-    assert_eq!(w.jelly[0].behaviour.eaten, 3);
-    assert!(jelly_scale(&w.jelly[0]) > before);
+    let mut events = Events::default();
+    jellyfish::jellyfish_and_contacts(&mut world, 0.0, &mut events);
+    assert_eq!(events.eaten, 3);
+    assert_eq!(world.jelly[0].behaviour.eaten, 3);
+    assert!(jelly_scale(&world.jelly[0]) > before);
     assert!(
-        w.fish[..3]
+        world.fish[..3]
             .iter()
-            .all(|f| !f.life.active && f.life.pop_time > 0.0)
+            .all(|fish| !fish.life.active && fish.life.pop_time > 0.0)
     );
 }
+
 #[test]
 fn sting_stuns_and_terminal_state_is_frozen() {
-    let mut w = world();
-    for f in &mut w.fish {
-        f.life.active = false;
+    let mut world = world();
+    for fish in &mut world.fish {
+        fish.life.active = false;
     }
-    w.sabrina.vitality.health = 20.0;
-    w.jelly[0].motion.pos = w.sabrina.motion.pos;
-    w.jelly[0].behaviour.state = JellyState::Hungry;
-    let e = step(&mut w, 1.0 / 60.0, Input::default());
-    assert!(e.hit && e.game_over);
-    assert_eq!(w.sabrina.vitality.health, 0.0);
-    let pos = w.sabrina.motion.pos;
-    let t = w.session.time;
-    advance(&mut w, 200);
-    assert_eq!(w.session.time, t);
-    assert_eq!(w.sabrina.motion.pos, pos);
+    world.sabrina.vitality.health = 20.0;
+    world.jelly[0].motion.pos = world.sabrina.motion.pos;
+    world.jelly[0].behaviour.state = JellyState::Hungry;
+    let events = step(&mut world, 1.0 / 60.0, Input::default());
+    assert!(events.hit && events.game_over);
+    assert_eq!(world.sabrina.vitality.health, 0.0);
+    let pos = world.sabrina.motion.pos;
+    let t = world.session.time;
+    advance(&mut world, 200);
+    assert_eq!(world.session.time, t);
+    assert_eq!(world.sabrina.motion.pos, pos);
 }
+
 #[test]
 fn crystal_gathers_to_palm_before_release_at_every_heading() {
     for yaw in [0.0, -1.5, -std::f32::consts::PI] {
         for pitch in [-1.1, 0.0, 1.1] {
-            let mut w = world();
-            w.sabrina.swimming.yaw = yaw;
-            w.sabrina.swimming.pitch = pitch;
-            let mut e = Events::default();
+            let mut world = world();
+            world.sabrina.swimming.yaw = yaw;
+            world.sabrina.swimming.pitch = pitch;
+            let mut events = Events::default();
             magic::crystal(
-                &mut w,
+                &mut world,
                 0.5,
                 Input {
                     cast: true,
                     ..Input::default()
                 },
-                &mut e,
+                &mut events,
             );
-            assert_eq!(w.crystal.magic.state, Spell::Charging);
-            let palm = sabrina_palm(&w.sabrina);
-            assert!((palm.offset - w.crystal.motion.pos).length() < 0.0001);
-            assert!((palm.depth - w.crystal.magic.depth).abs() < 0.0001);
-            assert_eq!(w.sabrina.cooldown, 0.0);
-            magic::crystal(&mut w, 0.61, Input::default(), &mut e);
-            assert_eq!(w.crystal.magic.state, Spell::Flying);
-            assert!(e.launch);
-            assert_eq!(w.sabrina.cooldown, 150.0);
+            assert_eq!(world.crystal.magic.state, Spell::Charging);
+            let palm = sabrina_palm(&world.sabrina);
+            assert!((palm.offset - world.crystal.motion.pos).length() < 0.0001);
+            assert!((palm.depth - world.crystal.magic.depth).abs() < 0.0001);
+            assert_eq!(world.sabrina.cooldown, 0.0);
+            magic::crystal(&mut world, 0.61, Input::default(), &mut events);
+            assert_eq!(world.crystal.magic.state, Spell::Flying);
+            assert!(events.launch);
+            assert_eq!(world.sabrina.cooldown, 150.0);
         }
     }
 }
+
 #[test]
 fn time_step_is_capped_and_nonpositive_steps_do_nothing() {
     let mut a = world();
@@ -218,6 +231,7 @@ fn time_step_is_capped_and_nonpositive_steps_do_nothing() {
     step(&mut a, -1.0, Input::default());
     assert_eq!(a.session.time, t);
 }
+
 #[test]
 fn seeded_rng_matches_mt19937_reference() {
     let mut r = world::Rng::new(5489);

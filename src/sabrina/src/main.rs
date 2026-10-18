@@ -1,14 +1,26 @@
+// Copyright (c) 2026 Luka Dežulović
 // SPDX-License-Identifier: MIT
+//! Desktop entry point: choose the renderer, find assets and install game plugins.
+
 // Bevy systems expose their independent ECS queries and resources as parameters.
 #![allow(clippy::too_many_arguments, clippy::type_complexity)]
+
 mod app;
+
 mod assets;
+
 mod audio;
+
 mod mipmaps;
+
 mod presentation;
+
 mod settings;
+
 mod ui;
+
 mod verification;
+
 mod visuals;
 use bevy::{
     prelude::*,
@@ -18,6 +30,7 @@ use bevy::{
     },
     window::{MonitorSelection, PresentMode, WindowMode},
 };
+
 fn main() {
     let options = app::Options::from_args();
     let mut prefs = settings::Preferences::load();

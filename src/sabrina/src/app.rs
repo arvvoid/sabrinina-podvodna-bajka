@@ -1,4 +1,6 @@
+// Copyright (c) 2026 Luka Dežulović
 // SPDX-License-Identifier: MIT
+//! Session transitions and the handoff from per-frame input to fixed-step rules.
 use crate::settings::Preferences;
 use bevy::{
     input::mouse::AccumulatedMouseMotion,
@@ -6,6 +8,7 @@ use bevy::{
     window::{MonitorSelection, PrimaryWindow, WindowMode},
 };
 use reef_sim as sim;
+
 #[derive(Resource, Default)]
 pub struct Options {
     pub capture: Option<String>,
@@ -14,33 +17,38 @@ pub struct Options {
     pub fullhd: bool,
     pub capture_fxaa: bool,
 }
+
 impl Options {
     pub fn from_args() -> Self {
-        let mut s = Self {
+        let mut options = Self {
             capture_fxaa: std::env::var("SABRINA_CAPTURE_AA").as_deref() == Ok("fxaa"),
             ..Self::default()
         };
-        for a in std::env::args() {
-            if a == "--fullhd" {
-                s.fullhd = true;
+        for argument in std::env::args() {
+            if argument == "--fullhd" {
+                options.fullhd = true;
             }
-            if a == "--verify-input" {
-                s.verify = true;
+            if argument == "--verify-input" {
+                options.verify = true;
             }
-            if let Some(k) = a.strip_prefix("--capture-") {
-                s.capture = Some(k.into());
-                s.school = k == "school";
+            if let Some(kind) = argument.strip_prefix("--capture-") {
+                options.capture = Some(kind.into());
+                options.school = kind == "school";
             }
         }
-        s
+        options
     }
 }
+
 #[derive(Resource)]
 pub struct Simulation(pub sim::World);
+
 #[derive(Resource, Default)]
 pub struct PendingInput(pub sim::Input);
+
 #[derive(Resource, Default)]
 pub struct FrameEvents(pub Vec<sim::Events>);
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Screen {
     #[default]
@@ -53,6 +61,7 @@ pub enum Screen {
     Credits,
     GameOver,
 }
+
 #[derive(Resource)]
 pub struct SessionUi {
     pub screen: Screen,
@@ -66,6 +75,7 @@ pub struct SessionUi {
     pub caption: String,
     pub loaded: bool,
 }
+
 impl Default for SessionUi {
     fn default() -> Self {
         Self {
@@ -82,12 +92,15 @@ impl Default for SessionUi {
         }
     }
 }
+
 impl SessionUi {
     pub fn paused(&self) -> bool {
         !matches!(self.screen, Screen::Menu | Screen::Playing)
     }
 }
+
 pub struct GamePlugin;
+
 impl Plugin for GamePlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<SessionUi>()
@@ -107,46 +120,61 @@ impl Plugin for GamePlugin {
             );
     }
 }
-fn setup(mut c: Commands, p: Res<Preferences>) {
-    let mut w = sim::World::default();
-    sim::reset(&mut w, 27, p.simulation(true));
-    sim::add_fish(&mut w, 16, false);
-    w.sabrina.motion.pos = sim::v(4.0, 6.0);
-    c.insert_resource(Simulation(w));
+
+fn setup(mut commands: Commands, preferences: Res<Preferences>) {
+    let mut world = sim::World::default();
+    sim::reset(&mut world, 27, preferences.simulation(true));
+    sim::add_fish(&mut world, 16, false);
+    world.sabrina.motion.pos = sim::v(4.0, 6.0);
+    commands.insert_resource(Simulation(world));
 }
-pub fn begin(w: &mut sim::World, u: &mut SessionUi, p: &Preferences, aquarium: bool) {
-    sim::reset(w, 27 + (u.elapsed * 10.0) as u32, p.simulation(aquarium));
-    w.points.best_score = p.best;
-    u.screen = Screen::Playing;
-    u.started = true;
-    u.pointer_mode = false;
-    u.score_time = 0.0;
-    u.caption.clear();
+
+pub fn begin(
+    world: &mut sim::World,
+    ui: &mut SessionUi,
+    preferences: &Preferences,
+    aquarium: bool,
+) {
+    sim::reset(
+        world,
+        27 + (ui.elapsed * 10.0) as u32,
+        preferences.simulation(aquarium),
+    );
+    world.points.best_score = preferences.best;
+    ui.screen = Screen::Playing;
+    ui.started = true;
+    ui.pointer_mode = false;
+    ui.score_time = 0.0;
+    ui.caption.clear();
 }
-pub fn home(w: &mut sim::World, u: &mut SessionUi, p: &Preferences) {
-    sim::reset(w, 27, p.simulation(true));
-    sim::add_fish(w, 16, false);
-    w.sabrina.motion.pos = sim::v(4.0, 6.0);
-    u.screen = Screen::Menu;
-    u.started = false;
-    u.pointer_mode = false;
-    u.caption.clear();
+
+pub fn home(world: &mut sim::World, ui: &mut SessionUi, preferences: &Preferences) {
+    sim::reset(world, 27, preferences.simulation(true));
+    sim::add_fish(world, 16, false);
+    world.sabrina.motion.pos = sim::v(4.0, 6.0);
+    ui.screen = Screen::Menu;
+    ui.started = false;
+    ui.pointer_mode = false;
+    ui.caption.clear();
 }
-pub fn pause(u: &mut SessionUi) {
-    match u.screen {
-        Screen::Playing => u.screen = Screen::Pause,
-        Screen::Pause => u.screen = Screen::Playing,
-        Screen::Settings | Screen::Help | Screen::Credits => u.screen = u.return_to,
+
+pub fn pause(ui: &mut SessionUi) {
+    match ui.screen {
+        Screen::Playing => ui.screen = Screen::Pause,
+        Screen::Pause => ui.screen = Screen::Playing,
+        Screen::Settings | Screen::Help | Screen::Credits => ui.screen = ui.return_to,
         _ => {}
     }
 }
-fn update_clock(time: Res<Time>, mut u: ResMut<SessionUi>) {
-    u.elapsed += time.delta_secs();
-    u.notice_time = (u.notice_time - time.delta_secs()).max(0.0);
-    if !u.paused() {
-        u.score_time = (u.score_time - time.delta_secs()).max(0.0)
+
+fn update_clock(time: Res<Time>, mut ui: ResMut<SessionUi>) {
+    ui.elapsed += time.delta_secs();
+    ui.notice_time = (ui.notice_time - time.delta_secs()).max(0.0);
+    if !ui.paused() {
+        ui.score_time = (ui.score_time - time.delta_secs()).max(0.0)
     }
 }
+
 pub fn input(
     keys: Res<ButtonInput<KeyCode>>,
     mouse: Res<ButtonInput<MouseButton>>,
@@ -154,7 +182,7 @@ pub fn input(
     pads: Query<&Gamepad>,
     mut window: Single<&mut Window, With<PrimaryWindow>>,
     camera: Query<(&Camera, &GlobalTransform), With<Camera3d>>,
-    mut u: ResMut<SessionUi>,
+    mut ui: ResMut<SessionUi>,
     mut pending: ResMut<PendingInput>,
     mut prefs: ResMut<Preferences>,
     options: Res<Options>,
@@ -186,7 +214,7 @@ pub fn input(
             pad.just_pressed(GamepadButton::South) || pad.just_pressed(GamepadButton::RightTrigger);
     }
     if pausing {
-        pause(&mut u)
+        pause(&mut ui)
     }
     if keys.just_pressed(KeyCode::F11) {
         prefs.fullscreen = !prefs.fullscreen;
@@ -197,19 +225,19 @@ pub fn input(
         };
         prefs.save();
     }
-    if u.screen != Screen::Playing {
+    if ui.screen != Screen::Playing {
         pending.0 = sim::Input::default();
         return;
     }
     if motion.delta.length() > 1.0 {
-        u.pointer_mode = true
+        ui.pointer_mode = true
     }
     if movement.length() > 0.1 {
-        u.pointer_mode = false
+        ui.pointer_mode = false
     }
     pending.0.movement = sim::v(movement.x, movement.y);
     // Pointer target is projected in tick, after any fixed-step movement.
-    if u.pointer_mode
+    if ui.pointer_mode
         && let (Some(pos), Ok((camera, transform))) = (window.cursor_position(), camera.single())
         && let Ok(ray) = camera.viewport_to_world(transform, pos)
     {
@@ -222,9 +250,10 @@ pub fn input(
     pending.0.wave |= wave;
     pending.0.toggle_song |= toggle;
 }
+
 fn tick(
-    mut w: ResMut<Simulation>,
-    mut u: ResMut<SessionUi>,
+    mut simulation: ResMut<Simulation>,
+    mut ui: ResMut<SessionUi>,
     mut pending: ResMut<PendingInput>,
     mut events: ResMut<FrameEvents>,
     mut prefs: ResMut<Preferences>,
@@ -232,8 +261,8 @@ fn tick(
     mut capture_action: Local<bool>,
     mut previous: ResMut<crate::presentation::Previous>,
 ) {
-    if !u.loaded
-        || u.paused()
+    if !ui.loaded
+        || ui.paused()
         || options.capture.as_deref().is_some_and(|k| {
             k.starts_with("graphics-") || (k.starts_with("pose-") && k != "pose-idle") || k == "rig"
         })
@@ -247,34 +276,35 @@ fn tick(
             "wave" => 3.5,
             _ => 1.0,
         };
-        if !*capture_action && w.0.session.time >= due {
+        if !*capture_action && simulation.0.session.time >= due {
             *capture_action = true;
             input.cast = kind == "throw" || kind == "crystal";
             input.toggle_song = kind == "song";
             input.wave = kind == "wave";
         }
     }
-    if u.pointer_mode {
-        input.movement = (input.movement - w.0.sabrina.motion.pos) * 0.5;
+    if ui.pointer_mode {
+        input.movement = (input.movement - simulation.0.sabrina.motion.pos) * 0.5;
     }
     if options.capture.as_deref() == Some("pose-idle") {
         input.movement = sim::v(0.0, 0.0);
     }
+    // Consume one-shot actions once, even when a rendered frame runs several ticks.
     pending.0.cast = false;
     pending.0.wave = false;
     pending.0.toggle_song = false;
-    w.0.settings.reduced_motion = prefs.reduced_motion;
-    previous.0 = Some(w.0.clone());
-    let e = sim::step(&mut w.0, 1.0 / 60.0, input);
-    if e.visit_ended {
-        u.score_time = 10.0;
-        prefs.best = prefs.best.max(w.0.points.best_score);
+    simulation.0.settings.reduced_motion = prefs.reduced_motion;
+    previous.0 = Some(simulation.0.clone());
+    let frame_events = sim::step(&mut simulation.0, 1.0 / 60.0, input);
+    if frame_events.visit_ended {
+        ui.score_time = 10.0;
+        prefs.best = prefs.best.max(simulation.0.points.best_score);
         if options.capture.is_none() && !options.verify {
             prefs.save()
         }
     }
-    if e.game_over {
-        u.screen = Screen::GameOver
+    if frame_events.game_over {
+        ui.screen = Screen::GameOver
     }
-    events.0.push(e);
+    events.0.push(frame_events);
 }

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Copyright (c) 2026 Luka Dežulović
 # SPDX-License-Identifier: MIT
 """Check derived render meshes can safely reuse the original skins/materials."""
 

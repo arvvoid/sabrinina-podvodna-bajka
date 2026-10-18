@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Luka Dežulović
 # SPDX-License-Identifier: MIT
 """Render an honest preview of a saved asset, without changing its source."""
 

@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Luka Dežulović
 # SPDX-License-Identifier: MIT
 """Export the saved crystal, preserving its geometry and packed textures."""
 

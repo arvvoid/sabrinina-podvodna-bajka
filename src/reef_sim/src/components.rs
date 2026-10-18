@@ -1,36 +1,44 @@
+// Copyright (c) 2026 Luka Dežulović
 // SPDX-License-Identifier: MIT
 //! Plain gameplay data shared by the fixed-step systems.
 use std::ops::{Add, Mul, Sub};
+
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct V2 {
     pub x: f32,
     pub y: f32,
 }
+
 pub const fn v(x: f32, y: f32) -> V2 {
     V2 { x, y }
 }
+
 impl Add for V2 {
     type Output = Self;
     fn add(self, b: Self) -> Self {
         v(self.x + b.x, self.y + b.y)
     }
 }
+
 impl Sub for V2 {
     type Output = Self;
     fn sub(self, b: Self) -> Self {
         v(self.x - b.x, self.y - b.y)
     }
 }
+
 impl Mul<f32> for V2 {
     type Output = Self;
     fn mul(self, s: f32) -> Self {
         v(self.x * s, self.y * s)
     }
 }
+
 impl V2 {
     pub fn length(self) -> f32 {
         (self.x * self.x + self.y * self.y).sqrt()
     }
+
     pub fn unit(self) -> Self {
         let l = self.length();
         if l > 0.0001 {
@@ -39,9 +47,11 @@ impl V2 {
             Self::default()
         }
     }
+
     pub fn dot(self, b: Self) -> f32 {
         self.x * b.x + self.y * b.y
     }
+
     pub fn rotate(self, a: f32) -> Self {
         v(
             self.x * a.cos() - self.y * a.sin(),
@@ -49,6 +59,7 @@ impl V2 {
         )
     }
 }
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum EntityKind {
     #[default]
@@ -58,12 +69,14 @@ pub enum EntityKind {
     Jelly,
     Crystal,
 }
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Entity {
     pub slot: i32,
     pub generation: u64,
     pub kind: EntityKind,
 }
+
 impl Default for Entity {
     fn default() -> Self {
         Self {
@@ -73,12 +86,14 @@ impl Default for Entity {
         }
     }
 }
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Water {
     #[default]
     Calm,
     Visit,
 }
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum JellyState {
     #[default]
@@ -87,6 +102,7 @@ pub enum JellyState {
     Hungry,
     Leaving,
 }
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Spell {
     #[default]
@@ -95,10 +111,23 @@ pub enum Spell {
     Flying,
     Burst,
 }
-macro_rules! component {($name:ident {$($field:ident:$ty:ty=$value:expr),* $(,)?})=>{
- #[derive(Clone,Copy,Debug)] pub struct $name {$(pub $field:$ty),*}
- impl Default for $name{fn default()->Self{Self{$($field:$value),*}}}
-}}
+macro_rules! component {
+    ($name:ident { $($field:ident: $ty:ty = $value:expr),* $(,)? }) => {
+        #[derive(Clone, Copy, Debug)]
+        pub struct $name {
+            $(pub $field: $ty),*
+        }
+
+        impl Default for $name {
+            fn default() -> Self {
+                Self {
+                    $($field: $value),*
+                }
+            }
+        }
+    };
+}
+
 component!(Motion {
     pos: V2 = v(0.0, 0.0),
     velocity: V2 = v(0.0, 0.0),
@@ -238,6 +267,7 @@ component!(Session {
     cycle: i32 = 0,
     game_over: bool = false
 });
+
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Score {
     pub score: i32,
@@ -251,6 +281,7 @@ pub struct Score {
     pub last_variety: i32,
     pub visit_start_fish: i32,
 }
+
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Input {
     pub movement: V2,
@@ -258,6 +289,7 @@ pub struct Input {
     pub toggle_song: bool,
     pub wave: bool,
 }
+
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Events {
     pub spawned: i32,
@@ -274,6 +306,7 @@ pub struct Events {
     pub visit_ended: bool,
     pub leaving: bool,
 }
+
 #[derive(Clone, Copy, Debug, Default)]
 pub struct CrystalOrbit {
     pub offset: V2,

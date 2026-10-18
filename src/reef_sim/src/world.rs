@@ -1,15 +1,22 @@
+// Copyright (c) 2026 Luka Dežulović
 // SPDX-License-Identifier: MIT
+//! Fixed-capacity entity storage, generation-safe handles and seeded randomness.
 use crate::*;
+
 pub const FISH_COUNT: usize = 72;
+
 pub const JELLY_COUNT: usize = 3;
+
 pub const SPECIES_COUNT: usize = 6;
 // Match std::mt19937 and libstdc++ uniform_real_distribution<float>, including
 // rounding before scaling. Stable slot iteration is part of the gameplay contract.
+
 #[derive(Clone)]
 pub struct Rng {
     state: [u32; 624],
     index: usize,
 }
+
 impl Rng {
     pub fn new(seed: u32) -> Self {
         let mut s = Self {
@@ -24,6 +31,7 @@ impl Rng {
         }
         s
     }
+
     pub fn next_u32(&mut self) -> u32 {
         if self.index == 624 {
             for i in 0..624 {
@@ -42,11 +50,13 @@ impl Rng {
         y ^= y >> 18;
         y
     }
+
     pub fn range(&mut self, a: f32, b: f32) -> f32 {
         let n = (self.next_u32() as f32 / 4294967296.0).min(f32::from_bits(0x3f7fffff));
         n * (b - a) + a
     }
 }
+
 #[derive(Clone)]
 pub struct World {
     pub fish: [FishEntity; FISH_COUNT],
@@ -59,6 +69,7 @@ pub struct World {
     pub rng: Rng,
     pub next_generation: u64,
 }
+
 impl Default for World {
     fn default() -> Self {
         Self {
@@ -74,82 +85,101 @@ impl Default for World {
         }
     }
 }
+
 pub fn bounds(p: V2) -> V2 {
     v(p.x.clamp(-15.3, 15.3), p.y.clamp(2.0, 16.2))
 }
-pub fn allocate_entity(w: &mut World, kind: EntityKind, slot: i32) -> Entity {
-    let e = Entity {
+
+pub fn allocate_entity(world: &mut World, kind: EntityKind, slot: i32) -> Entity {
+    let entity = Entity {
         slot,
-        generation: w.next_generation,
+        generation: world.next_generation,
         kind,
     };
-    w.next_generation += 1;
-    e
+    world.next_generation += 1;
+    entity
 }
-pub fn alive(w: &World) -> i32 {
-    w.fish.iter().filter(|f| f.life.active).count() as i32
+
+pub fn alive(world: &World) -> i32 {
+    world.fish.iter().filter(|fish| fish.life.active).count() as i32
 }
-pub fn hungry(w: &World) -> i32 {
-    w.jelly
+
+pub fn hungry(world: &World) -> i32 {
+    world
+        .jelly
         .iter()
-        .filter(|j| matches!(j.behaviour.state, JellyState::Arriving | JellyState::Hungry))
+        .filter(|jellyfish| {
+            matches!(
+                jellyfish.behaviour.state,
+                JellyState::Arriving | JellyState::Hungry
+            )
+        })
         .count() as i32
 }
-pub fn find_fish(w: &World, e: Entity) -> Option<&FishEntity> {
-    if e.kind != EntityKind::Fish || e.generation == 0 {
+
+pub fn find_fish(world: &World, entity: Entity) -> Option<&FishEntity> {
+    if entity.kind != EntityKind::Fish || entity.generation == 0 {
         return None;
     }
-    w.fish.get(e.slot as usize).filter(|f| f.id == e)
+    world
+        .fish
+        .get(entity.slot as usize)
+        .filter(|fish| fish.id == entity)
 }
-pub fn find_jelly(w: &World, e: Entity) -> Option<&JellyEntity> {
-    if e.kind != EntityKind::Jelly || e.generation == 0 {
+
+pub fn find_jelly(world: &World, entity: Entity) -> Option<&JellyEntity> {
+    if entity.kind != EntityKind::Jelly || entity.generation == 0 {
         return None;
     }
-    w.jelly.get(e.slot as usize).filter(|j| j.id == e)
+    world
+        .jelly
+        .get(entity.slot as usize)
+        .filter(|jellyfish| jellyfish.id == entity)
 }
-pub fn add_fish(w: &mut World, count: i32, from_edge: bool) -> i32 {
+
+pub fn add_fish(world: &mut World, count: i32, from_edge: bool) -> i32 {
     if count <= 0 {
         return 0;
     }
     let mut added = 0;
     for i in 0..FISH_COUNT {
-        if w.fish[i].life.active || w.fish[i].life.pop_time > 0.0 {
+        if world.fish[i].life.active || world.fish[i].life.pop_time > 0.0 {
             continue;
         }
-        let mut f = FishEntity {
-            id: allocate_entity(w, EntityKind::Fish, i as i32),
+        let mut fish = FishEntity {
+            id: allocate_entity(world, EntityKind::Fish, i as i32),
             ..FishEntity::default()
         };
-        f.life.active = true;
-        f.appearance.species = w.rng.range(0.0, 5.999) as usize;
-        f.appearance.size = w.rng.range(0.55, 1.18);
-        f.appearance.depth = w.rng.range(-1.7, 0.6);
-        f.swimming.phase = w.rng.range(0.0, 6.283);
-        f.motion.pos = v(
+        fish.life.active = true;
+        fish.appearance.species = world.rng.range(0.0, 5.999) as usize;
+        fish.appearance.size = world.rng.range(0.55, 1.18);
+        fish.appearance.depth = world.rng.range(-1.7, 0.6);
+        fish.swimming.phase = world.rng.range(0.0, 6.283);
+        fish.motion.pos = v(
             if from_edge {
-                if w.rng.range(0.0, 1.0) < 0.5 {
+                if world.rng.range(0.0, 1.0) < 0.5 {
                     -15.0
                 } else {
                     15.0
                 }
             } else {
-                w.rng.range(-14.0, 14.0)
+                world.rng.range(-14.0, 14.0)
             },
-            w.rng.range(3.0, 15.0),
+            world.rng.range(3.0, 15.0),
         );
-        let heading = if w.rng.range(0.0, 1.0) < 0.5 {
+        let heading = if world.rng.range(0.0, 1.0) < 0.5 {
             0.0
         } else {
             3.14159
-        } + w.rng.range(-0.25, 0.25);
-        f.swimming.cruise_heading = heading;
-        f.swimming.speed = 0.8 + f.appearance.size * 0.65;
-        f.swimming.tail_phase = w.rng.range(0.0, 6.283);
-        f.motion.direction = v(heading.cos(), heading.sin());
-        f.motion.velocity = f.motion.direction * f.swimming.speed;
-        f.swimming.turn_in = w.rng.range(2.0, 6.0);
-        f.appearance.birth = if from_edge { 0.0 } else { 1.0 };
-        w.fish[i] = f;
+        } + world.rng.range(-0.25, 0.25);
+        fish.swimming.cruise_heading = heading;
+        fish.swimming.speed = 0.8 + fish.appearance.size * 0.65;
+        fish.swimming.tail_phase = world.rng.range(0.0, 6.283);
+        fish.motion.direction = v(heading.cos(), heading.sin());
+        fish.motion.velocity = fish.motion.direction * fish.swimming.speed;
+        fish.swimming.turn_in = world.rng.range(2.0, 6.0);
+        fish.appearance.birth = if from_edge { 0.0 } else { 1.0 };
+        world.fish[i] = fish;
         added += 1;
         if added >= count {
             break;
@@ -157,16 +187,18 @@ pub fn add_fish(w: &mut World, count: i32, from_edge: bool) -> i32 {
     }
     added
 }
-pub fn reset(w: &mut World, seed: u32, mut settings: Settings) {
-    let generation = w.next_generation;
-    *w = World::default();
-    w.next_generation = generation;
-    w.sabrina.id = allocate_entity(w, EntityKind::Sabrina, 0);
-    w.crystal.id = allocate_entity(w, EntityKind::Crystal, 0);
-    w.rng = Rng::new(seed);
+
+pub fn reset(world: &mut World, seed: u32, mut settings: Settings) {
+    // Keep generations increasing across resets so old spell targets stay invalid.
+    let generation = world.next_generation;
+    *world = World::default();
+    world.next_generation = generation;
+    world.sabrina.id = allocate_entity(world, EntityKind::Sabrina, 0);
+    world.crystal.id = allocate_entity(world, EntityKind::Crystal, 0);
+    world.rng = Rng::new(seed);
     settings.rest_seconds = settings.rest_seconds.clamp(25.0, 150.0);
     settings.visitor_limit = settings.visitor_limit.clamp(1, 3);
-    w.settings = settings;
-    w.session.rest_remaining = settings.rest_seconds;
-    add_fish(w, 10, false);
+    world.settings = settings;
+    world.session.rest_remaining = settings.rest_seconds;
+    add_fish(world, 10, false);
 }

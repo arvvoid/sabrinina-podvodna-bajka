@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Luka Dežulović
 # SPDX-License-Identifier: MIT
 """Sample arm contacts from the poses used by the rendered skin."""
 

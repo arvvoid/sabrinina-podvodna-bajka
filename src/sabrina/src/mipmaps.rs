@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Luka Dežulović
 // SPDX-License-Identifier: MIT
 //! Shared glTF texture preparation. PNG/JPEG loading supplies only level zero;
 //! Embedded glTF images need mip levels for stable distant texture sampling.
@@ -79,6 +80,7 @@ fn generate(image: &mut Image, normal: bool) -> bool {
             for x in 0..next_w {
                 let mut sum = [0.0; 4];
                 let mut samples = 0.0;
+                // Proportional ranges keep the last row/column of odd-sized maps.
                 for sy in y * height / next_h..(y + 1) * height / next_h {
                     for sx in x * width / next_w..(x + 1) * width / next_w {
                         let pixel = &data[offset + (sy * width + sx) * 4..][..4];
