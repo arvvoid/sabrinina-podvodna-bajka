@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 import hashlib
 import importlib.util
+import os
 from pathlib import Path
 import tarfile
 import tempfile
@@ -39,7 +40,10 @@ class PackageReleaseTests(unittest.TestCase):
                     else:
                         with tarfile.open(archive) as opened:
                             names = opened.getnames()
-                            self.assertTrue(opened.getmember(f"sabrina-test/{executable}").mode & 0o111)
+                            if os.name == "posix":
+                                self.assertTrue(
+                                    opened.getmember(f"sabrina-test/{executable}").mode & 0o111
+                                )
                     for relative in (
                         executable, "licenses/LICENSE-DejaVu.txt", "licenses/LICENSE-FluidR3.txt",
                         "docs/guide.md", "LICENSE", "NOTICE", "ASSET_LICENSE.md", "PLAY.txt",
