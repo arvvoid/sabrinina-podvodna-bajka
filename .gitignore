@@ -1,0 +1,43 @@
+# Godot generated files
+.godot/
+.export/
+export_credentials.cfg
+
+# Native build outputs
+build/
+cmake-build-*/
+.sconsign*
+*.o
+*.obj
+*.a
+*.lib
+*.so
+*.dll
+*.dylib
+*.pdb
+
+# Packaged releases
+dist/
+exports/
+
+# Local settings and secrets
+.env
+.env.*
+!.env.example
+.vscode/
+.idea/
+.DS_Store
+*~
+
+# Local engine and captures
+/tools/godot
+/tools/*.zip
+/captures/
+
+/build-tests/
+
+# Blender local backups and Python bytecode
+*.blend1
+*.blend2
+__pycache__/
+*.pyc

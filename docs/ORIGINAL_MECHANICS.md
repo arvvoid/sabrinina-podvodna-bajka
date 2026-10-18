@@ -1,0 +1,44 @@
+# Adapting the original aquarium
+
+Reference: [the original Scratch project](https://scratch.mit.edu/projects/1203591608/), from an idea by Sabrina Dezulovic; remake by Luka Dezulovic. During the initial comparison, the supplied HTML and Scratch archive were decoded locally and their sprites’ block opcodes, fields, inputs and mutations matched. The HTML was also played to inspect the side-on composition and original character appearance. The redundant local archive is no longer bundled with the remake.
+
+The original starts with ten persistent fish, spawns one to five more at random intervals, and alternates peaceful aquarium time with a hungry jellyfish. Sabrina swims with the pointer. Her movement nudges fish away; her song attracts them and can attract the jellyfish. A click charges the crystal, which travels to the jellyfish and returns touched fish to Sabrina. The jellyfish eats, grows, stings, and eventually leaves. Recorded voices tell the original story and give the jellyfish a personality.
+
+The remake retains that loop. Its menu now provides creator credits and a brief origin history instead of the original story and intro narration. Fish are not consumed by a rescue action. The earlier top-down camera, sanctuary and three-tide objective have been removed. Health and game over now follow the author’s latest playtest request. All swimming occurs in a side-on XY plane; geometry, lighting, small fish depth variation and scenery are three-dimensional.
+
+## Deliberate tuning changes
+
+- The original has random 25–120 second waits after the population condition. The new rest interval is adjustable (25–150 seconds, default 55) with slight cycle variation, and a separate peaceful aquarium mode never spawns a jellyfish.
+- Original crystal cooldown is 150–210 seconds. It is now 150 seconds in gentle mode and 180 in lively mode, preserving the long strategic recharge. Song and the water wave remain useful between casts.
+- Charging takes 1.1 seconds and includes reaching, holding the crystal in the right palm and throwing from the hand; travel takes real time and touches fish along the path. Teleported fish glide back over 1.2 seconds and have brief protection.
+- Original scoring penalizes a cast by 300 and rewards starvation/repulsion by 300. The new score removes the cast cost (cooldown is the resource cost), rewards individual crystal rescues, successful song escorts and species variety, and retains survivor-based visit scoring. Scores cannot go negative. Song no longer drains points continuously.
+- Some later visits contain two jellyfish (or three if explicitly selected in settings). Each has independent hunger, arrival and departure. All fish contacts are eaten immediately; the former eating cooldown was removed. There is no endless escalation: visit speed and survivor multiplier are capped.
+- Visits end through magic, hunger, fullness or a maximum active duration. Fish continue swimming as the jellyfish leaves. New visits start only after quiet time.
+- Gentle stings last two seconds, lively stings three, followed by three more seconds of contact immunity. Sabrina has 100 health; damage is 28 / 35 per sting. Regeneration starts after eight safe seconds at 1.2 / 0.8 health per second. Zero health freezes play and opens retry / menu. An empty aquarium replenishes itself only when all jellyfish are hidden; no new fish spawn during arrival, feeding or departure. The population timer pauses while visitors remain visible.
+- The original eventually restarts after several cycles. This version continues until Sabrina runs out of health, or indefinitely in the peaceful aquarium.
+
+These values are initial playtest settings, not final balance. Retained gameplay and help recordings remain original; procedural visual representations and synthesized accompaniment are new. The original help recording describes its original controls, while the visible help text documents this build.
+
+## Flowing swimming and character revision
+
+The original sine/cosine concept is retained as a subtle cruise wave, but the former accumulated angular motion and sideways forces looked like floating in playtests. Fish now steer toward shallow cruise headings, begin broad turns before the edges, slow into turns and accelerate along their nose. Attraction, avoidance and schooling influence the desired heading; they no longer add sideways velocity. Correct left-facing pitch avoids diving while visibly pointing upward. Body and tail share a position-offset stroke phase with shared materials; tail amplitude follows swimming speed. Sabrina has relaxed forearm and wrist strokes, a forward resting gaze and smooth half-circle turns.
+
+The song builds over half a second. At full strength its radius is `1.4 + 5.1 * sqrt(energy / 100)` world units; visual ripples and notes shrink with it. Only fish inside that radius gather. The original Scratch Jellyfish `Lov` script uses a random integer 1–100 against `15 + 5 * game_cycle + 1`, without a distance test. The adaptation rolls the equivalent chance every 2.5 seconds while singing, capped at 50%, and keeps a successful directional lure for 3.5 seconds or until singing stops. A full song lasts 12 seconds in gentle mode or 10 in lively. Stopping early allows immediate reuse of remaining energy; emptying the meter locks singing until completely replenished (20 / 24 seconds). Fish gather into separate swaying positions and inherit part of Sabrina's velocity. Swimming slows from 7.2 to 5.6 units per second at full song strength. The original vocal recording and ducked accompaniment remain.
+
+Automatic hand grabbing has been removed. Right-click, F, controller B or the HUD wave button casts a 0.75-second, 5.5-unit directional water wave. Its widening front pushes groups of fish, hits each fish once per cast, and leaves jellyfish unaffected. Recharge is 3 / 4 seconds. Native contact still gently pushes fish. A first wave push away from a jellyfish within six units earns 20 points per fish per visit. Calm-water pushes do not score.
+
+Jellyfish remain hungry for 90 / 120 seconds rather than 20 / 26. Feeding no longer resets the timeout to a shorter value. Fullness requires 10 / 14 meals and at least 60 / 80 elapsed seconds; the overall visit limit is 100 / 130 seconds. Magic still repels immediately. Every meal increases visible size and the physical contact envelopes, with diminishing growth to keep the scene playable.
+
+Sabrina's appearance follows the requested blonde hair, brown eyes, fair skin and detailed rainbow tail. The characters use editable Blender sources and shared skinned GLB assets with bounded geometry budgets. Soft-edged fish, shark, ray and whale-like silhouettes move in the distance at different speeds and sizes. Their shapes and tails undulate; there is no static distant shoal. They never collide, score or interrupt gameplay.
+
+## Water and loading
+
+The reef uses brighter coral, shared fish meshes, animated fin rays and procedural scales. Moving world-space caustics shade the reef in its existing material passes. A short 3/6/12-sample depth integration approximates light scattering through water on the Compatibility renderer; it is not Godot's Forward+ volumetric fog. Subtle sunlight variation, depth fog and layered beams add depth without an expensive full-screen ray marcher. Quality and reduced-motion settings control the effects.
+
+A game-rendered Sabrina image replaces the default engine boot artwork. Native initialization is staged across the reef, characters, interface, audio and graphics settings, with a localized brief remake origin, progress indicator and author copyright. Credits name Luka Dezulovic and Sabrina Dezulovic and link to the original Scratch project.
+
+## Contact feedback and reef interface
+
+Jellyfish use shared capsule envelopes covering the entire bell, crest and tentacle area. These grow with the rendered model. Sabrina cannot pass through them, even during sting immunity, and jellyfish separate from each other. Fish stop at the surface before entering the red-pop effect. All touching fish are consumed, including during arrival and multiple contacts in one step. A fish remains briefly visible in red, then pops into six small particles; its slot cannot be reused until the effect finishes. Sabrina flashes red on a sting, with a visible health meter. A fatal hit stops song and movement, suppresses contradictory recovery captions and opens a localized retry panel.
+
+Shell-shaped buttons, coral sprigs, starfish and pearl-bordered panels are native SVG interface assets. UTF-8 conversion remains explicit for localized strings. Bundled DejaVu Sans supplies Croatian č, ć, ž, š and đ on every machine; runtime checks assert both strings and glyph availability. Gameplay and help recordings are retained; the original story text and intro narration are no longer included.
