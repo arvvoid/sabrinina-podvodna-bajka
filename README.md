@@ -2,6 +2,8 @@
 
 *Sabrina’s Underwater Fairy Tale*
 
+[![Test](https://github.com/arvvoid/sabrinina-podvodna-bajka/actions/workflows/rust.yml/badge.svg)](https://github.com/arvvoid/sabrinina-podvodna-bajka/actions/workflows/rust.yml)
+[![CodeQL](https://github.com/arvvoid/sabrinina-podvodna-bajka/actions/workflows/github-code-scanning/codeql/badge.svg)](https://github.com/arvvoid/sabrinina-podvodna-bajka/actions/workflows/github-code-scanning/codeql)
 [![Rust 1.99.1](https://img.shields.io/badge/Rust-1.99.1-orange?logo=rust)](https://www.rust-lang.org/)
 [![Bevy 0.20.0](https://img.shields.io/badge/Bevy-0.20.0-blue)](https://bevy.org/)
 [![Code: Apache 2.0](https://img.shields.io/badge/Code-Apache%202.0-green.svg)](LICENSE)
@@ -171,5 +173,3 @@ Original source code, shaders, scripts, tests, configuration and technical docum
 The game itself uses a hybrid licensing model: Sabrina's characters, story and world, 3D models, textures, UI artwork, music and recordings are **all rights reserved**, to the extent held by their respective rights holders. The title and logo are reserved branding; the code license grants no trademark rights. Third-party assets retain their own licenses. See [ASSET_LICENSE.md](ASSET_LICENSE.md).
 
 Official builds combine Apache-licensed code with separately licensed game content; selling them does not make the code proprietary or grant permission to redistribute the reserved content. Any future Steamworks or mobile-platform SDK files remain subject to their own terms and must not be published without permission.
-
-This change does not revoke permissions already granted for earlier MIT-licensed code, or alter any licenses applicable to the original Scratch project.
