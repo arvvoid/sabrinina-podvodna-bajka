@@ -93,6 +93,9 @@ followed by `target/sabrina-build-tests`.
 
 ## Maintenance notes
 
+- In-game HUD panel/button backgrounds use 28% opacity so the reef stays visible. Text, icons and meter fills remain opaque; HUD text has a dark shadow for contrast. Menu/dialog backgrounds keep their original opacity.
+- The contact exporter reads and writes UTF-8 explicitly, including rustfmt's pipes, and emits LF line endings. This avoids Windows locale-dependent encoding failures in the copyright notice. Both CI workflows run regression tests with CP1252 defaults and real rustfmt.
+
 - UI layout is built by named screen helpers in `ui.rs`; `draw` handles rebuilding, while `actions` and `update` handle interaction and live HUD values. Pointer hit tests and the input verifier share the logical canvas dimensions.
 - Keep simulation slot iteration, random draws, expression order and fixed-system order stable during readability refactors. Interpolated presentation must never become input to gameplay.
 - `generated_contacts.rs` is generated data, not handwritten source. Edit Blender poses or `tools/export_rust_contacts.py` and regenerate it; the generator also owns its copyright header.

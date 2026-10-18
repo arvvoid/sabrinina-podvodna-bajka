@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def export(check=False):
-    data = json.loads((ROOT / "art/characters/sabrina.contacts.json").read_text())
+    data = json.loads((ROOT / "art/characters/sabrina.contacts.json").read_text(encoding="utf-8"))
     assert data["clips"] == [
         "Idle",
         "Swim",
@@ -51,6 +51,7 @@ def export(check=False):
         [rustfmt, "--edition", "2024"],
         input="\n".join(lines),
         text=True,
+        encoding="utf-8",
         capture_output=True,
         check=True,
         cwd=ROOT,
@@ -58,10 +59,10 @@ def export(check=False):
     target = ROOT / "src/reef_sim/src/generated_contacts.rs"
     if check:
         assert (
-            target.read_text() == formatted
+            target.read_text(encoding="utf-8") == formatted
         ), "Run python3 tools/export_rust_contacts.py"
     else:
-        target.write_text(formatted)
+        target.write_text(formatted, encoding="utf-8", newline="\n")
 
 
 if __name__ == "__main__":

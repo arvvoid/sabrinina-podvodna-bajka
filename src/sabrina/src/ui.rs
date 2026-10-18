@@ -17,6 +17,7 @@ use std::{collections::HashMap, sync::OnceLock};
 // Layout and hit testing use the same centered logical canvas at every resolution.
 pub(crate) const CANVAS_WIDTH: f32 = 1600.0;
 pub(crate) const CANVAS_HEIGHT: f32 = 900.0;
+pub(crate) const HUD_BACKGROUND_ALPHA: f32 = 0.28;
 
 fn table() -> &'static HashMap<String, [String; 3]> {
     static TRANSLATIONS: OnceLock<HashMap<String, [String; 3]>> = OnceLock::new();
@@ -142,6 +143,7 @@ struct Builder<'a, 'w, 's> {
     lang: usize,
     index: usize,
     font: Handle<Font>,
+    background_alpha: f32,
 }
 
 impl Builder<'_, '_, '_> {
@@ -151,6 +153,13 @@ impl Builder<'_, '_, '_> {
             .spawn((
                 ImageNode {
                     image: self.server.load(format!("ui/reef_png/{name}.png")),
+                    color: Color::WHITE.with_alpha(
+                        if matches!(name, "panel" | "compact") || name.starts_with("button") {
+                            self.background_alpha
+                        } else {
+                            1.0
+                        },
+                    ),
                     image_mode: if name == "panel"
                         || name == "compact"
                         || name.starts_with("button")
@@ -197,6 +206,12 @@ impl Builder<'_, '_, '_> {
             .id();
         if let Some(key) = dynamic {
             self.commands.entity(e).insert(Dynamic(key));
+        }
+        if self.background_alpha < 1.0 {
+            self.commands.entity(e).insert(TextShadow {
+                offset: Vec2::new(1.0, 2.0),
+                color: Color::BLACK.with_alpha(0.85),
+            });
         }
         self.commands.entity(self.root).add_child(e);
         e
@@ -247,7 +262,10 @@ impl Builder<'_, '_, '_> {
     fn meter(&mut self, r: Rect, color: Color, key: &'static str) {
         let e = self
             .commands
-            .spawn((r.node(), BackgroundColor(Color::srgb(0.02, 0.13, 0.20))))
+            .spawn((
+                r.node(),
+                BackgroundColor(Color::srgba(0.02, 0.13, 0.20, self.background_alpha)),
+            ))
             .id();
         self.commands.entity(self.root).add_child(e);
         let e = self
@@ -346,6 +364,7 @@ fn draw(
         lang: preferences.language,
         index: 0,
         font: server.load("fonts/DejaVuSans.ttf"),
+        background_alpha: 1.0,
     };
     let lang = preferences.language;
     if options
@@ -406,6 +425,7 @@ fn draw(
 }
 
 fn draw_hud(builder: &mut Builder<'_, '_, '_>, screen: Screen) {
+    builder.background_alpha = HUD_BACKGROUND_ALPHA;
     let lang = builder.lang;
     builder.panel(rect(24.0, 22.0, 490.0, 160.0));
     builder.label(rect(48.0, 42.0, 450.0, 32.0), 24.0, "", Some("phase"));
@@ -458,6 +478,7 @@ fn draw_hud(builder: &mut Builder<'_, '_, '_>, screen: Screen) {
         );
         builder.button(rect(1415.0, 24.0, 160.0, 50.0), "II", Action::Pause, false);
     }
+    builder.background_alpha = 1.0;
 }
 
 fn draw_menu(builder: &mut Builder<'_, '_, '_>, preferences: &Preferences) {
@@ -1225,6 +1246,8 @@ fn update(
         };
         let desired_color = if disabled {
             Color::srgb(0.5, 0.65, 0.66)
+        } else if ui.screen == Screen::Playing {
+            Color::srgb(0.87, 0.97, 1.0)
         } else if label.primary || label.index == focus.index {
             Color::srgb(0.20, 0.17, 0.18)
         } else {

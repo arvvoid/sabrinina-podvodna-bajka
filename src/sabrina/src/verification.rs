@@ -404,9 +404,28 @@ fn check_pose(
         &MeshMaterial3d<StandardMaterial>,
     )>,
     materials: Res<Assets<StandardMaterial>>,
+    ui_images: Query<&ImageNode>,
+    ui_texts: Query<(&TextColor, Option<&TextShadow>)>,
 ) {
     if !options.verify {
         return;
+    }
+    if check.frame == 55 {
+        assert!(
+            ui_images
+                .iter()
+                .filter(|image| {
+                    (image.color.alpha() - crate::ui::HUD_BACKGROUND_ALPHA).abs() < 0.001
+                })
+                .count()
+                >= 8
+        );
+        assert!(
+            ui_texts
+                .iter()
+                .all(|(color, shadow)| color.alpha() == 1.0 && shadow.is_some())
+        );
+        println!("BEVY CHECK OK: HUD backgrounds translucent; text opaque with contrast shadows");
     }
     if check.frame == 480 {
         assert_eq!(
