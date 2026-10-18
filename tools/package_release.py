@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # Copyright (c) 2026 Luka Dežulović
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: Apache-2.0
 """Bundle the self-contained game executable with documentation and license notices."""
 
 import argparse
@@ -36,12 +36,14 @@ def package(binary, name, archive_format, output):
                 raise FileNotFoundError(source)
             shutil.copy2(source, folder / "licenses" / source.name)
         shutil.copytree(ROOT / "docs", folder / "docs")
-        for filename in ("LICENSE", "ASSET_LICENSE.md", "README.md"):
+        for filename in ("LICENSE", "NOTICE", "ASSET_LICENSE.md", "README.md"):
             shutil.copy2(ROOT / filename, folder / filename)
         (folder / "PLAY.txt").write_text(
             "Sabrina's Underwater Fairy Tale\n\n"
             "All game assets are embedded in the executable; no assets folder is needed.\n"
             "Keep the documentation and license notices when redistributing the package.\n"
+            "Code: Apache 2.0 (LICENSE and NOTICE). Game content and branding are reserved.\n"
+            "Redistributing reserved content requires permission; see ASSET_LICENSE.md.\n"
             "Windows: open sabrina.exe.\n"
             "Linux/macOS: open a terminal in this folder and run ./sabrina.\n\n"
             "Linux requires Vulkan drivers, ALSA, libudev and X11 runtime libraries.\n"

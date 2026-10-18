@@ -104,4 +104,4 @@ followed by `target/sabrina-build-tests`.
 - UI layout is built by named screen helpers in `ui.rs`; `draw` handles rebuilding, while `actions` and `update` handle interaction and live HUD values. Pointer hit tests and the input verifier share the logical canvas dimensions.
 - Keep simulation slot iteration, random draws, expression order and fixed-system order stable during readability refactors. Interpolated presentation must never become input to gameplay.
 - `generated_contacts.rs` is generated data, not handwritten source. Edit Blender poses or `tools/export_rust_contacts.py` and regenerate it; the generator also owns its copyright header.
-- Source files carry the project's copyright notice and MIT SPDX identifier. These notices do not change the separate artwork and audio terms in `ASSET_LICENSE.md`.
+- Original source files carry the project's copyright notice and Apache-2.0 SPDX identifier. Desktop packages include `LICENSE` and `NOTICE`. These notices do not change the reserved game-content and branding terms or third-party licenses in `ASSET_LICENSE.md`.

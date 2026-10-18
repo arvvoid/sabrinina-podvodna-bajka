@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # Copyright (c) 2026 Luka Dežulović
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: Apache-2.0
 """Validate shipped rigged glTF assets without requiring Blender or Godot."""
 
 import json

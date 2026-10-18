@@ -1,5 +1,5 @@
 // Copyright (c) 2026 Luka Dežulović
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: Apache-2.0
 //! MIDI-rendered music, arrival cues, recorded voices and magic effects.
 use crate::{
     app::{FrameEvents, Screen, SessionUi, Simulation},

@@ -1,5 +1,5 @@
 # Copyright (c) 2026 Luka Dežulović
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: Apache-2.0
 """Derive texture-free render LODs from maintained sources; never edit the sources.
 Run: blender --background --python tools/blender/export_render_lods.py
 The regular GLBs keep textures, skeletons and animations. These smaller meshes

@@ -4,7 +4,7 @@
 
 [![Rust 1.99.1](https://img.shields.io/badge/Rust-1.99.1-orange?logo=rust)](https://www.rust-lang.org/)
 [![Bevy 0.20.0](https://img.shields.io/badge/Bevy-0.20.0-blue)](https://bevy.org/)
-[![MIT License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Code: Apache 2.0](https://img.shields.io/badge/Code-Apache%202.0-green.svg)](LICENSE)
 [![Build targets](https://img.shields.io/badge/Build%20targets-Linux%20%7C%20Windows%20%7C%20macOS-lightgrey)](#build-and-run)
 
 A small underwater game about a mermaid, tropical fish and a hungry jellyfish. Swim through the reef, keep the fish safe with song and magic, or switch to quiet aquarium mode and enjoy the sea.
@@ -166,4 +166,10 @@ For visual checks, use `--capture-game`, `--capture-visit`, `--capture-throw`, `
 
 ## License
 
-Code and technical documentation are MIT licensed. Artwork, recordings, character designs and branding are reserved separately; the font has its own license. See [ASSET_LICENSE.md](ASSET_LICENSE.md).
+Original source code, shaders, scripts, tests, configuration and technical documentation are licensed under [Apache 2.0](LICENSE). See [NOTICE](NOTICE) for authorship. The code may be reused and redistributed, including commercially, under that license.
+
+The game itself uses a hybrid licensing model: Sabrina's characters, story and world, 3D models, textures, UI artwork, music and recordings are **all rights reserved**, to the extent held by their respective rights holders. The title and logo are reserved branding; the code license grants no trademark rights. Third-party assets retain their own licenses. See [ASSET_LICENSE.md](ASSET_LICENSE.md).
+
+Official builds combine Apache-licensed code with separately licensed game content; selling them does not make the code proprietary or grant permission to redistribute the reserved content. Any future Steamworks or mobile-platform SDK files remain subject to their own terms and must not be published without permission.
+
+This change does not revoke permissions already granted for earlier MIT-licensed code, or alter any licenses applicable to the original Scratch project.

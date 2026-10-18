@@ -1,5 +1,5 @@
 // Copyright (c) 2026 Luka Dežulović
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: Apache-2.0
 //! Deterministic gameplay rules, independent of Bevy and rendered frame rate.
 
 // Preserve the reference's decimal constants and expression order for replay parity.

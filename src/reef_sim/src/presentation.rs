@@ -1,5 +1,5 @@
 // Copyright (c) 2026 Luka Dežulović
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: Apache-2.0
 //! Read-only render sampling. Never feed this state back into gameplay systems.
 use crate::*;
 

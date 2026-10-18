@@ -1,5 +1,5 @@
 // Copyright (c) 2026 Luka Dežulović
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: Apache-2.0
 //! Localized screens, HUD updates and shared pointer/keyboard/controller navigation.
 use crate::{
     app::{self, Options, PendingInput, Screen, SessionUi, Simulation},

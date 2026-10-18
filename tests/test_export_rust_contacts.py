@@ -1,5 +1,5 @@
 # Copyright (c) 2026 Luka Dežulović
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: Apache-2.0
 """Exercise real rustfmt with Windows-style default text encodings."""
 from pathlib import Path
 import shutil

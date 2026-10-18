@@ -1,5 +1,5 @@
 // Copyright (c) 2026 Luka Dežulović
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: Apache-2.0
 //! One interpolated state shared by models, skeletons and attached effects.
 use crate::app::{SessionUi, Simulation};
 use bevy::prelude::*;

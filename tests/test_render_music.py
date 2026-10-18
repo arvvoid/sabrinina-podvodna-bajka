@@ -1,5 +1,5 @@
 # Copyright (c) 2026 Luka Dežulović
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: Apache-2.0
 import importlib.util
 from array import array
 from io import BytesIO

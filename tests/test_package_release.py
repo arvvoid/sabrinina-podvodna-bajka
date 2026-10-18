@@ -1,5 +1,5 @@
 # Copyright (c) 2026 Luka Dežulović
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: Apache-2.0
 import hashlib
 import importlib.util
 from pathlib import Path
@@ -25,7 +25,7 @@ class PackageReleaseTests(unittest.TestCase):
                 notice.write_text("license")
             (root / "docs").mkdir()
             (root / "docs/guide.md").write_text("guide")
-            for name in ("LICENSE", "ASSET_LICENSE.md", "README.md"):
+            for name in ("LICENSE", "NOTICE", "ASSET_LICENSE.md", "README.md"):
                 (root / name).write_text(name)
             for archive_format, executable in (("zip", "sabrina.exe"), ("gztar", "sabrina")):
                 with self.subTest(format=archive_format), patch.object(packager, "ROOT", root):
@@ -42,7 +42,7 @@ class PackageReleaseTests(unittest.TestCase):
                             self.assertTrue(opened.getmember(f"sabrina-test/{executable}").mode & 0o111)
                     for relative in (
                         executable, "licenses/LICENSE-DejaVu.txt", "licenses/LICENSE-FluidR3.txt",
-                        "docs/guide.md", "LICENSE", "ASSET_LICENSE.md", "PLAY.txt",
+                        "docs/guide.md", "LICENSE", "NOTICE", "ASSET_LICENSE.md", "PLAY.txt",
                     ):
                         self.assertIn(f"sabrina-test/{relative}", names)
                     self.assertFalse(any(name.startswith("sabrina-test/assets/") for name in names))

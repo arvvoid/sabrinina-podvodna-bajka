@@ -1,5 +1,5 @@
 // Copyright (c) 2026 Luka Dežulović
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: Apache-2.0
 //! Connected-device hints; gameplay keeps using Bevy's positional button mapping.
 use bevy::prelude::*;
 

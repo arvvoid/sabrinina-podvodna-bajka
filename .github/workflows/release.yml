@@ -129,7 +129,8 @@ jobs:
           still ongoing; a successful build is not a playtest.
 
           Android and iOS releases are planned, but are not included here.
-          Source code is MIT licensed; artwork and audio have separate restrictions.
+          Source code is Apache-2.0 licensed; game content and branding are reserved.
+          Included notices do not grant permission to redistribute reserved content.
 
           ## Changelog
 

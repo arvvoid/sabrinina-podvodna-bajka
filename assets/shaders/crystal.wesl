@@ -1,5 +1,5 @@
 // Copyright (c) 2026 Luka Dežulović
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: Apache-2.0
 // Blue regions shimmer like water; the remaining filigree stays metallic.
 import bevy_pbr::render::{
     pbr_fragment::pbr_input_from_standard_material,

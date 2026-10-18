@@ -1,5 +1,5 @@
 // Copyright (c) 2026 Luka Dežulović
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: Apache-2.0
 //! Desktop entry point: choose the renderer, find assets and install game plugins.
 
 // Bevy systems expose their independent ECS queries and resources as parameters.

@@ -1,5 +1,5 @@
 // Copyright (c) 2026 Luka Dežulović
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: Apache-2.0
 //! Drives actual Bevy input resources through the same live systems used by play.
 use crate::{
     app::{FrameEvents, Options, Screen, SessionUi, Simulation},

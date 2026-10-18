@@ -1,5 +1,5 @@
 // Copyright (c) 2026 Luka Dežulović
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: Apache-2.0
 import bevy_pbr::render::forward_io::VertexOutput;
 struct Parameters {
     // clock = (time, effect kind, variation seed, effect amount).

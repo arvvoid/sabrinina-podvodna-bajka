@@ -1,5 +1,5 @@
 // Copyright (c) 2026 Luka Dežulović
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: Apache-2.0
 //! Stage lighting, actor transforms and pooled effects sampled from presentation.
 use crate::{
     app::{Options, SessionUi},

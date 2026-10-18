@@ -1,5 +1,5 @@
 // Copyright (c) 2026 Luka Dežulović
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: Apache-2.0
 //! Session transitions and the handoff from per-frame input to fixed-step rules.
 use crate::settings::Preferences;
 use bevy::{

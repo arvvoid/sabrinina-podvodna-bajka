@@ -1,12 +1,28 @@
 # Asset licensing
 
-The root MIT license covers original code, build and authoring scripts, tests,
-configuration and technical documentation. It does not cover standalone artwork,
-recordings, character designs or branding, and grants no trademark rights.
+The root Apache License 2.0 covers original source code (including shaders),
+build and authoring scripts, tests, configuration and technical documentation.
+It does not cover the game content or branding listed below.
 
-The models, packed textures, UI artwork, boot image and recordings are reserved
-by their respective rights holders. A public code release does not by itself
-grant permission to redistribute those assets.
+Sabrina's characters, story and world, models, packed textures, UI artwork,
+music and recordings are **all rights reserved**, to the extent held by their
+respective rights holders. The game title and logo are reserved branding;
+the code license grants no trademark rights beyond its stated exceptions.
+A public code release does not by itself grant permission to copy, redistribute
+or commercially reuse these assets. Third-party licenses and any permissions
+previously granted by the applicable rights holders remain unaffected.
+
+## Commercial builds and platform integrations
+
+Official commercial builds combine Apache-licensed code with separately
+licensed game content. Apache 2.0 continues to apply to that code; it does
+not grant rights to the reserved content embedded in the executable.
+Distribution of reserved content requires the relevant rights holders'
+permission. No separate commercial-build EULA is introduced here.
+
+Any future Steamworks, Android or iOS SDK components remain subject to their
+respective platform terms, not this repository's code license. Keep SDK files
+or other restricted material private when redistribution is not authorized.
 
 ## 3D artwork and current quality
 
@@ -25,11 +41,12 @@ the asset licensing terms above.
 | Derived mesh levels | Same artwork and restrictions as the corresponding model |
 | Voices and magic sounds | Recordings carried over from the original Scratch project |
 | Calm music, visitor music and arrival stinger | Owner-supplied generated MIDI compositions in `art/music/`, rendered to `assets/audio/` with FluidSynth and FluidR3 GM |
-| UI SVGs, PNGs and boot artwork | Original game artwork under `assets/ui/` |
+| UI SVGs and PNGs | Original game artwork under `assets/ui/` |
 
 The [original Scratch project](https://scratch.mit.edu/projects/1203591608/)
 is the design reference. Its assets are not relicensed by this repository's
-MIT license.
+Apache 2.0 license. Its applicable licenses and any previously granted
+permissions are unchanged.
 Review the applicable permissions before public redistribution.
 
 The supplied MIDI compositions and rendered music are reserved separately
@@ -41,5 +58,7 @@ DejaVu Sans has its own license, included at `assets/fonts/LICENSE-DejaVu.txt`.
 Include applicable third-party license notices with distributed releases.
 Runtime assets and their notices are embedded in the executable. Desktop
 packages also place the DejaVu and FluidR3 notices in `licenses/`; retain these
-and the root license documents when redistributing. Embedding assets does not
+and the root `LICENSE`, `NOTICE` and `ASSET_LICENSE.md` when distributing an
+authorized package. Keeping notices alone does not grant permission to
+redistribute reserved content. Embedding assets does not
 change any of the rights or restrictions described above.

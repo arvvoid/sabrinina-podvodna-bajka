@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # Copyright (c) 2026 Luka Dežulović
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: Apache-2.0
 """Check derived render meshes can safely reuse the original skins/materials."""
 
 from validate_models import EXPECTED, ROOT, read_glb, values

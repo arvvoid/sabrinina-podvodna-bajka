@@ -1,5 +1,5 @@
 // Copyright (c) 2026 Luka Dežulović
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: Apache-2.0
 //! Build identity embedded at compile time.
 
 const VERSION: &str = env!("SABRINA_BUILD_VERSION");

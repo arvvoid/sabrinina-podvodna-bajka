@@ -6,4 +6,4 @@ It started as a Scratch game I made with my daughter Sabrina when she was four. 
 
 You are welcome to explore the code, learn from it and make your own forks under the applicable license. Please do not expect changes from a fork to be merged into this project.
 
-The source code is MIT licensed; artwork, audio, character designs and branding are covered separately. See [LICENSE](LICENSE) and [ASSET_LICENSE.md](ASSET_LICENSE.md) for details.
+The source code is Apache-2.0 licensed; artwork, audio, character designs and branding are reserved separately. See [LICENSE](LICENSE), [NOTICE](NOTICE) and [ASSET_LICENSE.md](ASSET_LICENSE.md) for details.

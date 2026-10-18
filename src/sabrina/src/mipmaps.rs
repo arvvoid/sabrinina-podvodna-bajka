@@ -1,5 +1,5 @@
 // Copyright (c) 2026 Luka Dežulović
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: Apache-2.0
 //! Shared glTF texture preparation. PNG/JPEG loading supplies only level zero;
 //! Embedded glTF images need mip levels for stable distant texture sampling.
 use bevy::{

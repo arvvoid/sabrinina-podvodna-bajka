@@ -1,5 +1,5 @@
 // Copyright (c) 2026 Luka Dežulović
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: Apache-2.0
 //! Shared glTF resources, per-actor rigs and presentation-only pose corrections.
 use crate::{
     app::{Options, Screen, SessionUi, Simulation, begin},
