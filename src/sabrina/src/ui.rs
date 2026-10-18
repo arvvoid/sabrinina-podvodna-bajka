@@ -414,7 +414,15 @@ fn draw_hud(builder: &mut Builder<'_, '_, '_>, screen: Screen) {
     }
     builder.image(rect(240.0, 779.0, 58.0, 58.0), "shell");
     builder.image(rect(1315.0, 806.0, 58.0, 58.0), "star");
-    builder.label(rect(210.0,864.0,1180.0,32.0),17.0,tr("Mouse / WASD / stick · swim     Click / Space / A · crystal     Q / X · song     RMB / F / B · wave",lang),None);
+    builder.label(
+        rect(210.0, 864.0, 1180.0, 32.0),
+        17.0,
+        tr(
+            "Mouse / WASD / stick · swim     Click / Space / A · crystal     Q / X · song     RMB / F / B · wave",
+            lang,
+        ),
+        None,
+    );
     builder.label(rect(500.0, 130.0, 600.0, 90.0), 21.0, "", Some("score"));
     builder.label(rect(350.0, 700.0, 900.0, 48.0), 23.0, "", Some("notice"));
     builder.label(rect(350.0, 748.0, 900.0, 36.0), 19.0, "", Some("caption"));
