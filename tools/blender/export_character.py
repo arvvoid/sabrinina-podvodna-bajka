@@ -3,7 +3,6 @@
 Usage: blender --background art/characters/sabrina.blend --python tools/blender/export_character.py
 """
 
-import json
 import sys
 
 import bpy
@@ -50,23 +49,6 @@ bpy.ops.export_scene.gltf(
     export_cameras=False,
     export_lights=False,
 )
-manifest = ROOT / "art/characters/manifest.json"
-data = json.loads(manifest.read_text())
-record = {
-    "asset": asset,
-    "source": str(Path(bpy.data.filepath).resolve().relative_to(ROOT)),
-    "export": str(output.relative_to(ROOT)),
-    "bones": len(rig.data.bones),
-    "vertices": sum(len(o.data.vertices) for o in objects),
-    "triangles": sum(
-        sum(len(p.vertices) - 2 for p in o.data.polygons) for o in objects
-    ),
-    "surfaces": len(objects),
-    "clips": [a.name for a in bpy.data.actions],
-    "bytes": output.stat().st_size,
-}
-data["assets"] = [r for r in data["assets"] if r["asset"] != asset] + [record]
-manifest.write_text(json.dumps(data, indent=2) + "\n")
 print("EXPORTED ARTIST SOURCE", output)
 
 if asset == "sabrina":

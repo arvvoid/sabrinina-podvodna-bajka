@@ -2,21 +2,19 @@
 # SPDX-License-Identifier: MIT
 """Check derived render meshes can safely reuse the original skins/materials."""
 
-import hashlib
-import json
-from validate_models import ROOT, read_glb, values
+from validate_models import EXPECTED, ROOT, read_glb, values
 
 
 def main():
-    records = json.loads((ROOT / "assets/render_lods/manifest.json").read_text())
-    assert len(records) == 13
-    for record in records:
-        base_path = ROOT / record["base_export"]
-        assert (
-            hashlib.sha256(base_path.read_bytes()).hexdigest() == record["base_sha256"]
-        )
+    sources = [
+        ROOT / f"assets/models/{name}.glb"
+        for name in EXPECTED
+        if name not in {"sabrina", "jellyfish"}
+    ]
+    sources.append(ROOT / "assets/environments/reef_ruins.glb")
+    for base_path in sources:
         base, base_bytes = read_glb(base_path)
-        lod, binary = read_glb(ROOT / record["export"])
+        lod, binary = read_glb(ROOT / "assets/render_lods" / base_path.name)
         assert not lod.get("images") and not lod.get("animations")
         if base.get("skins"):
             assert len(base["skins"]) == len(lod["skins"]) == 1
@@ -64,8 +62,7 @@ def main():
                 assert 0 < count < previous
                 previous = count
         print(
-            record["asset"]
-            + ": LOD topology, UVs, skin order/bind matrices and source hash OK"
+            base_path.stem + ": LOD topology, UVs and skin order/bind matrices OK"
         )
 
 

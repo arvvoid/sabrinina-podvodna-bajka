@@ -5,20 +5,24 @@ The regular GLBs keep textures, skeletons and animations. These smaller meshes
 reuse their material and skin handles at runtime.
 """
 
-import hashlib
-import json
+import sys
 
 import bpy
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-records = []
-characters = json.loads((ROOT / "art/characters/manifest.json").read_text())["assets"]
-sources = [r for r in characters if r["asset"] not in ["sabrina", "jellyfish"]]
-sources.append(json.loads((ROOT / "art/environments/manifest.json").read_text()))
-for record in sources:
-    asset = record["asset"]
-    bpy.ops.wm.open_mainfile(filepath=str(ROOT / record["source"]))
+sys.path.insert(0, str(ROOT / "tools"))
+from validate_models import EXPECTED
+
+sources = [
+    ROOT / f"art/characters/{name}.blend"
+    for name in EXPECTED
+    if name not in {"sabrina", "jellyfish"}
+]
+sources.append(ROOT / "art/environments/reef_ruins.blend")
+for source_path in sources:
+    asset = source_path.stem
+    bpy.ops.wm.open_mainfile(filepath=str(source_path))
     rigs = [o for o in bpy.context.scene.objects if o.type == "ARMATURE"]
     for rig in rigs:
         rig.animation_data_clear()
@@ -68,19 +72,4 @@ for record in sources:
         export_cameras=False,
         export_lights=False,
     )
-    records.append(
-        {
-            "asset": asset,
-            "source": record["source"],
-            "base_export": record["export"],
-            "base_sha256": hashlib.sha256(
-                (ROOT / record["export"]).read_bytes()
-            ).hexdigest(),
-            "export": str(output.relative_to(ROOT)),
-            "triangles": counts,
-        }
-    )
     print("LOD EXPORTED", asset, counts, flush=True)
-(ROOT / "assets/render_lods/manifest.json").write_text(
-    json.dumps(records, indent=2) + "\n"
-)

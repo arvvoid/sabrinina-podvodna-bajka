@@ -1,8 +1,6 @@
 # SPDX-License-Identifier: MIT
 """Export the saved, artist-edited reef without rebuilding geometry or textures."""
 
-import json
-
 import bpy
 from pathlib import Path
 
@@ -25,14 +23,4 @@ bpy.ops.export_scene.gltf(
     export_cameras=False,
     export_lights=False,
 )
-manifest = ROOT / "art/environments/manifest.json"
-data = json.loads(manifest.read_text())
-data.update(
-    source=str(Path(bpy.data.filepath).resolve().relative_to(ROOT)),
-    triangles=sum(sum(len(f.vertices) - 2 for f in o.data.polygons) for o in objects),
-    vertices=sum(len(o.data.vertices) for o in objects),
-    surfaces=sum(len(o.data.materials) for o in objects),
-    bytes=output.stat().st_size,
-)
-manifest.write_text(json.dumps(data, indent=2) + "\n")
 print("EXPORTED ARTIST ENVIRONMENT", output)

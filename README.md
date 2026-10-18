@@ -68,7 +68,7 @@ Linux uses Vulkan; Windows permits Vulkan and Direct3D 12; Apple targets use Met
 - `rust/reef_sim/`: engine-independent components, game rules and fixed-step simulation.
 - `rust/sabrina/`: Bevy input, presentation, animation, rendering, audio and UI.
 - `assets/`: runtime models, embedded textures, audio, fonts, UI and WESL shaders.
-- `art/`: maintained Blender sources, manifests, provenance and contact samples.
+- `art/`: maintained Blender sources and contact samples.
 - `tools/`: build, export, packaging and validation scripts.
 
 See [architecture](docs/ARCHITECTURE.md) and [art workflow](docs/CHARACTER_PIPELINE.md).

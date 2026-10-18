@@ -20,7 +20,7 @@ blender --background art/props/ocean_crystal.blend --python tools/blender/export
 python3 tools/validate_models.py
 ```
 
-Substitute another character's filename to export it. Exporters use the saved artwork; they do not rebuild geometry or replace poses. Commit the source, GLB and updated manifest together.
+Substitute another character's filename to export it. Exporters use the saved artwork; they do not rebuild geometry or replace poses. Commit the source and GLB together. Only the game-ready Blender sources are maintained; original high-poly inputs and Blender backup files are not needed.
 
 Sabrina exports also sample arm contacts into `art/characters/sabrina.contacts.json` and regenerate `rust/reef_sim/src/generated_contacts.rs`. These samples follow the visible clips while keeping collision independent of rendering. `python3 tools/export_rust_contacts.py --check` checks the generated Rust file.
 
@@ -31,7 +31,7 @@ blender --background --python tools/blender/export_render_lods.py
 python3 tools/validate_render_lods.py
 ```
 
-This keeps the source untouched and exports two smaller meshes per asset. Runtime LODs share the original textures, materials and skin. The validator checks source-export hashes, joint order, bind matrices, weights and geometry attributes.
+This keeps the source untouched and exports two smaller meshes per asset. Runtime LODs share the original textures, materials and skin. The validator checks joint order, bind matrices, weights and geometry attributes against the base GLBs. There is no manifest or source-hash tracking, so regenerate LODs whenever the base geometry changes.
 
 ## Contracts worth preserving
 
