@@ -116,6 +116,7 @@ fn main() {
         WindowMode::Windowed
     };
     let diagnostics = options.capture.is_some();
+    let decorations = options.capture.as_deref() != Some("demo");
     let mut app = App::new();
     if external_assets.is_none() {
         embedded_assets::register(&mut app);
@@ -145,6 +146,7 @@ fn main() {
                         title: "Sabrinina podvodna bajka".into(),
                         resolution: resolution.into(),
                         mode,
+                        decorations,
                         present_mode: PresentMode::Fifo,
                         ..default()
                     }),

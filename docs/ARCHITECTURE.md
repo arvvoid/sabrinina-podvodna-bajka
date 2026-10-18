@@ -4,13 +4,15 @@ The game has two crates. `reef_sim` owns rules and state without depending on an
 
 ## Simulation and presentation
 
-`reef_sim::World` contains plain components for Sabrina, 72 fish slots, three jellyfish slots, encounters, spells and scoring. Reused slots have generation IDs so a stale target cannot refer to a newly spawned fish. The simulation runs at 60 Hz and uses a seeded MT19937 generator.
+`reef_sim::World` contains plain components for Sabrina, 72 fish slots, four jellyfish slots, encounters, spells and scoring. Reused slots have generation IDs so a stale target cannot refer to a newly spawned fish. The simulation runs at 60 Hz and uses a seeded MT19937 generator.
 
 Update order matters: timers, song, player movement, population and visits, crystal, wave, fish movement, contacts, jellyfish damage, then recovery and scoring. Keep dependent rules in this order. Independent presentation work can use Bevy's scheduler.
 
 Rendering interpolates previous and current simulation snapshots. Input runs before fixed updates; presentation never feeds positions back into collision or scoring. Generations and spell transitions prevent interpolation across unrelated states. Pausing freezes the displayed snapshot, skeletal motion and effects.
 
 ## Combat and scoring
+
+Competitive play ends after `FINAL_ROUND` (10). Rounds 1–9 respect the normal 1–3 visitor limit; round 10 always spawns all four slots from both sides at separated heights, in either difficulty. Defeating the last visitor with fish and health remaining pays the normal survivor award exactly once, then sets `Session::victory` and emits `Events::victory`. Health loss or a fish wipeout takes priority. `Session::finished()` freezes both defeat and victory, and no round 11 can start. Retry resets the session. Quiet aquarium stays endless. The victory screen shows the sum of completed-round scores and final survivors; the saved best remains a single-round record.
 
 `reef_sim/src/balance.rs` owns combat constants, bounded difficulty curves and score awards. Jellyfish start with 100 health; a crystal removes 40, a close wave 10. Only health actually removed scores, so repeated attacks cannot farm a defeated visitor. Zero health initiates a harmless retreat; elapsed time and eaten fish never do. Crystal hits apply a three-second harmless bubble, followed by return flight; misses also return. Gentle stores a generation-safe homing target, while Lively stores a fixed direction at cast time. Recharge starts at launch.
 
@@ -23,6 +25,8 @@ Rescue awards share a fish's `rescued_cycle` across all abilities. Crystal rewar
 Score feedback lives in the simulation snapshot, not the audio event queue; audio can drain events without losing visible rewards. Each award kind has its own brief feedback line, so a final hit, retreat and survivor bonus remain visible together. Consecutive awards of the same kind briefly accumulate. Round results show the earned total, not an extra award of that amount. Settings carry a scoring version to invalidate incompatible old records without discarding other preferences. Local bests are not leaderboard-comparable across custom settings.
 
 ## Rendering and animation
+
+Loading uses a plain full-viewport background with localized UI rather than text baked into splash artwork. Model dependency progress fills 90% of the bar; the menu opens only once the 77 animated character instances (Sabrina, 72 fish and four jellyfish) are ready. The language chooser lists all three native language names explicitly and supports the shared mouse/keyboard/controller navigation.
 
 `Actor` identifies a persistent entity root; `ActorVisual` holds its model and orientation. Each animated model has its own skeleton but shares meshes, textures, animation graphs and clip maps. Fish swap shared normal/damage material handles. Screen-size LODs retain the same skin and materials, with hysteresis to avoid flickering between levels.
 

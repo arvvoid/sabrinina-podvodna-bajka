@@ -36,7 +36,7 @@ pub use world::*;
 /// Keep this order and random-number consumption stable when refactoring.
 pub fn step(world: &mut World, mut dt: f32, input: Input) -> Events {
     let mut events = Events::default();
-    if dt <= 0.0 || world.session.game_over {
+    if dt <= 0.0 || world.session.finished() {
         return events;
     }
     dt = dt.min(1.0 / 30.0);

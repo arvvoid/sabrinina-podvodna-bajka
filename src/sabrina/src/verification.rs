@@ -65,8 +65,12 @@ fn drive(
     audio: Query<(Entity, &Channel, Option<&AudioSink>)>,
     mut events: ResMut<FrameEvents>,
     mut exit: MessageWriter<AppExit>,
+    texts: Query<&Text>,
 ) {
-    if !options.verify || !ui.loaded || rigs.iter().count() < 76 {
+    if !options.verify
+        || !ui.loaded
+        || rigs.iter().count() < 1 + reef_sim::FISH_COUNT + reef_sim::JELLY_COUNT
+    {
         return;
     }
     check.frame += 1;
@@ -307,6 +311,76 @@ fn drive(
             println!("BEVY CHECK OK: close wave hits tentacles and pushes jellyfish");
         }
         470 => {
+            reef_sim::reset(&mut simulation.0, 27, reef_sim::Settings::default());
+            simulation.0.session.cycle = reef_sim::FINAL_ROUND - 1;
+            reef_sim::begin_visit(&mut simulation.0);
+            assert_eq!(reef_sim::hungry(&simulation.0), 4);
+            simulation.0.sabrina.vitality.invulnerable = 10.0;
+            for (index, jellyfish) in simulation.0.jelly.iter_mut().enumerate() {
+                jellyfish.motion.pos = reef_sim::v(-9.0 + index as f32 * 6.0, 13.0);
+                jellyfish.behaviour.state = reef_sim::JellyState::Hungry;
+                jellyfish.behaviour.bubble = 3.0;
+            }
+        }
+        490 => {
+            let mut result = reef_sim::Events::default();
+            for index in 0..reef_sim::JELLY_COUNT {
+                reef_sim::damage_jelly(&mut simulation.0, index, 100.0, true, &mut result);
+            }
+            events.0.push(result);
+        }
+        495 => {
+            assert_eq!(ui.screen, Screen::Victory);
+            assert!(simulation.0.session.victory);
+            check.paused_time = simulation.0.session.time;
+            keys.press(KeyCode::Escape);
+        }
+        510 => {
+            assert_eq!(ui.screen, Screen::Victory);
+            assert_eq!(simulation.0.session.time, check.paused_time);
+            println!(
+                "BEVY CHECK OK: round ten victory freezes play and cannot be dismissed with pause"
+            );
+            let position = pixel(&window, Vec2::new(800.0, 600.0));
+            window.set_cursor_position(Some(position));
+            mouse.press(MouseButton::Left);
+        }
+        515 => {
+            assert_eq!(ui.screen, Screen::Playing);
+            assert!(!simulation.0.session.finished());
+            assert_eq!(simulation.0.session.cycle, 0);
+            crate::app::home(
+                &mut simulation.0,
+                &mut ui,
+                &crate::settings::Preferences::default(),
+            );
+        }
+        520 => {
+            let position = pixel(&window, Vec2::new(450.0, 685.0));
+            window.set_cursor_position(Some(position));
+            mouse.press(MouseButton::Left);
+        }
+        525 => {
+            assert_eq!(ui.screen, Screen::Language);
+            let position = pixel(&window, Vec2::new(800.0, 435.0));
+            window.set_cursor_position(Some(position));
+            mouse.press(MouseButton::Left);
+        }
+        530 => {
+            assert_eq!(ui.screen, Screen::Language);
+            assert!(texts.iter().any(|text| text.0 == "Natrag"));
+            keys.press(KeyCode::ArrowDown);
+        }
+        532 => keys.press(KeyCode::Enter),
+        535 => {
+            assert!(texts.iter().any(|text| text.0 == "Indietro"));
+            keys.press(KeyCode::Escape);
+        }
+        540 => {
+            assert_eq!(ui.screen, Screen::Menu);
+            println!(
+                "BEVY CHECK OK: language chooser selects Croatian and Italian with mouse and keyboard"
+            );
             println!("BEVY INPUT INTEGRATION COMPLETE");
             exit.write(AppExit::Success);
         }
@@ -333,6 +407,18 @@ fn check_pose(
 ) {
     if !options.verify {
         return;
+    }
+    if check.frame == 480 {
+        assert_eq!(
+            actor_visibility
+                .iter()
+                .filter(|(actor, visibility)| {
+                    matches!(actor, Actor::Jelly(_)) && **visibility == Visibility::Visible
+                })
+                .count(),
+            4
+        );
+        println!("BEVY CHECK OK: all four final-round jellyfish rendered");
     }
     if check.frame == 375 {
         assert_eq!(simulation.0.crystal.magic.state, reef_sim::Spell::Resting);
@@ -380,7 +466,7 @@ fn check_pose(
                 assert_eq!(material.alpha_mode, AlphaMode::Opaque);
             }
         }
-        assert_eq!(translucent, 3);
+        assert_eq!(translucent, reef_sim::JELLY_COUNT);
         println!("BEVY CHECK OK: translucent jellyfish skin with opaque faces");
     }
     if check.frame == 400 {

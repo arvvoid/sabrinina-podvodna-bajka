@@ -60,6 +60,8 @@ pub enum Screen {
     Help,
     Credits,
     GameOver,
+    Victory,
+    Language,
 }
 
 #[derive(Resource)]
@@ -162,7 +164,9 @@ pub fn pause(ui: &mut SessionUi) {
     match ui.screen {
         Screen::Playing => ui.screen = Screen::Pause,
         Screen::Pause => ui.screen = Screen::Playing,
-        Screen::Settings | Screen::Help | Screen::Credits => ui.screen = ui.return_to,
+        Screen::Settings | Screen::Help | Screen::Credits | Screen::Language => {
+            ui.screen = ui.return_to
+        }
         _ => {}
     }
 }
@@ -259,6 +263,7 @@ fn tick(
     mut prefs: ResMut<Preferences>,
     options: Res<Options>,
     mut capture_action: Local<bool>,
+    mut demo_tick: Local<u32>,
     mut previous: ResMut<crate::presentation::Previous>,
 ) {
     if !ui.loaded
@@ -270,7 +275,22 @@ fn tick(
         return;
     }
     let mut input = pending.0;
-    if let Some(kind) = &options.capture {
+    if options.capture.as_deref() == Some("demo") {
+        *demo_tick += 1;
+        input.movement = match *demo_tick {
+            120..=210 => sim::v(0.65, 0.0),
+            260..=360 => sim::v(-0.65, 0.25),
+            500..=620 => sim::v(-0.5, -0.25),
+            740..=810 => sim::v(0.5, 0.0),
+            _ => sim::v(0.0, 0.0),
+        };
+        input.toggle_song = matches!(*demo_tick, 360 | 480);
+        input.cast = matches!(*demo_tick, 60 | 900);
+        input.wave = matches!(*demo_tick, 240 | 600 | 840);
+    }
+    if let Some(kind) = &options.capture
+        && kind != "demo"
+    {
         let due = match kind.as_str() {
             "throw" => 3.25,
             "wave" => 3.5,
@@ -306,6 +326,11 @@ fn tick(
     }
     if frame_events.game_over {
         ui.screen = Screen::GameOver
+    } else if frame_events.victory {
+        ui.screen = Screen::Victory;
+        ui.score_time = 0.0;
+        ui.notice_time = 0.0;
+        ui.caption.clear();
     }
     events.0.push(frame_events);
 }

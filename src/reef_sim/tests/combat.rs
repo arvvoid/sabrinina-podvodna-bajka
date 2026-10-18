@@ -462,7 +462,7 @@ fn progression_is_monotonic_bounded_and_respects_visitor_limit() {
         previous = speed;
     }
     let mut counts = [0; 3];
-    for (index, cycle) in [1, 5, 20].into_iter().enumerate() {
+    for (index, cycle) in [1, 5, 9].into_iter().enumerate() {
         for seed in 0..200 {
             let mut world = World::default();
             reset(
@@ -482,8 +482,128 @@ fn progression_is_monotonic_bounded_and_respects_visitor_limit() {
     assert_eq!(counts[0], 200);
     assert!(counts[0] < counts[1] && counts[1] < counts[2]);
     for limit in 1..=3 {
+        world.session.cycle = 8;
         world.settings.visitor_limit = limit;
         begin_visit(&mut world);
         assert!(hungry(&world) <= limit);
     }
+}
+
+#[test]
+fn tenth_round_always_spawns_four_and_finishes_in_victory_once() {
+    for gentle in [false, true] {
+        for limit in 1..=3 {
+            let mut world = encounter(gentle);
+            world.settings.visitor_limit = limit;
+            world.session.cycle = FINAL_ROUND - 1;
+            begin_visit(&mut world);
+            assert_eq!(world.session.cycle, 10);
+            assert_eq!(hungry(&world), 4);
+            let fourth = world.jelly[3].id;
+            assert!(find_jelly(&world, fourth).is_some());
+            let mut events = Events::default();
+            for index in 0..4 {
+                damage_jelly(&mut world, index, 100.0, true, &mut events);
+                recovery_and_scoring(&mut world, 0.0, &mut events);
+                assert_eq!(world.session.victory, index == 3);
+            }
+            assert!(events.victory && events.visit_ended && !events.game_over);
+            let score = 4 * 200 + alive(&world) * SURVIVOR_POINTS;
+            assert_eq!(world.points.total_score, score);
+            let time = world.session.time;
+            let position = world.sabrina.motion.pos;
+            for _ in 0..120 {
+                let events = step(
+                    &mut world,
+                    1.0 / 60.0,
+                    Input {
+                        movement: v(1.0, 1.0),
+                        cast: true,
+                        wave: true,
+                        toggle_song: true,
+                    },
+                );
+                assert!(!events.victory && !events.visit_ended && !events.game_over);
+            }
+            begin_visit(&mut world);
+            finish_visit(&mut world, &mut Events::default());
+            assert_eq!(world.session.cycle, 10);
+            assert_eq!(world.session.time, time);
+            assert_eq!(world.sabrina.motion.pos, position);
+            assert_eq!(world.points.total_score, score);
+            reset(&mut world, 27, Settings::default());
+            assert!(!world.session.finished());
+            assert_eq!(world.session.cycle, 0);
+            assert!(find_jelly(&world, fourth).is_none());
+        }
+    }
+}
+
+#[test]
+fn final_round_defeat_takes_priority_over_victory() {
+    for lose_fish in [false, true] {
+        let mut world = encounter(true);
+        world.session.cycle = FINAL_ROUND;
+        send_home(&mut world.jelly[0]);
+        if lose_fish {
+            for fish in &mut world.fish {
+                fish.life.active = false;
+            }
+        } else {
+            world.sabrina.vitality.health = 0.0;
+        }
+        let mut events = Events::default();
+        recovery_and_scoring(&mut world, 0.0, &mut events);
+        assert!(events.game_over && world.session.game_over);
+        assert!(!events.victory && !events.visit_ended && !world.session.victory);
+        assert_eq!(world.points.total_score, 0);
+    }
+}
+
+#[test]
+fn aquarium_remains_endless_past_the_final_round() {
+    let mut world = World::default();
+    reset(
+        &mut world,
+        27,
+        Settings {
+            aquarium: true,
+            ..Settings::default()
+        },
+    );
+    world.session.cycle = FINAL_ROUND;
+    world.session.rest_remaining = 0.0;
+    begin_visit(&mut world);
+    for _ in 0..600 {
+        step(&mut world, 1.0 / 60.0, Input::default());
+    }
+    assert!(!world.session.finished());
+    assert_eq!(hungry(&world), 0);
+    assert_eq!(world.session.water, Water::Calm);
+}
+
+#[test]
+fn complete_game_has_exactly_ten_rounds_and_accumulates_each_score() {
+    let mut world = World::default();
+    reset(&mut world, 27, Settings::default());
+    let mut total = 0;
+    for round in 1..=FINAL_ROUND {
+        begin_visit(&mut world);
+        assert_eq!(world.session.cycle, round);
+        assert_eq!(world.points.score, 0);
+        let visitors = hungry(&world);
+        assert_eq!(visitors == 4, round == FINAL_ROUND);
+        let mut events = Events::default();
+        for index in 0..JELLY_COUNT {
+            damage_jelly(&mut world, index, 100.0, true, &mut events);
+        }
+        recovery_and_scoring(&mut world, 0.0, &mut events);
+        total += visitors * 200 + alive(&world) * SURVIVOR_POINTS;
+        assert_eq!(world.points.total_score, total);
+        assert!(events.visit_ended);
+        assert_eq!(events.victory, round == FINAL_ROUND);
+    }
+    begin_visit(&mut world);
+    assert_eq!(world.session.cycle, FINAL_ROUND);
+    assert_eq!(world.points.total_score, total);
 }

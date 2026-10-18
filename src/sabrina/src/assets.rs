@@ -210,47 +210,56 @@ pub(crate) fn finish_load(
     mut meshes: ResMut<Assets<Mesh>>,
     materials: Res<Assets<bevy::gltf::GltfMaterial>>,
     mut images: ResMut<Assets<Image>>,
+    rigs: Query<&RigPlayer>,
 ) {
-    if lib.ready
-        || !lib
+    if ui.loaded {
+        return;
+    }
+    if !lib.ready {
+        if !lib
             .handles
             .iter()
             .chain(lib.lods.values())
             .all(|h| gltfs.contains(h) && server.is_loaded_with_dependencies(h.id()))
-    {
-        return;
-    }
-    for handle in lib.lods.values() {
-        for mesh in &gltfs.get(handle).unwrap().meshes {
-            for primitive in &gltf_meshes.get(mesh).unwrap().primitives {
-                let mut mesh = meshes.get_mut(&primitive.mesh).unwrap();
-                if !mesh.contains_attribute(Mesh::ATTRIBUTE_TANGENT) {
-                    mesh.generate_tangents()
-                        .expect("Render LOD has normals and UVs");
+        {
+            return;
+        }
+        for handle in lib.lods.values() {
+            for mesh in &gltfs.get(handle).unwrap().meshes {
+                for primitive in &gltf_meshes.get(mesh).unwrap().primitives {
+                    let mut mesh = meshes.get_mut(&primitive.mesh).unwrap();
+                    if !mesh.contains_attribute(Mesh::ATTRIBUTE_TANGENT) {
+                        mesh.generate_tangents()
+                            .expect("Render LOD has normals and UVs");
+                    }
                 }
             }
         }
+        crate::mipmaps::prepare(&lib, &gltfs, &materials, &mut images);
+        lib.ready = true;
+        for actor in [Actor::Reef, Actor::Sabrina, Actor::Crystal]
+            .into_iter()
+            .chain((0..reef_sim::FISH_COUNT).map(Actor::Fish))
+            .chain((0..reef_sim::JELLY_COUNT).map(Actor::Jelly))
+        {
+            commands.spawn((
+                actor,
+                ActorVisual {
+                    model: None,
+                    variant: usize::MAX,
+                    yaw: 0.0,
+                },
+                Transform::default(),
+                Visibility::default(),
+            ));
+        }
+        return;
     }
-    crate::mipmaps::prepare(&lib, &gltfs, &materials, &mut images);
-    lib.ready = true;
+    if rigs.iter().count() < 1 + reef_sim::FISH_COUNT + reef_sim::JELLY_COUNT {
+        return;
+    }
     ui.loaded = true;
     ui.screen = Screen::Menu;
-    for actor in [Actor::Reef, Actor::Sabrina, Actor::Crystal]
-        .into_iter()
-        .chain((0..72).map(Actor::Fish))
-        .chain((0..3).map(Actor::Jelly))
-    {
-        commands.spawn((
-            actor,
-            ActorVisual {
-                model: None,
-                variant: usize::MAX,
-                yaw: 0.0,
-            },
-            Transform::default(),
-            Visibility::default(),
-        ));
-    }
     if let Some(kind) = &options.capture {
         let short = kind
             .strip_prefix("hr-")
@@ -260,6 +269,14 @@ pub(crate) fn finish_load(
             "boot" => ui.screen = Screen::Loading,
             "menu" => {}
             "settings" => ui.screen = Screen::Settings,
+            "language" => ui.screen = Screen::Language,
+            "victory" => {
+                ui.screen = Screen::Victory;
+                simulation.0.session.cycle = reef_sim::FINAL_ROUND;
+                simulation.0.session.victory = true;
+                simulation.0.points.total_score = 12500;
+                simulation.0.points.last_survivors = 24;
+            }
             "help" => ui.screen = Screen::Help,
             "credits" => ui.screen = Screen::Credits,
             _ => {
@@ -269,9 +286,12 @@ pub(crate) fn finish_load(
                 }
                 if matches!(
                     short,
-                    "visit" | "crystal" | "throw" | "wave" | "song" | "combat"
+                    "visit" | "crystal" | "throw" | "wave" | "song" | "combat" | "demo" | "finale"
                 ) {
                     simulation.0.settings.aquarium = false;
+                    if short == "finale" {
+                        simulation.0.session.cycle = reef_sim::FINAL_ROUND - 1;
+                    }
                     reef_sim::begin_visit(&mut simulation.0);
                 }
             }
@@ -318,6 +338,22 @@ pub(crate) fn finish_load(
         simulation.0.sabrina.motion.pos = reef_sim::v(-3.0, 8.0);
         simulation.0.jelly[0].motion.pos = reef_sim::v(3.0, 9.0);
         simulation.0.jelly[0].behaviour.state = reef_sim::JellyState::Hungry;
+    }
+    if options.capture.as_deref() == Some("demo") {
+        reef_sim::reset(
+            &mut simulation.0,
+            27,
+            reef_sim::Settings {
+                gentle: true,
+                visitor_limit: 1,
+                ..default()
+            },
+        );
+        reef_sim::begin_visit(&mut simulation.0);
+        simulation.0.sabrina.motion.pos = reef_sim::v(-3.0, 8.0);
+        simulation.0.jelly[0].motion.pos = reef_sim::v(3.0, 9.0);
+        simulation.0.jelly[0].behaviour.state = reef_sim::JellyState::Hungry;
+        reef_sim::add_fish(&mut simulation.0, 16, false);
     }
     if options.verify {
         begin(&mut simulation.0, &mut ui, &preferences, true);

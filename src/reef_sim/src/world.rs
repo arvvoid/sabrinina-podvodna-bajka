@@ -5,7 +5,9 @@ use crate::*;
 
 pub const FISH_COUNT: usize = 72;
 
-pub const JELLY_COUNT: usize = 3;
+pub const JELLY_COUNT: usize = 4;
+pub const FINAL_ROUND: i32 = 10;
+pub const NORMAL_VISITOR_LIMIT: i32 = 3;
 
 pub const SPECIES_COUNT: usize = 6;
 // Match std::mt19937 and libstdc++ uniform_real_distribution<float>, including
@@ -197,7 +199,7 @@ pub fn reset(world: &mut World, seed: u32, mut settings: Settings) {
     world.crystal.id = allocate_entity(world, EntityKind::Crystal, 0);
     world.rng = Rng::new(seed);
     settings.rest_seconds = settings.rest_seconds.clamp(25.0, 150.0);
-    settings.visitor_limit = settings.visitor_limit.clamp(1, 3);
+    settings.visitor_limit = settings.visitor_limit.clamp(1, NORMAL_VISITOR_LIMIT);
     world.settings = settings;
     world.session.rest_remaining = settings.rest_seconds;
     add_fish(world, 10, false);

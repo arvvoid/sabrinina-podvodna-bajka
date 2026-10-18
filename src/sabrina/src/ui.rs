@@ -75,6 +75,7 @@ enum Action {
     Credits,
     Help,
     Language,
+    SelectLanguage(usize),
     Quit,
     Fullscreen,
     Quality,
@@ -85,8 +86,6 @@ enum Action {
     Song,
     Wave,
     Original,
-    Replay,
-    VoicePause,
     Music,
     Effects,
     Voice,
@@ -361,21 +360,35 @@ fn draw(
         let e = builder
             .commands
             .spawn((
-                ImageNode::new(server.load("ui/boot.png")),
-                rect(0.0, 0.0, 1600.0, 900.0).node(),
+                Node {
+                    position_type: PositionType::Absolute,
+                    left: px(-(window.width() / zoom - CANVAS_WIDTH) / 2.0),
+                    top: px(-(window.height() / zoom - CANVAS_HEIGHT) / 2.0),
+                    width: px(window.width() / zoom),
+                    height: px(window.height() / zoom),
+                    ..default()
+                },
+                BackgroundColor(Color::srgb(0.025, 0.17, 0.22)),
             ))
             .id();
         builder.commands.entity(root).add_child(e);
+        builder.panel(rect(420.0, 225.0, 760.0, 450.0));
         builder.label(
-            rect(120.0, 760.0, 900.0, 60.0),
-            24.0,
-            tr("Please wait…", lang),
+            rect(485.0, 285.0, 630.0, 180.0),
+            40.0,
+            tr("Sabrina's\nUnderwater\nFairy Tale", lang),
             None,
+        );
+        builder.label(rect(485.0, 505.0, 630.0, 60.0), 22.0, "", Some("loading"));
+        builder.meter(
+            rect(485.0, 600.0, 630.0, 14.0),
+            Color::srgb(0.38, 1.0, 0.76),
+            "loading",
         );
         focus.count = 0;
         return;
     }
-    if ui.started {
+    if ui.started && !matches!(ui.screen, Screen::Victory | Screen::GameOver) {
         draw_hud(&mut builder, ui.screen);
     }
     match ui.screen {
@@ -384,6 +397,8 @@ fn draw(
         Screen::Settings => draw_settings(&mut builder, &preferences),
         Screen::Credits | Screen::Help => draw_help_or_credits(&mut builder, ui.screen),
         Screen::GameOver => draw_game_over(&mut builder),
+        Screen::Victory => draw_victory(&mut builder),
+        Screen::Language => draw_language(&mut builder),
         _ => {}
     }
     focus.count = builder.index;
@@ -502,7 +517,7 @@ fn draw_menu(builder: &mut Builder<'_, '_, '_>, preferences: &Preferences) {
         ),
         (
             rect(340.0, 658.0, 220.0, 52.0),
-            ["English", "Hrvatski", "Italiano"][lang],
+            "Language…",
             Action::Language,
             false,
         ),
@@ -651,6 +666,12 @@ fn draw_settings(builder: &mut Builder<'_, '_, '_>, preferences: &Preferences) {
         Action::Visitors,
         false,
     );
+    builder.label(
+        rect(815.0, 535.0, 465.0, 70.0),
+        18.0,
+        tr("Rounds 1–9 only. Round 10 always has four jellyfish.", lang),
+        None,
+    );
     builder.button(rect(815.0, 725.0, 465.0, 58.0), "Done", Action::Done, true);
 }
 
@@ -682,31 +703,16 @@ fn draw_help_or_credits(builder: &mut Builder<'_, '_, '_>, screen: Screen) {
             .into()
     };
     builder.label(
-        rect(280.0, 180.0, 1040.0, 540.0),
-        if help { 18.0 } else { 23.0 },
+        rect(280.0, 180.0, 1040.0, 500.0),
+        if help { 17.0 } else { 23.0 },
         text,
         None,
     );
     if help {
-        builder.button(
-            rect(280.0, 745.0, 310.0, 52.0),
-            "Original voice guide",
-            Action::Replay,
-            false,
-        );
-        builder.button(
-            rect(610.0, 745.0, 310.0, 52.0),
-            "Pause / resume voice",
-            Action::VoicePause,
-            false,
-        );
         builder.label(
-            rect(280.0, 708.0, 1040.0, 32.0),
-            15.0,
-            tr(
-                "Original recording uses earlier rules; follow the text above.",
-                lang,
-            ),
+            rect(280.0, 680.0, 1040.0, 60.0),
+            18.0,
+            tr("Final round guide", lang),
             None,
         );
     } else {
@@ -739,6 +745,63 @@ fn draw_game_over(builder: &mut Builder<'_, '_, '_>) {
     );
     builder.button(
         rect(490.0, 586.0, 620.0, 56.0),
+        "Back to our reef",
+        Action::Home,
+        false,
+    );
+}
+
+fn draw_language(builder: &mut Builder<'_, '_, '_>) {
+    builder.panel(rect(450.0, 180.0, 700.0, 540.0));
+    builder.label(
+        rect(510.0, 235.0, 580.0, 70.0),
+        28.0,
+        "Language / Jezik / Lingua",
+        None,
+    );
+    for (index, name) in ["English", "Hrvatski", "Italiano"].into_iter().enumerate() {
+        let label = if index == builder.lang {
+            format!("✓ {name}")
+        } else {
+            name.into()
+        };
+        builder.button(
+            rect(510.0, 325.0 + index as f32 * 80.0, 580.0, 58.0),
+            &label,
+            Action::SelectLanguage(index),
+            index == builder.lang,
+        );
+    }
+    builder.button(rect(510.0, 620.0, 580.0, 52.0), "Back", Action::Done, true);
+}
+
+fn draw_victory(builder: &mut Builder<'_, '_, '_>) {
+    builder.panel(rect(400.0, 145.0, 800.0, 610.0));
+    builder.image(rect(750.0, 180.0, 100.0, 100.0), "star");
+    builder.label(
+        rect(460.0, 295.0, 680.0, 62.0),
+        40.0,
+        tr("Victory!", builder.lang),
+        None,
+    );
+    builder.label(
+        rect(460.0, 370.0, 680.0, 75.0),
+        23.0,
+        tr(
+            "You protected the reef through all 10 rounds!",
+            builder.lang,
+        ),
+        None,
+    );
+    builder.label(rect(460.0, 460.0, 680.0, 80.0), 23.0, "", Some("victory"));
+    builder.button(
+        rect(460.0, 570.0, 680.0, 60.0),
+        "Swim again",
+        Action::Play,
+        true,
+    );
+    builder.button(
+        rect(460.0, 655.0, 680.0, 55.0),
         "Back to our reef",
         Action::Home,
         false,
@@ -885,7 +948,11 @@ fn actions(
             audio.stop_voice = true;
             preferences.save();
         }
-        Action::Language => preferences.language = (preferences.language + 1) % 3,
+        Action::Language => {
+            ui.return_to = ui.screen;
+            ui.screen = Screen::Language;
+        }
+        Action::SelectLanguage(language) => preferences.language = language,
         Action::Quit => {
             preferences.save();
             exit.write(AppExit::Success);
@@ -910,8 +977,6 @@ fn actions(
         }
         Action::Song => pending.0.toggle_song = true,
         Action::Wave => pending.0.wave = true,
-        Action::Replay => audio.help = Some(preferences.language),
-        Action::VoicePause => audio.pause_voice = true,
         Action::Original => {
             let url = "https://scratch.mit.edu/projects/1203591608/";
             #[cfg(target_os = "linux")]
@@ -960,14 +1025,35 @@ fn update(
     focus: Res<Focus>,
     mut hits: Query<(&Hit, &mut ImageNode)>,
     server: Res<AssetServer>,
+    library: Res<crate::assets::Library>,
 ) {
     let sabrina = &simulation.0.sabrina;
     let language = preferences.language;
     for (key, mut text) in &mut texts {
         let value = match key.0 {
+            "loading" => tr(
+                if library.ready {
+                    "Preparing the characters…"
+                } else {
+                    "Bringing the reef to life…"
+                },
+                language,
+            ),
+            "victory" => format!(
+                "{}{}\n{}{}",
+                tr("Total score: ", language),
+                simulation.0.points.total_score,
+                tr("Fish safe: ", language),
+                simulation.0.points.last_survivors
+            ),
             "phase" => {
                 if simulation.0.session.water == reef_sim::Water::Visit {
-                    format!("{}{}", tr("Round ", language), simulation.0.session.cycle)
+                    format!(
+                        "{}{}/{}",
+                        tr("Round ", language),
+                        simulation.0.session.cycle,
+                        reef_sim::FINAL_ROUND
+                    )
                 } else {
                     tr("A peaceful little sea", language)
                 }
@@ -1101,6 +1187,22 @@ fn update(
     }
     for (meter, mut node) in &mut bars {
         let amount = match meter.0 {
+            "loading" => {
+                let total = library.handles.len() + library.lods.len();
+                let loaded = library
+                    .handles
+                    .iter()
+                    .chain(library.lods.values())
+                    .filter(|handle| server.is_loaded_with_dependencies(handle.id()))
+                    .count();
+                if ui.loaded {
+                    1.0
+                } else if total == 0 {
+                    0.0
+                } else {
+                    loaded as f32 / total as f32 * 0.9
+                }
+            }
             "health" => sabrina.vitality.health / 100.0,
             "song" => sabrina.song.energy / 100.0,
             "crystal" => 1.0 - sabrina.cooldown / reef_sim::recharge_duration(&simulation.0),
@@ -1148,8 +1250,9 @@ fn update(
     for (hit, mut image) in &mut hits {
         let file = if hit.index == focus.index {
             "button_hover"
-        } else if matches!(hit.action, Action::Play | Action::Done | Action::Pause)
-            && ui.screen != Screen::Playing
+        } else if matches!(hit.action, Action::SelectLanguage(selected) if selected == language)
+            || matches!(hit.action, Action::Play | Action::Done | Action::Pause)
+                && ui.screen != Screen::Playing
         {
             "button"
         } else {

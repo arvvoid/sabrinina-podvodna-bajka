@@ -8,6 +8,12 @@ A small underwater game about a mermaid, tropical fish and a hungry jellyfish. S
 
 *The current Rust and Bevy remake — an early working version, not the finished game.*
 
+### See it in motion
+
+[![Animated gameplay: Sabrina uses crystal magic, a close wave and song to protect the fish](docs/media/gameplay-preview.gif)](docs/media/gameplay.mp4)
+
+[Watch or download the 18-second gameplay video (MP4, 720p)](docs/media/gameplay.mp4). The eight-second preview above loops silently; the full clip uses the game's combat music as its soundtrack. Recorded from the current game with scripted inputs, not a pre-rendered animation.
+
 ## How it started
 
 I made the [original Scratch game](https://scratch.mit.edu/projects/1203591608/) together with my daughter Sabrina, who was four at the time. Sabrina came up with the idea and design; I helped as her dad with teaching, technical help and explanations. Together, we built a little underwater world with swimming fish, a hungry jellyfish and a mermaid who protects the fish with magic.
@@ -28,6 +34,8 @@ This is an initial working version. It is playable, but still needs more work, r
 
 Fish arrive during peaceful intervals. Each visiting jellyfish has **100 health** and stays until its health reaches zero, then retreats. There is no timeout or eaten-fish limit. **Losing all fish during a round, or all Sabrina's health, ends the game.** Jellyfish still grow as they eat; Sabrina recovers health after a safe period.
 
+**Protect the reef through 10 rounds to win.** Round 10 is always the last and always spawns **four jellyfish**, in both Gentle and Lively modes, regardless of the normal visitor limit. Defeat all four with some health and at least one fish remaining to reach the victory screen, showing total score and surviving fish. There is no round 11. Quiet aquarium remains endless.
+
 - **Crystal:** 40 damage and a 3-second air bubble. A bubbled jellyfish cannot swim, sting or eat, but waves can still push it. The crystal returns like a boomerang after a hit or miss; it recharges in 12 seconds from launch. Once returned, it immediately resumes orbiting, without glow or particles until ready to throw again. Gentle mode auto-aims; Lively uses a straight skillshot aimed by swimming before casting (horizontal while stationary).
 - **Wave:** pushes fish away as before. Within 2.5 world units of the cast position it also pushes a jellyfish and deals 10 damage, once per visitor per cast. This checks the bell and tentacles, not just the centre, including at point-blank range. Recharge: 3 seconds.
 - **Song:** gathers nearby fish, but can also attract jellyfish. Its reach shrinks with energy; exhausting it requires a complete recharge.
@@ -35,7 +43,7 @@ Fish arrive during peaceful intervals. Each visiting jellyfish has **100 health*
 
 Scoring rewards actions, not waiting: **1 point per actual damage**, **100 per defeated visitor**, **50 per genuine fish rescue**, and **25 per surviving fish** after every visitor is defeated. A fish can earn only one rescue reward per round across all abilities. Crystal collection only scores for threatened fish; wave rescues require surviving and reaching clear water; song requires escorting a threatened fish to safety. Safe fish collection, missed attacks and passive waiting earn nothing. A sting still subtracts up to 100 points. Hit, rescue and survivor rewards appear immediately, and each visitor has a health bar.
 
-Settings offer Gentle and Lively difficulty, encounter pacing and a peaceful, noncompetitive aquarium mode. Best scores from the old scoring rules are reset once; the saved best remains a local single-round record, not a normalized leaderboard across custom settings. The original voice guide is retained as an optional recording, marked as describing earlier rules; the written guide has the current rules.
+Settings offer Gentle and Lively difficulty, encounter pacing and a peaceful, noncompetitive aquarium mode. The visitor-limit setting applies to rounds 1–9 only. Best scores from the old scoring rules are reset once; the saved best remains a local single-round record, not a normalized leaderboard across custom settings. The obsolete spoken instructions have been removed; the localized written guide describes the current rules. Character voices and song remain.
 
 | Action | Mouse / keyboard | Controller |
 |---|---|---|
@@ -46,7 +54,7 @@ Settings offer Gentle and Lively difficulty, encounter pacing and a peaceful, no
 | Pause | Escape | Start |
 | Fullscreen | F11 or Settings | Settings |
 
-English, Croatian and Italian are available. Graphics, sound, controls and best score are saved locally. The first launch uses fullscreen and Balanced graphics. Balanced has subtle soft shadows; High adds finer shadows and 2× MSAA; Light reduces effects and disables shadows.
+English, Croatian and Italian are available through the main menu's **Language… / Jezik… / Lingua…** button. Select a language by name in the chooser; a checkmark identifies the selected language. Graphics, sound, controls and best score are saved locally. The loading screen uses localized text and asset-loading progress, then waits for character instances before opening the menu. The first launch uses fullscreen and Balanced graphics. Balanced has subtle soft shadows; High adds finer shadows and 2× MSAA; Light reduces effects and disables shadows.
 
 ## Build and run
 
@@ -133,6 +141,8 @@ python3 tools/export_rust_contacts.py --check
 ```
 
 For visual checks, use `--capture-game`, `--capture-visit`, `--capture-throw`, `--capture-combat` (bubble, visitor health and hit feedback), `--capture-pose-idle` or `--capture-graphics-high`. `--capture-school --fullhd` runs a 72-fish stress scene and reports frame times. Captures go to the system temporary directory and do not save preferences.
+
+`--capture-boot`, `--capture-language`, `--capture-victory` and `--capture-finale` preview the loading screen, language chooser, victory screen and four-visitor final round. `--capture-demo` runs a seeded, scripted 20-second gameplay scene for video recording, using normal movement and spell rules in a borderless window; it does not record video itself. None of these modes save preferences.
 
 ## Next steps
 

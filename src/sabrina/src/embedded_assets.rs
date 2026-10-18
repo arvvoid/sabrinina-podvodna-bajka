@@ -40,7 +40,6 @@ mod tests {
             "audio/jelly_appears.ogg",
             "shaders/water.wesl",
             "shaders/crystal.wesl",
-            "ui/boot.png",
             "fonts/LICENSE-DejaVu.txt",
             "audio/LICENSE-FluidR3.txt",
         ] {
@@ -53,5 +52,10 @@ mod tests {
         }
         let unique: std::collections::HashSet<_> = FILES.iter().map(|(path, _)| path).collect();
         assert_eq!(unique.len(), FILES.len());
+        assert!(
+            !FILES
+                .iter()
+                .any(|(path, _)| path.starts_with("audio/help_") || *path == "ui/boot.png")
+        );
     }
 }

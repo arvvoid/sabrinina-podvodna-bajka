@@ -1003,7 +1003,11 @@ fn capture(
         return;
     }
     *elapsed += time.delta_secs();
-    let deadline = if options.school { 20.0 } else { 4.0 };
+    let deadline = if options.school || kind == "demo" {
+        20.0
+    } else {
+        4.0
+    };
     if *elapsed > if options.school { 5.0 } else { 1.0 } && !*taken {
         frame_times.push(real_time.delta_secs() * 1000.0);
     }

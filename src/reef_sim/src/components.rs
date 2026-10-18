@@ -270,8 +270,15 @@ component!(Session {
     visit_time: f32 = 0.0,
     spawn_in: f32 = 7.0,
     cycle: i32 = 0,
-    game_over: bool = false
+    game_over: bool = false,
+    victory: bool = false
 });
+
+impl Session {
+    pub fn finished(&self) -> bool {
+        self.game_over || self.victory
+    }
+}
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Score {
@@ -323,6 +330,7 @@ pub struct Events {
     pub wave_cast: bool,
     pub song_empty: bool,
     pub game_over: bool,
+    pub victory: bool,
     pub cast: bool,
     pub launch: bool,
     pub hit: bool,

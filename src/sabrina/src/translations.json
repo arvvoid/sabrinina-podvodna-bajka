@@ -1,10 +1,17 @@
 {
-  "Original voice guide": ["Original voice guide", "Izvorne glasovne upute", "Guida vocale originale"],
-  "Original recording uses earlier rules; follow the text above.": [
-    "Original recording uses earlier rules; follow the text above.",
-    "Izvorna snimka opisuje stara pravila; slijedi tekst iznad.",
-    "La registrazione originale usa regole precedenti; segui il testo sopra."
+  "Language…": ["Language…", "Jezik…", "Lingua…"],
+  "Final round guide": [
+    "VICTORY · The visitor limit applies to rounds 1–9. Round 10 is the last: always FOUR jellyfish in both difficulties. Defeat all four with fish and health remaining to win! Quiet aquarium stays endless.",
+    "POBJEDA · Odabrani broj meduza vrijedi za runde 1–9. Runda 10 je zadnja: uvijek ČETIRI meduze u oba načina. Otjeraj sve četiri uz preostale ribice i zdravlje za pobjedu! Mirni akvarij ostaje beskrajan.",
+    "VITTORIA · Il limite vale nei turni 1–9. Il turno 10 è l'ultimo: sempre QUATTRO meduse in entrambe le difficoltà. Sconfiggile con pesci e salute rimasti per vincere! Acquario tranquillo resta infinito."
   ],
+  "Bringing the reef to life…": ["Bringing the reef to life…", "Oživljavamo podvodni svijet…", "Diamo vita alla barriera…"],
+  "Preparing the characters…": ["Preparing the characters…", "Pripremamo likove…", "Prepariamo i personaggi…"],
+  "Rounds 1–9 only. Round 10 always has four jellyfish.": ["Rounds 1–9 only. Round 10 always has four jellyfish.", "Samo runde 1–9. U 10. rundi uvijek su četiri meduze.", "Solo turni 1–9. Il turno 10 ha sempre quattro meduse."],
+  "Victory!": ["Victory!", "Pobjeda!", "Vittoria!"],
+  "You protected the reef through all 10 rounds!": ["You protected the reef through all 10 rounds!", "Zaštitila si podvodni svijet kroz svih 10 rundi!", "Hai protetto la barriera per tutti e 10 i turni!"],
+  "Total score: ": ["Total score: ", "Ukupni bodovi: ", "Punteggio totale: "],
+  "Fish safe: ": ["Fish safe: ", "Preživjele ribice: ", "Pesci al sicuro: "],
   "Round ": ["Round ", "Runda ", "Turno "],
   "Visitors · ": ["Visitors · ", "Meduze · ", "Meduse · "],
   "Crystal hit": ["Crystal hit", "Pogodak kristalom", "Colpo di cristallo"],
@@ -216,16 +223,6 @@
     "Back",
     "Natrag",
     "Indietro"
-  ],
-  "Listen again": [
-    "Listen again",
-    "Poslušaj ponovno",
-    "Ascolta di nuovo"
-  ],
-  "Pause / resume voice": [
-    "Pause / resume voice",
-    "Zaustavi / nastavi glas",
-    "Pausa / riprendi voce"
   ],
   "♪ Singing · Q / X": [
     "♪ Singing · Q / X",

@@ -10,9 +10,7 @@ use bevy::{audio::Volume, prelude::*};
 
 #[derive(Resource, Default)]
 pub struct AudioRequests {
-    pub help: Option<usize>,
     pub stop_voice: bool,
-    pub pause_voice: bool,
 }
 
 #[derive(Component, Clone, Copy, PartialEq)]
@@ -83,29 +81,6 @@ fn update(
         voice_playing = false;
         requests.stop_voice = false;
     }
-    if requests.pause_voice {
-        for (_, channel, sink) in &channels {
-            if *channel == Channel::Voice
-                && let Some(sink) = sink
-            {
-                sink.toggle_playback()
-            }
-        }
-        requests.pause_voice = false;
-    }
-    if let Some(lang) = requests.help.take() {
-        for (entity, channel, _) in &channels {
-            if *channel == Channel::Voice {
-                commands.entity(entity).despawn();
-            }
-        }
-        commands.spawn((
-            Channel::Voice,
-            AudioPlayer::new(server.load(format!("audio/help_{}.ogg", ["en", "hr", "it"][lang]))),
-            PlaybackSettings::DESPAWN.with_volume(Volume::Linear(preferences.voice)),
-        ));
-        voice_playing = true;
-    }
     let mut effect = None;
     let mut voice = None;
     let mut arrival = false;
@@ -152,7 +127,7 @@ fn update(
         if event.leaving {
             voice = Some(("jelly_leave", "The jellyfish is swimming away."));
         }
-        if event.game_over {
+        if event.game_over || event.victory {
             requests.stop_voice = true;
             ui.notice_time = 0.0;
             ui.score_time = 0.0;
@@ -174,6 +149,7 @@ fn update(
     }
     if let Some((name, caption)) = voice
         && !voice_playing
+        && !simulation.0.session.finished()
     {
         ui.caption = tr(caption, preferences.language);
         commands.spawn((
@@ -186,7 +162,7 @@ fn update(
     let duck =
         if voice_playing { 0.25 } else { 1.0 } * (1.0 - simulation.0.sabrina.song.strength * 0.60);
     let visit = ui.started
-        && !simulation.0.session.game_over
+        && !simulation.0.session.finished()
         && simulation.0.session.water == reef_sim::Water::Visit;
     if visit && (arrival || !music.visiting) {
         // Looped Ogg sources cannot seek; a fresh player starts each visit at bar one.
@@ -208,7 +184,7 @@ fn update(
     }
     music.visiting = visit;
     for (entity, channel, sink) in &mut channels {
-        if *channel == Channel::Arrival && (!ui.started || simulation.0.session.game_over) {
+        if *channel == Channel::Arrival && (!ui.started || simulation.0.session.finished()) {
             commands.entity(entity).despawn();
             continue;
         }
