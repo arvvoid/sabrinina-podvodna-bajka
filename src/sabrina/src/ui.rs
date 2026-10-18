@@ -84,6 +84,7 @@ enum Action {
     SelectLanguage(usize),
     Quit,
     Fullscreen,
+    Vsync,
     Fps,
     Quality,
     Motion,
@@ -455,11 +456,12 @@ fn draw(
     scale.0 = zoom;
     // Rebuild only when layout or settings change; HUD values update separately.
     let key = format!(
-        "{:?}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{:?}:{}",
+        "{:?}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{:?}:{}",
         ui.screen,
         preferences.language,
         preferences.quality,
         preferences.fullscreen,
+        preferences.vsync,
         preferences.reduced_motion,
         preferences.gentle,
         preferences.visitors,
@@ -825,6 +827,16 @@ fn draw_settings(builder: &mut Builder<'_, '_, '_>, preferences: &Preferences) {
         Action::Fps,
         false,
     );
+    builder.button(
+        rect(315.0, 625.0, 450.0, 52.0),
+        &format!(
+            "{}{}",
+            tr("V-sync: ", lang),
+            tr(if preferences.vsync { "on" } else { "off" }, lang)
+        ),
+        Action::Vsync,
+        false,
+    );
     builder.button(rect(815.0, 725.0, 465.0, 58.0), "Done", Action::Done, true);
 }
 
@@ -1133,6 +1145,10 @@ fn actions(
             }
         }
         Action::Quality => preferences.quality = (preferences.quality + 1) % 3,
+        Action::Vsync => {
+            preferences.vsync = !preferences.vsync;
+            window.present_mode = preferences.present_mode();
+        }
         Action::Fps => preferences.show_fps = !preferences.show_fps,
         Action::Motion => preferences.reduced_motion = !preferences.reduced_motion,
         Action::Gentle => {

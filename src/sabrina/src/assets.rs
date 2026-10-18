@@ -669,6 +669,24 @@ fn animate(
             }
     };
     for (mut player, mut rig) in &mut players {
+        let hidden = match rig.actor {
+            Actor::Fish(i) => {
+                let f = &rendered.0.fish[i];
+                !f.life.active && f.life.pop_time <= 0.22
+            }
+            Actor::Jelly(i) => rendered.0.jelly[i].behaviour.state == reef_sim::JellyState::Hidden,
+            _ => false,
+        };
+        if hidden {
+            // Zero weights make Bevy skip every bone of an unseen rig, so it is
+            // neither evaluated nor re-propagated. Visible rigs restore weights.
+            if player.playing_animations().any(|(_, a)| a.weight() != 0.0) {
+                for (_, a) in player.playing_animations_mut() {
+                    a.set_weight(0.0);
+                }
+            }
+            continue;
+        }
         let (name, phase, speed) = match rig.actor {
             Actor::Sabrina => {
                 let s = &rendered.0.sabrina;
@@ -690,9 +708,6 @@ fn animate(
             }
             Actor::Fish(i) => {
                 let f = &rendered.0.fish[i];
-                if !f.life.active && f.life.pop_time <= 0.22 {
-                    continue;
-                }
                 (
                     "Swim",
                     None,
@@ -701,9 +716,6 @@ fn animate(
             }
             Actor::Jelly(i) => {
                 let j = &rendered.0.jelly[i];
-                if j.behaviour.state == reef_sim::JellyState::Hidden {
-                    continue;
-                }
                 (
                     if j.behaviour.bubble > 0.0 {
                         "Drift"

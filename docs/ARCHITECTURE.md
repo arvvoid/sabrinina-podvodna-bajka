@@ -30,7 +30,7 @@ Backend selection is fixed: Windows uses Direct3D 12, Linux uses Vulkan, and App
 
 Loading uses a plain full-viewport background with localized UI rather than text baked into splash artwork. Model dependency progress fills 90% of the bar; the menu opens only once the 77 animated character instances (Sabrina, 72 fish and four jellyfish) are ready. The language chooser lists all three native language names explicitly and supports the shared mouse/keyboard/controller navigation.
 
-`Actor` identifies a persistent entity root; `ActorVisual` holds its model and orientation. Each animated model has its own skeleton but shares meshes, textures, animation graphs and clip maps. Fish swap shared normal/damage material handles. Screen-size LODs retain the same skin and materials, with hysteresis to avoid flickering between levels.
+`Actor` identifies a persistent entity root; `ActorVisual` holds its model and orientation. Each animated model has its own skeleton but shares meshes, textures, animation graphs and clip maps. Fish swap shared normal/damage material handles. Hidden pooled fish and jellyfish keep their last pose: their animations get zero weight, so Bevy skips their bones and their transforms are not rewritten. Screen-size LODs retain the same skin and materials, with hysteresis to avoid flickering between levels.
 
 Embedded textures receive mipmaps once during loading. Color filtering happens in linear light; normal maps are renormalized. Trilinear sampling and anisotropy reduce distant shimmer. A depth prepass reduces hidden-surface shading.
 
@@ -38,7 +38,7 @@ Sabrina's authored clips blend over 0.22 seconds. Runtime neck, tail and hair co
 
 Jellyfish skin uses alpha blending; the separate face remains opaque. Jellyfish and small fish do not cast shadows. Balanced uses a 512-pixel filtered shadow map and 12% shadowed sunlight; High uses 1024 pixels and 22%, plus 2× MSAA. Unshadowed fill keeps the reef soft. Light disables shadows. Crystal and water effects do not cast shadows.
 
-Water, reef caustics and crystal materials use WESL files authored in `assets/shaders/` and embedded in the executable. Quality settings select 3, 6 or 12 water-light samples. Shader constants are calculated once per frame.
+Water, reef caustics and crystal materials use WESL files authored in `assets/shaders/` and embedded in the executable. Quality settings select 3, 6 or 12 water-light samples. Shader constants are calculated once per frame. Pooled effects only write transforms, visibility and material parameters when they are shown and the values actually change, because every changed material is re-uploaded and rebound; particles of one colour share a material.
 
 Only primitives under the `Reef_Near_Left` glTF node use alpha blending. The reef shader receives Sabrina's interpolated position and softens opacity from 100% to a minimum of 75% inside a small ellipse around her, only on geometry in front of her. The main reef remains opaque, and the reveal is disabled in the menu. Collision geometry is unchanged.
 

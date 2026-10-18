@@ -17,6 +17,7 @@ struct Check {
     paused_face: Vec<f32>,
     idle_hair: Vec<(Entity, Quat)>,
     music_player: Option<Entity>,
+    vsync: bool,
 }
 
 #[derive(Component)]
@@ -451,8 +452,22 @@ fn drive(
             assert_eq!(*fps_counter.single().unwrap().1, Visibility::Hidden);
             assert!(texts.iter().any(|text| text.0.starts_with("☐")));
             println!("BEVY CHECK OK: settings FPS checkbox shows a measured counter and hides it");
-            println!("BEVY INPUT INTEGRATION COMPLETE");
-            exit.write(AppExit::Success);
+            check.vsync = preferences.vsync;
+        }
+        580 | 590 => {
+            let position = pixel(&window, Vec2::new(540.0, 650.0));
+            window.set_cursor_position(Some(position));
+            mouse.press(MouseButton::Left);
+        }
+        585 | 595 => {
+            let expected = check.vsync != (frame == 585);
+            assert_eq!(preferences.vsync, expected);
+            assert_eq!(window.present_mode, preferences.present_mode());
+            if frame == 595 {
+                println!("BEVY CHECK OK: settings V-sync button switches the present mode");
+                println!("BEVY INPUT INTEGRATION COMPLETE");
+                exit.write(AppExit::Success);
+            }
         }
         _ => {}
     }

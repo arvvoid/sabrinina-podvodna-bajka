@@ -27,7 +27,7 @@ use bevy::{
 };
 use reef_sim as sim;
 
-#[derive(Clone, Copy, Debug, ShaderType)]
+#[derive(Clone, Copy, Debug, PartialEq, ShaderType)]
 pub struct WaterParams {
     clock: Vec4,
     color: Vec4,
@@ -372,46 +372,53 @@ fn setup(
         );
     }
     let sphere = meshes.add(Sphere::new(1.0).mesh().uv(12, 8));
-    let mut ball = |effect, color: Color, size: f32| {
+    // Particles of one colour share a material so they can be batched.
+    let mut particle = |color: Color| {
+        solid.add(StandardMaterial {
+            base_color: color,
+            emissive: color.to_linear() * 0.6,
+            perceptual_roughness: 0.68,
+            ..default()
+        })
+    };
+    let trail_material = particle(Color::srgb(0.25, 0.8, 1.0));
+    let spark_material = particle(Color::srgb(0.4, 0.95, 1.0));
+    let pop_material = particle(Color::srgb(1.0, 0.34, 0.36));
+    let plankton_material = particle(Color::srgb(0.45, 0.82, 0.91));
+    let mut ball = |effect, material: &Handle<StandardMaterial>, size: f32| {
         commands.spawn((
             effect,
             NotShadowCaster,
             NotShadowReceiver,
             Mesh3d(sphere.clone()),
-            MeshMaterial3d(solid.add(StandardMaterial {
-                base_color: color,
-                emissive: color.to_linear() * 0.6,
-                perceptual_roughness: 0.68,
-                ..default()
-            })),
+            MeshMaterial3d(material.clone()),
             Transform::from_scale(Vec3::splat(size)),
         ));
     };
     for i in 0..24 {
-        ball(Effect::Trail(i), Color::srgb(0.25, 0.8, 1.0), 0.03);
-        ball(Effect::Spark(i), Color::srgb(0.4, 0.95, 1.0), 0.02);
+        ball(Effect::Trail(i), &trail_material, 0.03);
+        ball(Effect::Spark(i), &spark_material, 0.02);
     }
     for i in 0..72 {
         for k in 0..6 {
-            ball(Effect::Pop(i, k), Color::srgb(1.0, 0.34, 0.36), 0.1);
+            ball(Effect::Pop(i, k), &pop_material, 0.1);
         }
     }
     for i in 0..80 {
-        ball(Effect::Plankton(i), Color::srgb(0.45, 0.82, 0.91), 0.018);
+        ball(Effect::Plankton(i), &plankton_material, 0.018);
     }
     // The original song uses small eighth notes, not particle dots.
     let stem = meshes.add(Cylinder::new(1.0, 1.0));
-    for i in 0..7 {
-        let color = if i % 2 == 0 {
-            Color::srgb(0.46, 0.94, 1.0)
-        } else {
-            Color::srgb(0.99, 0.67, 0.91)
-        };
-        let material = solid.add(StandardMaterial {
-            base_color: color,
-            emissive: color.to_linear() * 0.7,
-            ..default()
+    let note_materials =
+        [Color::srgb(0.46, 0.94, 1.0), Color::srgb(0.99, 0.67, 0.91)].map(|color| {
+            solid.add(StandardMaterial {
+                base_color: color,
+                emissive: color.to_linear() * 0.7,
+                ..default()
+            })
         });
+    for i in 0..7 {
+        let material = &note_materials[i % 2];
         let parent = commands
             .spawn((Effect::Note(i), Transform::default(), Visibility::default()))
             .id();
@@ -529,22 +536,23 @@ fn actors(
     };
     for (actor, mut view, mut transform, mut visibility) in &mut actors {
         let mut show = true;
+        let mut next = *transform;
         match *actor {
             Actor::Sabrina => {
                 let s = &rendered.0.sabrina;
-                transform.translation = Vec3::new(
+                next.translation = Vec3::new(
                     s.motion.pos.x,
                     s.motion.pos.y + 0.07 * (t * 1.8).sin() * motion,
                     0.5,
                 );
-                transform.rotation =
+                next.rotation =
                     Quat::from_rotation_y(s.swimming.yaw) * Quat::from_rotation_z(s.swimming.pitch);
                 let pulse = if s.vitality.invulnerable > 0.0 {
                     0.94 + 0.06 * (t * 5.0).sin()
                 } else {
                     1.0
                 };
-                transform.scale = Vec3::splat(pulse);
+                next.scale = Vec3::splat(pulse);
             }
             Actor::Fish(i) => {
                 let f = &rendered.0.fish[i];
@@ -556,8 +564,7 @@ fn actors(
                     } else {
                         1.0
                     };
-                transform.translation =
-                    Vec3::new(f.motion.pos.x, f.motion.pos.y, f.appearance.depth);
+                next.translation = Vec3::new(f.motion.pos.x, f.motion.pos.y, f.appearance.depth);
                 let target = if f.motion.direction.x < 0.0 {
                     std::f32::consts::PI
                 } else {
@@ -565,9 +572,9 @@ fn actors(
                 };
                 let diff = (target - view.yaw).sin().atan2((target - view.yaw).cos());
                 view.yaw += diff * (1.0 - (-7.45 * dt).exp());
-                transform.rotation = Quat::from_rotation_y(view.yaw)
+                next.rotation = Quat::from_rotation_y(view.yaw)
                     * Quat::from_rotation_z(f.motion.direction.y.clamp(-1.0, 1.0).asin());
-                transform.scale = Vec3::splat(size);
+                next.scale = Vec3::splat(size);
             }
             Actor::Jelly(i) => {
                 let j = &rendered.0.jelly[i];
@@ -575,15 +582,14 @@ fn actors(
                 let s = sim::jelly_scale(j);
                 let recoil =
                     ((j.behaviour.repel_flash / 0.65).clamp(0.0, 1.0) * std::f32::consts::PI).sin();
-                transform.translation = Vec3::new(
+                next.translation = Vec3::new(
                     j.motion.pos.x,
                     j.motion.pos.y + 0.10 * (t * 2.0 + j.behaviour.phase).sin() * motion,
                     0.2,
                 );
-                transform.rotation =
+                next.rotation =
                     Quat::from_rotation_z(0.035 * (t * 1.7 + j.behaviour.phase).sin() * motion);
-                transform.scale =
-                    Vec3::new(s * (1.0 + 0.12 * recoil), s * (1.0 - 0.15 * recoil), s);
+                next.scale = Vec3::new(s * (1.0 + 0.12 * recoil), s * (1.0 - 0.15 * recoil), s);
             }
             Actor::Crystal => {
                 let crystal = &rendered.0.crystal;
@@ -593,12 +599,12 @@ fn actors(
                 );
                 let charging = crystal.magic.state == sim::Spell::Charging;
                 show = crystal.magic.state != sim::Spell::Burst;
-                transform.translation = Vec3::new(
+                next.translation = Vec3::new(
                     crystal.motion.pos.x,
                     crystal.motion.pos.y,
                     crystal.magic.depth,
                 );
-                transform.scale = Vec3::splat(if flying { 0.85 } else { 0.72 });
+                next.scale = Vec3::splat(if flying { 0.85 } else { 0.72 });
                 let orbit = t
                     * 0.9
                     * if preferences.reduced_motion {
@@ -606,7 +612,7 @@ fn actors(
                     } else {
                         1.0
                     };
-                transform.rotation = if charging {
+                next.rotation = if charging {
                     Quat::from_rotation_y(rendered.0.sabrina.swimming.yaw)
                         * Quat::from_rotation_z(rendered.0.sabrina.swimming.pitch - 0.65)
                 } else {
@@ -624,11 +630,16 @@ fn actors(
             }
             Actor::Reef => {}
         }
-        *visibility = if show {
+        visibility.set_if_neq(if show {
             Visibility::Visible
         } else {
             Visibility::Hidden
-        };
+        });
+        // Hidden pooled actors keep their last transform so their rigs are not
+        // re-propagated every frame.
+        if show {
+            transform.set_if_neq(next);
+        }
     }
     for (surface, mut handle) in &mut surfaces {
         let red = match surface.actor {
@@ -709,11 +720,12 @@ fn effects(
     for (effect, mut transform, mut visibility, handle) in &mut query {
         let mut show = true;
         let mut amount = 1.0;
+        let mut next = *transform;
         match *effect {
             Effect::Backdrop => {}
             Effect::Shaft(i) => {
                 show = preferences.quality > 0 && i < if preferences.quality == 1 { 4 } else { 6 };
-                transform.rotation = Quat::from_rotation_z(
+                next.rotation = Quat::from_rotation_z(
                     (-17.0 + 4.0 * (ui.elapsed * 0.15 + i as f32 * 0.5).sin() * motion)
                         .to_radians(),
                 );
@@ -732,7 +744,7 @@ fn effects(
                     0.65 + 0.06 * (i % 4) as f32
                 };
                 let side = if i % 2 == 0 { 1.0 } else { -1.0 };
-                transform.translation = Vec3::new(
+                next.translation = Vec3::new(
                     ((t * speed + i as f32 * 7.13) % 54.0 - 27.0) * side,
                     8.0 + (i % 5) as f32 * 1.7 + 0.55 * (t * 0.14 + i as f32).sin(),
                     -18.0 - (i % 3) as f32,
@@ -742,25 +754,24 @@ fn effects(
                 } else {
                     1.2 + 0.35 * (i % 4) as f32
                 };
-                transform.scale = Vec3::new(size * side, size * 0.65, 1.0);
+                next.scale = Vec3::new(size * side, size * 0.65, 1.0);
             }
             Effect::Wave => {
                 let wave = &s.wave;
                 show = wave.active;
                 let travel = (wave.time * 8.0).min(5.5);
                 let wave_position = wave.origin + wave.direction * travel;
-                transform.translation = Vec3::new(wave_position.x, wave_position.y, 1.6);
-                transform.rotation =
-                    Quat::from_rotation_z(wave.direction.y.atan2(wave.direction.x));
-                transform.scale = Vec3::new(1.2, 2.0 * (0.65 + 0.38 * travel), 1.0);
+                next.translation = Vec3::new(wave_position.x, wave_position.y, 1.6);
+                next.rotation = Quat::from_rotation_z(wave.direction.y.atan2(wave.direction.x));
+                next.scale = Vec3::new(1.2, 2.0 * (0.65 + 0.38 * travel), 1.0);
                 amount = wave.time / 0.75;
             }
             Effect::Song(i) => {
                 show = s.song.active && s.song.strength > 0.05;
                 let f = (t * 0.40 * motion + i as f32 / 3.0) % 1.0;
                 let size = if i == 0 { 1.0 } else { 0.2 + f * 0.8 } * sim::song_radius(&rendered.0);
-                transform.translation = Vec3::new(s.motion.pos.x, s.motion.pos.y, -0.2);
-                transform.scale = Vec3::new(size * 2.0, size * 2.0, 1.0);
+                next.translation = Vec3::new(s.motion.pos.x, s.motion.pos.y, -0.2);
+                next.scale = Vec3::new(size * 2.0, size * 2.0, 1.0);
                 amount = if i == 0 {
                     0.16
                 } else {
@@ -769,25 +780,25 @@ fn effects(
             }
             Effect::Glow => {
                 show = !burst && (!resting || ready);
-                transform.translation = cp - Vec3::Z * 0.15;
-                transform.scale = Vec3::new(2.4, 2.4, 1.0);
+                next.translation = cp - Vec3::Z * 0.15;
+                next.scale = Vec3::new(2.4, 2.4, 1.0);
             }
             Effect::Wake => {
                 show = flying;
-                transform.translation = cp
+                next.translation = cp
                     - Vec3::new(crystal.motion.direction.x, crystal.motion.direction.y, 0.0) * 1.65;
-                transform.rotation = Quat::from_rotation_z(
+                next.rotation = Quat::from_rotation_z(
                     crystal.motion.direction.y.atan2(crystal.motion.direction.x),
                 );
-                transform.scale = Vec3::new(3.8, 1.35, 1.0);
+                next.scale = Vec3::new(3.8, 1.35, 1.0);
                 amount = (crystal.magic.time * 5.0).min(1.0);
             }
             Effect::Shield(i) => {
                 let f = &rendered.0.fish[i];
                 show = f.life.active && f.rescue.shield > 0.0;
-                transform.translation =
+                next.translation =
                     Vec3::new(f.motion.pos.x, f.motion.pos.y, f.appearance.depth + 0.8);
-                transform.scale = Vec3::new(2.2, 1.8, 1.0) * f.appearance.size;
+                next.scale = Vec3::new(2.2, 1.8, 1.0) * f.appearance.size;
                 amount = f.rescue.shield.min(1.0);
             }
             Effect::JellyHealth(i) => {
@@ -797,12 +808,12 @@ fn effects(
                     sim::JellyState::Arriving | sim::JellyState::Hungry
                 );
                 let scale = sim::jelly_scale(jellyfish);
-                transform.translation = Vec3::new(
+                next.translation = Vec3::new(
                     jellyfish.motion.pos.x,
                     jellyfish.motion.pos.y + 1.7 * scale,
                     2.0,
                 );
-                transform.scale = Vec3::new(2.1 * scale, 0.16, 1.0);
+                next.scale = Vec3::new(2.1 * scale, 0.16, 1.0);
                 amount = jellyfish.behaviour.health / 100.0;
             }
             Effect::JellyBubble(i) => {
@@ -812,14 +823,14 @@ fn effects(
                         jellyfish.behaviour.state,
                         sim::JellyState::Arriving | sim::JellyState::Hungry
                     );
-                transform.translation =
+                next.translation =
                     Vec3::new(jellyfish.motion.pos.x, jellyfish.motion.pos.y - 0.4, 1.8);
-                transform.scale = Vec3::new(3.5, 4.2, 1.0) * sim::jelly_scale(jellyfish);
+                next.scale = Vec3::new(3.5, 4.2, 1.0) * sim::jelly_scale(jellyfish);
                 amount = jellyfish.behaviour.bubble.min(1.0);
             }
             Effect::Trail(i) => {
                 show = flying || (resting && ready);
-                transform.translation = if resting {
+                next.translation = if resting {
                     let o = sim::crystal_orbit(&rendered.0, i as f32 * 0.05);
                     Vec3::new(
                         s.motion.pos.x + o.offset.x,
@@ -834,7 +845,7 @@ fn effects(
                         trail.points[i].lerp(trail.points[i - 1], fraction)
                     }
                 };
-                transform.scale =
+                next.scale =
                     Vec3::splat(if flying { 0.075 } else { 0.028 } * (1.0 - i as f32 / 24.0));
             }
             Effect::Spark(i) => {
@@ -845,9 +856,8 @@ fn effects(
                 } else {
                     0.5 + 0.25 * (a * 1.7).sin()
                 };
-                transform.translation =
-                    cp + Vec3::new(a.cos() * r, a.sin() * r, (a * 2.0).sin() * 0.3);
-                transform.scale = Vec3::splat(
+                next.translation = cp + Vec3::new(a.cos() * r, a.sin() * r, (a * 2.0).sin() * 0.3);
+                next.scale = Vec3::splat(
                     0.035
                         * if burst {
                             (1.0 - crystal.magic.time / 0.7).max(0.0)
@@ -861,12 +871,12 @@ fn effects(
                 show = f.life.pop_time > 0.0 && f.life.pop_time < 0.30;
                 let a = k as f32 * std::f32::consts::PI / 3.0;
                 let progress = ((0.30 - f.life.pop_time) / 0.30).clamp(0.0, 1.0);
-                transform.translation = Vec3::new(
+                next.translation = Vec3::new(
                     f.motion.pos.x + a.cos() * progress * 0.8,
                     f.motion.pos.y + a.sin() * progress * 0.8,
                     f.appearance.depth,
                 );
-                transform.scale = Vec3::splat(0.1 * (1.0 - progress));
+                next.scale = Vec3::splat(0.1 * (1.0 - progress));
             }
             Effect::Plankton(i) => {
                 show = !preferences.reduced_motion
@@ -875,7 +885,7 @@ fn effects(
                         1 => 45,
                         _ => 80,
                     };
-                transform.translation = Vec3::new(
+                next.translation = Vec3::new(
                     -18.0 + 36.0 * visual_random(i as f32 + 900.0),
                     ((18.0 * visual_random(i as f32 + 950.0)
                         + t * (0.12 + 0.06 * visual_random(i as f32)))
@@ -888,15 +898,14 @@ fn effects(
                 show = s.song.active && s.song.strength > 0.05;
                 let progress = (t * 0.28 + i as f32 / 7.0) % 1.0;
                 let a = i as f32 * 2.4 + t * 0.30;
-                transform.translation = Vec3::new(
+                next.translation = Vec3::new(
                     s.motion.pos.x
                         + a.sin() * (0.2 + progress * 0.45) * sim::song_radius(&rendered.0),
                     s.motion.pos.y + 0.35 + progress * sim::song_radius(&rendered.0) * 0.65,
                     1.2,
                 );
-                transform.scale =
-                    Vec3::splat((progress * std::f32::consts::PI).sin() * s.song.strength);
-                transform.rotation = Quat::from_rotation_z(a.sin() * 0.2);
+                next.scale = Vec3::splat((progress * std::f32::consts::PI).sin() * s.song.strength);
+                next.rotation = Quat::from_rotation_z(a.sin() * 0.2);
             }
             Effect::Burst => {
                 show = charging || burst;
@@ -905,38 +914,57 @@ fn effects(
                 } else {
                     0.8 + crystal.magic.time
                 };
-                transform.translation = cp;
-                transform.scale = Vec3::new(r * 2.0, r * 2.0, 1.0);
+                next.translation = cp;
+                next.scale = Vec3::new(r * 2.0, r * 2.0, 1.0);
                 amount = 0.5;
             }
         }
-        *visibility = if show {
+        visibility.set_if_neq(if show {
             Visibility::Visible
         } else {
             Visibility::Hidden
+        });
+        // Hidden or unchanged effects must not mark transforms or materials
+        // changed: every changed material is re-uploaded and rebound.
+        if !show {
+            continue;
+        }
+        transform.set_if_neq(next);
+        let Some(handle) = handle else { continue };
+        let Some(current) = water.get(&handle.0) else {
+            continue;
         };
-        if let Some(handle) = handle
-            && let Some(mut m) = water.get_mut(&handle.0)
-        {
-            m.params.clock.x = t * if preferences.reduced_motion {
+        let mut params = current.params;
+        if uses_clock(params.clock.y) {
+            params.clock.x = t * if preferences.reduced_motion {
                 0.15
             } else {
                 1.0
             };
-            m.params.clock.w = amount;
-            if matches!(*effect, Effect::Water) {
-                // Sample depths do not depend on the pixel. Calculate their
-                // phase/attenuation once instead of millions of times in WGSL.
-                let clock = m.params.clock.x * 0.23;
-                for i in 0..amount as usize {
-                    let z = (i as f32 + 0.5) / amount;
-                    let pair = i % 2 * 2;
-                    m.params.depth_samples[i / 2][pair] = z * 4.08 + (z * 4.0 + clock).sin() * 0.35;
-                    m.params.depth_samples[i / 2][pair + 1] = (-z * 2.0).exp() / amount;
-                }
+        }
+        params.clock.w = amount;
+        if matches!(*effect, Effect::Water) {
+            // Sample depths do not depend on the pixel. Calculate their
+            // phase/attenuation once instead of millions of times in WGSL.
+            let clock = params.clock.x * 0.23;
+            for i in 0..amount as usize {
+                let z = (i as f32 + 0.5) / amount;
+                let pair = i % 2 * 2;
+                params.depth_samples[i / 2][pair] = z * 4.08 + (z * 4.0 + clock).sin() * 0.35;
+                params.depth_samples[i / 2][pair + 1] = (-z * 2.0).exp() / amount;
             }
         }
+        if params != current.params
+            && let Some(mut m) = water.get_mut(&handle.0)
+        {
+            m.params = params;
+        }
     }
+}
+
+/// Effect kinds whose `water.wesl` branch reads `clock.x`; the rest stay static.
+fn uses_clock(kind: f32) -> bool {
+    matches!(kind as i32, 0 | 1 | 2 | 3 | 7)
 }
 // Preserve total sunlight when changing shadow strength. Balanced contributes
 // only 12% shadowed light; broad fill keeps faces readable in the reef's shade.

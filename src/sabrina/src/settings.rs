@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Luka Dežulović
 // SPDX-License-Identifier: Apache-2.0
 //! Local preferences and one-time import of settings from the Godot prototype.
-use bevy::prelude::*;
+use bevy::{prelude::*, window::PresentMode};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
@@ -16,6 +16,7 @@ pub struct Preferences {
     pub rest: f32,
     pub visitors: i32,
     pub fullscreen: bool,
+    pub vsync: bool,
     pub show_fps: bool,
     pub quality: u8,
     pub reduced_motion: bool,
@@ -34,6 +35,7 @@ impl Default for Preferences {
             rest: 55.0,
             visitors: 2,
             fullscreen: true,
+            vsync: true,
             show_fps: false,
             quality: 1,
             reduced_motion: false,
@@ -154,6 +156,16 @@ impl Preferences {
         }
     }
 
+    /// Relaxed FIFO (where supported) presents a late frame immediately instead
+    /// of waiting a whole refresh, avoiding a drop from 60 straight to 30 FPS.
+    pub fn present_mode(&self) -> PresentMode {
+        if self.vsync {
+            PresentMode::AutoVsync
+        } else {
+            PresentMode::AutoNoVsync
+        }
+    }
+
     pub fn simulation(&self, aquarium: bool) -> reef_sim::Settings {
         reef_sim::Settings {
             gentle: self.gentle,
@@ -177,6 +189,18 @@ mod tests {
         let saved = serde_json::to_string(&preferences).unwrap();
         let restored: Preferences = serde_json::from_str(&saved).unwrap();
         assert!(restored.show_fps);
+    }
+
+    #[test]
+    fn vsync_defaults_on_and_selects_present_mode() {
+        let mut preferences: Preferences = serde_json::from_str(r#"{"show_fps":true}"#).unwrap();
+        assert!(preferences.vsync);
+        assert_eq!(preferences.present_mode(), PresentMode::AutoVsync);
+        preferences.vsync = false;
+        let saved = serde_json::to_string(&preferences).unwrap();
+        let restored: Preferences = serde_json::from_str(&saved).unwrap();
+        assert!(!restored.vsync);
+        assert_eq!(restored.present_mode(), PresentMode::AutoNoVsync);
     }
 
     #[test]
