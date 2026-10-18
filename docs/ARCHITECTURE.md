@@ -42,11 +42,21 @@ Water, reef caustics and crystal materials use external WESL files in `assets/sh
 | `mipmaps.rs` | Texture mip generation during loading |
 | `visuals.rs` | Camera, lighting, entities and pooled effects |
 | `ui.rs` | Menus, HUD, focus navigation and translations |
-| `audio.rs` | Recordings, synthesized music and captions |
+| `audio.rs` | MIDI-rendered music, arrival stinger, recordings and captions |
 | `settings.rs` | Saved preferences and first-run import of old Godot settings |
 | `verification.rs` | Live input and pause checks |
 
 Use simulation tests for rule changes, model validators for asset changes, and live input/capture checks for presentation. Benchmark release builds and record the actual GPU, resolution and quality setting. Frame-time percentiles are more useful than a single FPS reading.
+
+Music sources live in `art/music/`; `tools/render_music.py` renders them through
+FluidSynth into the three Ogg assets. Exported loops cover complete bars and
+retain the previous pass's release/reverb tail, with a 30 ms phase blend at the
+boundary that preserves bar length. Runtime playback does not
+synthesize MIDI. Calm and visitor loops crossfade; each visit restarts the combat
+track and triggers a dedicated one-shot arrival channel. Voices and song duck
+music, and the music slider controls both loops and the stinger. Magic effects
+cannot replace the stinger. The audio asset directory, including the FluidR3
+notice, is already included by both packaging paths.
 
 ## Maintenance notes
 

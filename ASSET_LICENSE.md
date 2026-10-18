@@ -24,6 +24,7 @@ the asset licensing terms above.
 | Crystal | Adapted from an owner-supplied crystal model; `art/props/ocean_crystal.blend` |
 | Derived mesh levels | Same artwork and restrictions as the corresponding model |
 | Voices and magic sounds | Recordings carried over from the original Scratch project |
+| Calm music, visitor music and arrival stinger | Owner-supplied generated MIDI compositions in `art/music/`, rendered to `assets/audio/` with FluidSynth and FluidR3 GM |
 | UI SVGs, PNGs and boot artwork | Original game artwork under `assets/ui/` |
 
 The [original Scratch project](https://scratch.mit.edu/projects/1203591608/)
@@ -31,8 +32,10 @@ is the design reference. Its assets are not relicensed by this repository's
 MIT license.
 Review the applicable permissions before public redistribution.
 
-The synthesized accompaniment is defined in `src/sabrina/src/audio.rs`; the
-source composition is covered by the code license. DejaVu Sans has its own
-license, included at `assets/fonts/LICENSE-DejaVu.txt`.
+The supplied MIDI compositions and rendered music are reserved separately
+from the code, like the other audio assets above. FluidR3 instrument samples
+are MIT licensed; their notice is included at `assets/audio/LICENSE-FluidR3.txt`.
+Neither the soundfont nor FluidSynth is bundled or required at runtime.
+DejaVu Sans has its own license, included at `assets/fonts/LICENSE-DejaVu.txt`.
 
 Include applicable third-party license notices with distributed releases.

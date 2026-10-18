@@ -83,6 +83,33 @@ The release workflow builds Linux x86_64 (Ubuntu 24.04 baseline), Windows x86_64
 
 Tags must use `vMAJOR.MINOR.PATCH`, optionally followed by a prerelease suffix such as `v0.1.0-beta.1`. Tags with a suffix publish as prereleases. All platform builds and checks must succeed before publication. Release notes include installation guidance and GitHub's automatically generated changelog since the previous release. Creating a release does not replace platform playtesting or artwork-permission review.
 
+## Music
+
+The supplied MIDI arrangements are preserved in `art/music/`. The game plays
+stereo Ogg renders: underwater exploration at 96 BPM during calm play and menus,
+jellyfish combat at 144 BPM during visits, and a short reveal stinger at the
+start of each visit. Music crossfades between states and ducks beneath voices
+and Sabrina's song. The stinger uses the music volume setting and is independent
+of magic effects.
+
+The two loops are padded to complete musical bars, with a warm-up pass retaining
+notes and reverb across the seam. A 30 ms phase blend smooths the loop boundary
+without shortening the bar. The stinger plays once with its release tail.
+To regenerate the checked-in audio on Debian/Ubuntu:
+
+```sh
+sudo apt install libfluidsynth3 fluid-soundfont-gm ffmpeg python3-venv
+python3 -m venv /tmp/sabrina-music-env
+/tmp/sabrina-music-env/bin/pip install -r tools/requirements-music.txt
+/tmp/sabrina-music-env/bin/python -m tools.render_music \
+  --soundfont /usr/share/sounds/sf2/FluidR3_GM.sf2
+/tmp/sabrina-music-env/bin/python -m unittest discover -s tests -v
+```
+
+Rendering dependencies are authoring-only; players need neither MIDI software
+nor a soundfont. See [asset licensing](ASSET_LICENSE.md) for the compositions and
+the included instrument-sample notice.
+
 ## Working on the game
 
 - `src/reef_sim/`: engine-independent components, game rules and fixed-step simulation.

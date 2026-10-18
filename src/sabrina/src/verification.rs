@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: MIT
 //! Drives actual Bevy input resources through the same live systems used by play.
 use crate::{
-    app::{Options, Screen, SessionUi, Simulation},
+    app::{FrameEvents, Options, Screen, SessionUi, Simulation},
     assets::{Actor, Palm, RigPlayer},
+    audio::Channel,
 };
 use bevy::{input::mouse::AccumulatedMouseMotion, prelude::*, window::PrimaryWindow};
 
@@ -15,6 +16,7 @@ struct Check {
     paused_pose: Vec<(Entity, Transform)>,
     paused_face: Vec<f32>,
     idle_hair: Vec<(Entity, Quat)>,
+    music_player: Option<Entity>,
 }
 
 #[derive(Component)]
@@ -60,6 +62,8 @@ fn drive(
     mut window: Single<&mut Window, With<PrimaryWindow>>,
     mut gamepads: Query<&mut Gamepad, With<TestPad>>,
     rigs: Query<&RigPlayer>,
+    audio: Query<(Entity, &Channel, Option<&AudioSink>)>,
+    mut events: ResMut<FrameEvents>,
     mut exit: MessageWriter<AppExit>,
 ) {
     if !options.verify || !ui.loaded || rigs.iter().count() < 76 {
@@ -97,6 +101,11 @@ fn drive(
         }
         50 => {
             assert!(!simulation.0.sabrina.song.active);
+            assert!(audio.iter().any(|(_, channel, sink)| {
+                *channel == Channel::Calm
+                    && sink.is_some_and(|s| !s.empty() && s.volume().to_linear() > 0.0)
+            }));
+            println!("BEVY CHECK OK: decoded MIDI-rendered exploration music");
             keys.press(KeyCode::KeyF);
         }
         55 => {
@@ -198,6 +207,10 @@ fn drive(
             simulation.0.settings.gentle = true;
             simulation.0.settings.visitor_limit = 1;
             reef_sim::begin_visit(&mut simulation.0);
+            events.0.push(reef_sim::Events {
+                visit_started: true,
+                ..Default::default()
+            });
             simulation.0.sabrina.motion.pos = reef_sim::v(-8.0, 14.0);
             simulation.0.jelly[0].motion.pos = reef_sim::v(0.0, 8.0);
             simulation.0.jelly[0].behaviour.state = reef_sim::JellyState::Hungry;
@@ -218,6 +231,47 @@ fn drive(
             );
             println!("BEVY CHECK OK: crystal damage, bubble and immediate score feedback");
         }
+        340 => {
+            let arrival = audio
+                .iter()
+                .filter(|(_, channel, _)| **channel == Channel::Arrival)
+                .count();
+            assert_eq!(arrival, 1);
+            assert!(audio.iter().any(|(_, channel, sink)| {
+                *channel == Channel::Arrival && sink.is_some_and(|s| !s.empty())
+            }));
+            assert!(audio.iter().any(|(_, channel, sink)| {
+                *channel == Channel::Visit && sink.is_some_and(|s| s.volume().to_linear() > 0.0)
+            }));
+            println!(
+                "BEVY CHECK OK: decoded MIDI-rendered combat music and independent arrival stinger"
+            );
+            check.music_player = audio
+                .iter()
+                .find_map(|(entity, channel, _)| (*channel == Channel::Visit).then_some(entity));
+        }
+        345 => {
+            events.0.push(reef_sim::Events {
+                visit_started: true,
+                ..Default::default()
+            });
+        }
+        350 => {
+            let visitor = audio
+                .iter()
+                .find_map(|(entity, channel, _)| (*channel == Channel::Visit).then_some(entity));
+            assert!(visitor.is_some() && visitor != check.music_player);
+            assert_eq!(
+                audio
+                    .iter()
+                    .filter(|(_, channel, _)| **channel == Channel::Arrival)
+                    .count(),
+                1
+            );
+            println!(
+                "BEVY CHECK OK: new arrival restarts combat at bar one without stacking stingers"
+            );
+        }
         380 => {
             assert_eq!(simulation.0.crystal.magic.state, reef_sim::Spell::Resting);
             assert_eq!(simulation.0.jelly[0].behaviour.health, 60.0);
@@ -230,6 +284,11 @@ fn drive(
             assert_eq!(ui.screen, Screen::GameOver);
             assert!(simulation.0.sabrina.vitality.health > 0.0);
             println!("BEVY CHECK OK: fish wipeout opens game-over with health remaining");
+            assert!(
+                audio
+                    .iter()
+                    .all(|(_, channel, _)| *channel != Channel::Arrival)
+            );
         }
         410 => {
             println!("BEVY INPUT INTEGRATION COMPLETE");
