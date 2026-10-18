@@ -36,6 +36,9 @@ pub fn tr(key: &str, lang: usize) -> String {
 #[derive(Component)]
 struct UiRoot;
 
+#[derive(Component)]
+pub(crate) struct FpsCounter;
+
 #[derive(Clone, Copy)]
 struct Rect {
     x: f32,
@@ -81,6 +84,7 @@ enum Action {
     SelectLanguage(usize),
     Quit,
     Fullscreen,
+    Fps,
     Quality,
     Motion,
     Gentle,
@@ -131,6 +135,8 @@ impl Plugin for ReefUiPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Focus>()
             .init_resource::<Hints>()
+            .add_systems(Startup, setup_fps)
+            .add_systems(Update, update_fps)
             .add_systems(
                 PreUpdate,
                 crate::controls::update.after(bevy::input::InputSystems),
@@ -140,6 +146,63 @@ impl Plugin for ReefUiPlugin {
                 Update,
                 (draw, update).chain().before(crate::presentation::prepare),
             );
+    }
+}
+
+fn setup_fps(mut commands: Commands, server: Res<AssetServer>) {
+    commands.spawn((
+        FpsCounter,
+        Text::new("FPS: --"),
+        TextShadow {
+            offset: Vec2::new(1.0, 2.0),
+            color: Color::BLACK.with_alpha(0.85),
+        },
+        TextFont {
+            font: server.load("fonts/DejaVuSans.ttf").into(),
+            font_size: 18.0.into(),
+            ..default()
+        },
+        TextColor(Color::WHITE),
+        BackgroundColor(Color::BLACK.with_alpha(0.55)),
+        Node {
+            position_type: PositionType::Absolute,
+            right: px(12.0),
+            top: px(112.0),
+            padding: UiRect::all(px(6.0)),
+            ..default()
+        },
+        GlobalZIndex(100),
+        Visibility::Hidden,
+    ));
+}
+
+fn update_fps(
+    preferences: Res<Preferences>,
+    diagnostics: Res<bevy::diagnostic::DiagnosticsStore>,
+    time: Res<Time<Real>>,
+    mut elapsed: Local<f32>,
+    mut counter: Single<(&mut Text, &mut Visibility), With<FpsCounter>>,
+) {
+    let (text, visibility) = &mut *counter;
+    **visibility = if preferences.show_fps {
+        Visibility::Visible
+    } else {
+        Visibility::Hidden
+    };
+    if !preferences.show_fps {
+        *elapsed = 0.25;
+        return;
+    }
+    *elapsed += time.delta_secs();
+    if *elapsed < 0.25 {
+        return;
+    }
+    *elapsed = 0.0;
+    if let Some(fps) = diagnostics
+        .get(&bevy::diagnostic::FrameTimeDiagnosticsPlugin::FPS)
+        .and_then(|diagnostic| diagnostic.smoothed())
+    {
+        text.0 = format!("FPS: {fps:.0}");
     }
 }
 
@@ -392,7 +455,7 @@ fn draw(
     scale.0 = zoom;
     // Rebuild only when layout or settings change; HUD values update separately.
     let key = format!(
-        "{:?}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{:?}",
+        "{:?}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{:?}:{}",
         ui.screen,
         preferences.language,
         preferences.quality,
@@ -407,7 +470,8 @@ fn draw(
         preferences.best,
         window.width(),
         window.height(),
-        hints.style
+        hints.style,
+        preferences.show_fps
     );
     if key == focus.key {
         return;
@@ -751,6 +815,16 @@ fn draw_settings(builder: &mut Builder<'_, '_, '_>, preferences: &Preferences) {
         tr("Rounds 1–9 only. Round 10 always has four jellyfish.", lang),
         None,
     );
+    builder.button(
+        rect(815.0, 625.0, 465.0, 52.0),
+        &format!(
+            "{} {}",
+            if preferences.show_fps { "☑" } else { "☐" },
+            tr("Show FPS counter", lang)
+        ),
+        Action::Fps,
+        false,
+    );
     builder.button(rect(815.0, 725.0, 465.0, 58.0), "Done", Action::Done, true);
 }
 
@@ -1059,6 +1133,7 @@ fn actions(
             }
         }
         Action::Quality => preferences.quality = (preferences.quality + 1) % 3,
+        Action::Fps => preferences.show_fps = !preferences.show_fps,
         Action::Motion => preferences.reduced_motion = !preferences.reduced_motion,
         Action::Gentle => {
             preferences.gentle = !preferences.gentle;

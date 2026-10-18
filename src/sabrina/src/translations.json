@@ -1,4 +1,5 @@
 {
+  "Show FPS counter": ["Show FPS counter", "Prikaži FPS brojač", "Mostra contatore FPS"],
   "Keyboard help extras": ["Use the controls above. Arrow keys also swim, E also throws, and F11 switches fullscreen.", "Koristi kontrole iznad. Strelice također služe za plivanje, E baca kristal, a F11 mijenja prikaz preko cijelog zaslona.", "Usa i comandi sopra. Anche le frecce fanno nuotare, E lancia il cristallo e F11 cambia lo schermo intero."],
   "Controller help extras": ["Use the left stick to swim and the buttons shown above. The D-pad or left stick navigates menus; the bottom face button selects.", "Plivaj lijevom palicom i koristi tipke prikazane iznad. Križić ili lijeva palica pomiče odabir u izborniku; donja tipka potvrđuje.", "Nuota con la levetta sinistra e usa i tasti indicati sopra. Croce direzionale o levetta navigano nei menu; il tasto frontale in basso conferma."],
   "Swim": ["Swim", "Plivaj", "Nuota"],

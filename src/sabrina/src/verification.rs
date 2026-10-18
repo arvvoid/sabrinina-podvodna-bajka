@@ -70,9 +70,11 @@ fn drive(
         Query<(&TextSpan, &TextColor)>,
         Query<Entity, With<TestPad>>,
         Res<crate::controls::Hints>,
+        ResMut<crate::settings::Preferences>,
+        Query<(&Text, &Visibility), With<crate::ui::FpsCounter>>,
     ),
 ) {
-    let (spans, test_pads, hints) = controller_checks;
+    let (spans, test_pads, hints, preferences, fps_counter) = controller_checks;
     if !options.verify
         || !ui.loaded
         || rigs.iter().count() < 1 + reef_sim::FISH_COUNT + reef_sim::JELLY_COUNT
@@ -427,6 +429,28 @@ fn drive(
             println!(
                 "BEVY CHECK OK: coloured Xbox/PlayStation hints and keyboard fallback update live"
             );
+            assert!(!preferences.show_fps);
+            ui.return_to = Screen::Playing;
+            ui.screen = Screen::Settings;
+        }
+        560 | 570 => {
+            let position = pixel(&window, Vec2::new(1045.0, 650.0));
+            window.set_cursor_position(Some(position));
+            mouse.press(MouseButton::Left);
+        }
+        565 => {
+            assert!(preferences.show_fps);
+            let (text, visibility) = fps_counter.single().unwrap();
+            assert_eq!(*visibility, Visibility::Visible);
+            let fps: f32 = text.0.strip_prefix("FPS: ").unwrap().parse().unwrap();
+            assert!(fps.is_finite() && fps > 0.0);
+            assert!(texts.iter().any(|text| text.0.starts_with("☑")));
+        }
+        575 => {
+            assert!(!preferences.show_fps);
+            assert_eq!(*fps_counter.single().unwrap().1, Visibility::Hidden);
+            assert!(texts.iter().any(|text| text.0.starts_with("☐")));
+            println!("BEVY CHECK OK: settings FPS checkbox shows a measured counter and hides it");
             println!("BEVY INPUT INTEGRATION COMPLETE");
             exit.write(AppExit::Success);
         }

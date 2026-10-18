@@ -16,6 +16,7 @@ pub struct Preferences {
     pub rest: f32,
     pub visitors: i32,
     pub fullscreen: bool,
+    pub show_fps: bool,
     pub quality: u8,
     pub reduced_motion: bool,
     pub music: f32,
@@ -33,6 +34,7 @@ impl Default for Preferences {
             rest: 55.0,
             visitors: 2,
             fullscreen: true,
+            show_fps: false,
             quality: 1,
             reduced_motion: false,
             music: 0.30,
@@ -166,6 +168,16 @@ impl Preferences {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn fps_counter_defaults_off_and_survives_serialization() {
+        let mut preferences: Preferences = serde_json::from_str("{}").unwrap();
+        assert!(!preferences.show_fps);
+        preferences.show_fps = true;
+        let saved = serde_json::to_string(&preferences).unwrap();
+        let restored: Preferences = serde_json::from_str(&saved).unwrap();
+        assert!(restored.show_fps);
+    }
 
     #[test]
     fn old_records_reset_without_discarding_other_preferences() {

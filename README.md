@@ -63,6 +63,8 @@ HUD and help hints follow the connected controller, including button colours. Wi
 
 HUD backgrounds and progress fills are semi-transparent. The lower-left foreground reef fades only slightly around Sabrina when it covers her (at most 25% transparent), leaving the rest of the scenery solid.
 
+Enable **Show FPS counter** in Settings to display a small, smoothed frames-per-second counter in the upper-right corner, below the HUD buttons. It is off by default, works in menus and during play, and is saved with your preferences.
+
 English, Croatian and Italian are available through the main menu's **Language… / Jezik… / Lingua…** button. Select a language by name in the chooser; a checkmark identifies the selected language. Graphics, sound, controls and best score are saved locally. The loading screen uses localized text and asset-loading progress, then waits for character instances before opening the menu. The first launch uses fullscreen and Balanced graphics. Balanced has subtle soft shadows; High adds finer shadows and 2× MSAA; Light reduces effects and disables shadows.
 
 ## Build and run
