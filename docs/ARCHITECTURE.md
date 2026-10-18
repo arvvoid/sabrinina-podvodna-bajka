@@ -10,6 +10,16 @@ Update order matters: timers, song, player movement, population and visits, crys
 
 Rendering interpolates previous and current simulation snapshots. Input runs before fixed updates; presentation never feeds positions back into collision or scoring. Generations and spell transitions prevent interpolation across unrelated states. Pausing freezes the displayed snapshot, skeletal motion and effects.
 
+## Combat and scoring
+
+`reef_sim/src/balance.rs` owns combat constants, bounded difficulty curves and score awards. Jellyfish start with 100 health; a crystal removes 40, a close wave 10. Only health actually removed scores, so repeated attacks cannot farm a defeated visitor. Zero health initiates a harmless retreat; elapsed time and eaten fish never do. Crystal hits apply a three-second harmless bubble, followed by return flight; misses also return. Gentle stores a generation-safe homing target, while Lively stores a fixed direction at cast time. Recharge starts at launch.
+
+Waves affect fish across their original cone, but visitors only within 2.5 world units, once per cast ID. Knockback decays independently of visitor steering and works during bubbles. Bubbles prevent movement, feeding and stings; visual drift does not feed back into gameplay. Health bars and bubble rings use pooled water-material quads.
+
+Rescue awards share a fish's `rescued_cycle` across all abilities. Crystal rewards only collection within four units of an active, unbubbled threat. Wave rescue candidates must survive one second and reach six-unit clearance; song requires at least one second of escort from four-unit danger to six-unit clearance. Per-fish rescue flags prevent repeated ability switching from farming points. Recovery/scoring checks a fish wipeout before awarding round completion, even when the last visitor was defeated in the same tick. Births occur only in calm water without visitors.
+
+Score feedback lives in the simulation snapshot, not the audio event queue; audio can drain events without losing visible rewards. Each award kind has its own brief feedback line, so a final hit, retreat and survivor bonus remain visible together. Consecutive awards of the same kind briefly accumulate. Round results show the earned total, not an extra award of that amount. Settings carry a scoring version to invalidate incompatible old records without discarding other preferences. Local bests are not leaderboard-comparable across custom settings.
+
 ## Rendering and animation
 
 `Actor` identifies a persistent entity root; `ActorVisual` holds its model and orientation. Each animated model has its own skeleton but shares meshes, textures, animation graphs and clip maps. Fish swap shared normal/damage material handles. Screen-size LODs retain the same skin and materials, with hysteresis to avoid flickering between levels.

@@ -110,7 +110,7 @@ fn drive(
             println!("BEVY CHECK OK: crystal hand wind-up");
         }
         150 => {
-            assert!(simulation.0.sabrina.cooldown > 140.0);
+            assert!(simulation.0.sabrina.cooldown > 9.0 && simulation.0.sabrina.cooldown <= 12.0);
             println!("BEVY CHECK OK: crystal launch and recharge");
             check.initial = simulation.0.sabrina.motion.pos;
         }
@@ -192,6 +192,44 @@ fn drive(
             assert_eq!(simulation.0.sabrina.vitality.health, 100.0);
             println!("BEVY CHECK OK: retry resets the session");
             ui.pointer_mode = false;
+        }
+        310 => {
+            simulation.0.settings.aquarium = false;
+            simulation.0.settings.gentle = true;
+            simulation.0.settings.visitor_limit = 1;
+            reef_sim::begin_visit(&mut simulation.0);
+            simulation.0.sabrina.motion.pos = reef_sim::v(-8.0, 14.0);
+            simulation.0.jelly[0].motion.pos = reef_sim::v(0.0, 8.0);
+            simulation.0.jelly[0].behaviour.state = reef_sim::JellyState::Hungry;
+            for fish in &mut simulation.0.fish {
+                fish.motion.pos = reef_sim::v(10.0, 4.0);
+            }
+            simulation.0.crystal.magic.state = reef_sim::Spell::Flying;
+            simulation.0.crystal.motion.pos = reef_sim::v(-1.5, 8.0);
+            simulation.0.crystal.motion.direction = reef_sim::v(1.0, 0.0);
+            simulation.0.sabrina.cooldown = 12.0;
+        }
+        315 => {
+            assert_eq!(simulation.0.jelly[0].behaviour.health, 60.0);
+            assert!(simulation.0.jelly[0].behaviour.bubble > 0.0);
+            assert_eq!(simulation.0.points.score, 40);
+            assert!(
+                simulation.0.points.rewards[reef_sim::ScoreFeedback::Crystal as usize].time > 0.0
+            );
+            println!("BEVY CHECK OK: crystal damage, bubble and immediate score feedback");
+        }
+        380 => {
+            assert_eq!(simulation.0.crystal.magic.state, reef_sim::Spell::Resting);
+            assert_eq!(simulation.0.jelly[0].behaviour.health, 60.0);
+            println!("BEVY CHECK OK: boomerang returns without repeat damage");
+            for fish in &mut simulation.0.fish {
+                fish.life.active = false;
+            }
+        }
+        385 => {
+            assert_eq!(ui.screen, Screen::GameOver);
+            assert!(simulation.0.sabrina.vitality.health > 0.0);
+            println!("BEVY CHECK OK: fish wipeout opens game-over with health remaining");
         }
         410 => {
             println!("BEVY INPUT INTEGRATION COMPLETE");

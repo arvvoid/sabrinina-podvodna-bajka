@@ -108,6 +108,8 @@ enum Effect {
     Glow,
     Wake,
     Shield(usize),
+    JellyBubble(usize),
+    JellyHealth(usize),
     Trail(usize),
     Spark(usize),
     Pop(usize, usize),
@@ -349,6 +351,24 @@ fn setup(
             AlphaMode::Add,
         );
     }
+    for i in 0..sim::JELLY_COUNT {
+        plane(
+            Effect::JellyBubble(i),
+            11.0,
+            0.0,
+            Vec3::ZERO,
+            Vec3::ONE,
+            AlphaMode::Blend,
+        );
+        plane(
+            Effect::JellyHealth(i),
+            10.0,
+            0.0,
+            Vec3::ZERO,
+            Vec3::ONE,
+            AlphaMode::Blend,
+        );
+    }
     let sphere = meshes.add(Sphere::new(1.0).mesh().uv(12, 8));
     let mut ball = |effect, color: Color, size: f32| {
         commands.spawn((
@@ -551,7 +571,10 @@ fn actors(
             }
             Actor::Crystal => {
                 let crystal = &rendered.0.crystal;
-                let flying = crystal.magic.state == sim::Spell::Flying;
+                let flying = matches!(
+                    crystal.magic.state,
+                    sim::Spell::Flying | sim::Spell::Returning
+                );
                 let charging = crystal.magic.state == sim::Spell::Charging;
                 show = crystal.magic.state != sim::Spell::Burst
                     && (crystal.magic.state != sim::Spell::Resting
@@ -637,7 +660,10 @@ fn effects(
         crystal.motion.pos.y,
         crystal.magic.depth,
     );
-    let flying = crystal.magic.state == sim::Spell::Flying;
+    let flying = matches!(
+        crystal.magic.state,
+        sim::Spell::Flying | sim::Spell::Returning
+    );
     let resting = crystal.magic.state == sim::Spell::Resting;
     let burst = crystal.magic.state == sim::Spell::Burst;
     let charging = crystal.magic.state == sim::Spell::Charging;
@@ -749,6 +775,33 @@ fn effects(
                     Vec3::new(f.motion.pos.x, f.motion.pos.y, f.appearance.depth + 0.8);
                 transform.scale = Vec3::new(2.2, 1.8, 1.0) * f.appearance.size;
                 amount = f.rescue.shield.min(1.0);
+            }
+            Effect::JellyHealth(i) => {
+                let jellyfish = &rendered.0.jelly[i];
+                show = matches!(
+                    jellyfish.behaviour.state,
+                    sim::JellyState::Arriving | sim::JellyState::Hungry
+                );
+                let scale = sim::jelly_scale(jellyfish);
+                transform.translation = Vec3::new(
+                    jellyfish.motion.pos.x,
+                    jellyfish.motion.pos.y + 1.7 * scale,
+                    2.0,
+                );
+                transform.scale = Vec3::new(2.1 * scale, 0.16, 1.0);
+                amount = jellyfish.behaviour.health / 100.0;
+            }
+            Effect::JellyBubble(i) => {
+                let jellyfish = &rendered.0.jelly[i];
+                show = jellyfish.behaviour.bubble > 0.0
+                    && matches!(
+                        jellyfish.behaviour.state,
+                        sim::JellyState::Arriving | sim::JellyState::Hungry
+                    );
+                transform.translation =
+                    Vec3::new(jellyfish.motion.pos.x, jellyfish.motion.pos.y - 0.4, 1.8);
+                transform.scale = Vec3::new(3.5, 4.2, 1.0) * sim::jelly_scale(jellyfish);
+                amount = jellyfish.behaviour.bubble.min(1.0);
             }
             Effect::Trail(i) => {
                 show = flying || (resting && ready);
@@ -1014,7 +1067,12 @@ fn crystal_light(
                 1.4
             } else if burst {
                 0.8
-            } else if ready || crystal.magic.state == sim::Spell::Flying {
+            } else if ready
+                || matches!(
+                    crystal.magic.state,
+                    sim::Spell::Flying | sim::Spell::Returning
+                )
+            {
                 0.45
             } else {
                 0.0

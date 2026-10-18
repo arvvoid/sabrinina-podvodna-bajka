@@ -5,7 +5,9 @@
 // Preserve the reference's decimal constants and expression order for replay parity.
 #![allow(clippy::approx_constant, clippy::excessive_precision)]
 
+pub mod balance;
 pub mod components;
+pub use balance::*;
 
 pub mod contacts;
 

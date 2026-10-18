@@ -110,6 +110,7 @@ pub enum Spell {
     Charging,
     Flying,
     Burst,
+    Returning,
 }
 macro_rules! component {
     ($name:ident { $($field:ident: $ty:ty = $value:expr),* $(,)? }) => {
@@ -156,12 +157,12 @@ component!(FishRescue {
     shield: f32 = 0.0,
     teleport: f32 = 0.0,
     rescued_cycle: i32 = -1,
-    wave_rescued_cycle: i32 = -1,
     wave_hit: u64 = 0,
     wave_flow: f32 = 0.0,
     song_escort: f32 = 0.0,
     song_risk_cycle: i32 = -1,
-    song_rescued_cycle: i32 = -1
+    song_rescued_cycle: i32 = -1,
+    wave_escape: f32 = 0.0
 });
 component!(FishLife {
     active: bool = false,
@@ -170,7 +171,6 @@ component!(FishLife {
 component!(JellyBehaviour {
     state: JellyState = JellyState::Hidden,
     time: f32 = 0.0,
-    hunger: f32 = 20.0,
     turn_in: f32 = 0.0,
     eat_wait: f32 = 0.0,
     phase: f32 = 0.0,
@@ -179,12 +179,17 @@ component!(JellyBehaviour {
     exit_side: i32 = 1,
     song_check: f32 = 0.0,
     song_interest: f32 = 0.0,
-    repel_flash: f32 = 0.0
+    repel_flash: f32 = 0.0,
+    health: f32 = 100.0,
+    bubble: f32 = 0.0,
+    wave_hit: u64 = 0,
+    knockback: V2 = v(0.0, 0.0)
 });
 component!(CrystalMagic {
     state: Spell = Spell::Resting,
     time: f32 = 0.0,
     target: Entity = Entity::default(),
+    aim: V2 = v(1.0, 0.0),
     charge_offset: V2 = v(0.0, 0.0),
     charge_depth: f32 = 1.0,
     depth: f32 = 1.0
@@ -280,6 +285,24 @@ pub struct Score {
     pub last_survivors: i32,
     pub last_variety: i32,
     pub visit_start_fish: i32,
+    pub rewards: [ScoreReward; 6],
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct ScoreReward {
+    pub points: i32,
+    pub time: f32,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum ScoreFeedback {
+    #[default]
+    None,
+    Crystal,
+    Wave,
+    Rescue,
+    Retreat,
+    Survivors,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -296,6 +319,7 @@ pub struct Events {
     pub teleported: i32,
     pub eaten: i32,
     pub repelled: i32,
+    pub jelly_hit: bool,
     pub wave_cast: bool,
     pub song_empty: bool,
     pub game_over: bool,

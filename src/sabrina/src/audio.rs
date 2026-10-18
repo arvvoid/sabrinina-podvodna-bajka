@@ -175,6 +175,9 @@ fn update(
         if event.teleported > 0 {
             effect = Some(("magic_collect", 1.1))
         }
+        if event.jelly_hit {
+            effect = Some(("magic_burst", 0.8));
+        }
         if event.repelled > 0 {
             effect = Some(("magic_burst", 1.0));
             voice = Some(("jelly_repelled", "That mermaid and her crystal!"));

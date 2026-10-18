@@ -102,7 +102,7 @@ fn soft_contacts_resolve_overlapping_fish_without_rewards() {
 }
 
 #[test]
-fn wave_pushes_fish_once_and_does_not_push_jellyfish() {
+fn wave_pushes_fish_and_damages_close_jellyfish_once() {
     let mut world = world();
     world.sabrina.motion.pos = v(0.0, 8.0);
     for fish in &mut world.fish {
@@ -111,8 +111,7 @@ fn wave_pushes_fish_once_and_does_not_push_jellyfish() {
     world.fish[0].life.active = true;
     world.fish[0].motion.pos = v(2.0, 8.5);
     world.jelly[0].behaviour.state = JellyState::Hungry;
-    world.jelly[0].motion.pos = v(1.0, 8.0);
-    let before = world.jelly[0].motion.pos;
+    world.jelly[0].motion.pos = v(1.5, 8.5);
     let mut events = Events::default();
     magic::water_wave(
         &mut world,
@@ -128,7 +127,8 @@ fn wave_pushes_fish_once_and_does_not_push_jellyfish() {
         magic::water_wave(&mut world, 0.016, Input::default(), &mut events);
     }
     assert!(world.fish[0].contact.impulse.x > 4.0);
-    assert_eq!(world.jelly[0].motion.pos, before);
+    assert_eq!(world.jelly[0].behaviour.health, 90.0);
+    assert!(world.jelly[0].behaviour.knockback.x > 0.0);
     let cast = world.sabrina.wave.cast_id;
     magic::water_wave(
         &mut world,
@@ -214,7 +214,7 @@ fn crystal_gathers_to_palm_before_release_at_every_heading() {
             magic::crystal(&mut world, 0.61, Input::default(), &mut events);
             assert_eq!(world.crystal.magic.state, Spell::Flying);
             assert!(events.launch);
-            assert_eq!(world.sabrina.cooldown, 150.0);
+            assert_eq!(world.sabrina.cooldown, 12.0);
         }
     }
 }

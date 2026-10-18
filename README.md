@@ -26,9 +26,16 @@ This is an initial working version. It is playable, but still needs more work, r
 
 ## Playing
 
-Fish arrive during peaceful intervals. When jellyfish visit, use song to gather fish, a wave to push them out of danger, or the crystal to repel a visitor. Jellyfish grow as they eat. Contact stings Sabrina; health slowly returns after a safe period. Losing all health ends the game.
+Fish arrive during peaceful intervals. Each visiting jellyfish has **100 health** and stays until its health reaches zero, then retreats. There is no timeout or eaten-fish limit. **Losing all fish during a round, or all Sabrina's health, ends the game.** Jellyfish still grow as they eat; Sabrina recovers health after a safe period.
 
-Song uses energy and its reach shrinks as energy falls. If it runs out, it must recharge completely. The crystal takes much longer to recover, so save it for trouble. Rescue fish, protect different species and finish encounters with survivors to build your score. Settings offer Gentle and Lively difficulty, encounter pacing and a peaceful aquarium mode.
+- **Crystal:** 40 damage and a 3-second air bubble. A bubbled jellyfish cannot swim, sting or eat, but waves can still push it. The crystal returns like a boomerang after a hit or miss; it recharges in 12 seconds from launch. Gentle mode auto-aims; Lively uses a straight skillshot aimed by swimming before casting (horizontal while stationary).
+- **Wave:** pushes fish away as before. Within 2.5 world units it also pushes a jellyfish and deals 10 damage, once per visitor per cast. Recharge: 3 seconds.
+- **Song:** gathers nearby fish, but can also attract jellyfish. Its reach shrinks with energy; exhausting it requires a complete recharge.
+- **Progression:** each round slightly increases visitor speed and the probability of multiple visitors, up to the selected visitor limit. Speed growth is bounded; health and damage stay consistent.
+
+Scoring rewards actions, not waiting: **1 point per actual damage**, **100 per defeated visitor**, **50 per genuine fish rescue**, and **25 per surviving fish** after every visitor is defeated. A fish can earn only one rescue reward per round across all abilities. Crystal collection only scores for threatened fish; wave rescues require surviving and reaching clear water; song requires escorting a threatened fish to safety. Safe fish collection, missed attacks and passive waiting earn nothing. A sting still subtracts up to 100 points. Hit, rescue and survivor rewards appear immediately, and each visitor has a health bar.
+
+Settings offer Gentle and Lively difficulty, encounter pacing and a peaceful, noncompetitive aquarium mode. Best scores from the old scoring rules are reset once; the saved best remains a local single-round record, not a normalized leaderboard across custom settings. The original voice guide is retained as an optional recording, marked as describing earlier rules; the written guide has the current rules.
 
 | Action | Mouse / keyboard | Controller |
 |---|---|---|
@@ -96,7 +103,7 @@ python3 tools/export_rust_contacts.py --check
 ./tools/run.sh --verify-input
 ```
 
-For visual checks, use `--capture-game`, `--capture-visit`, `--capture-throw`, `--capture-pose-idle` or `--capture-graphics-high`. `--capture-school --fullhd` runs a 72-fish stress scene and reports frame times. Captures go to the system temporary directory and do not save preferences.
+For visual checks, use `--capture-game`, `--capture-visit`, `--capture-throw`, `--capture-combat` (bubble, visitor health and hit feedback), `--capture-pose-idle` or `--capture-graphics-high`. `--capture-school --fullhd` runs a 72-fish stress scene and reports frame times. Captures go to the system temporary directory and do not save preferences.
 
 ## Next steps
 

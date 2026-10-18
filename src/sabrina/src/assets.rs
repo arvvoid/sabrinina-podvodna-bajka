@@ -267,7 +267,10 @@ pub(crate) fn finish_load(
                 if options.school {
                     reef_sim::add_fish(&mut simulation.0, 72, false);
                 }
-                if matches!(short, "visit" | "crystal" | "throw" | "wave" | "song") {
+                if matches!(
+                    short,
+                    "visit" | "crystal" | "throw" | "wave" | "song" | "combat"
+                ) {
                     simulation.0.settings.aquarium = false;
                     reef_sim::begin_visit(&mut simulation.0);
                 }
@@ -309,6 +312,12 @@ pub(crate) fn finish_load(
         simulation.0.jelly[0].motion.pos = reef_sim::v(4.0, 9.0);
         simulation.0.jelly[0].behaviour.state = reef_sim::JellyState::Hungry;
         simulation.0.jelly[0].behaviour.turn_in = 100.0;
+    }
+    if options.capture.as_deref() == Some("combat") {
+        simulation.0.settings.gentle = true;
+        simulation.0.sabrina.motion.pos = reef_sim::v(-3.0, 8.0);
+        simulation.0.jelly[0].motion.pos = reef_sim::v(3.0, 9.0);
+        simulation.0.jelly[0].behaviour.state = reef_sim::JellyState::Hungry;
     }
     if options.verify {
         begin(&mut simulation.0, &mut ui, &preferences, true);
@@ -634,7 +643,9 @@ fn animate(
                     continue;
                 }
                 (
-                    if j.behaviour.eat_wait > 0.0 {
+                    if j.behaviour.bubble > 0.0 {
+                        "Drift"
+                    } else if j.behaviour.eat_wait > 0.0 {
                         "Nibble"
                     } else if j.behaviour.state == reef_sim::JellyState::Leaving {
                         "Drift"
@@ -642,7 +653,7 @@ fn animate(
                         "Pulse"
                     },
                     None,
-                    1.0,
+                    if j.behaviour.bubble > 0.0 { 0.2 } else { 1.0 },
                 )
             }
             _ => continue,

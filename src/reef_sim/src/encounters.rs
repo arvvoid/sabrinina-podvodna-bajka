@@ -10,19 +10,15 @@ pub fn begin_visit(world: &mut World) {
     world.session.water = Water::Visit;
     world.session.cycle += 1;
     world.points.score = 0;
+    world.points.rewards = Default::default();
     world.points.visit_rescues = 0;
     world.session.visit_time = 0.0;
     world.points.visit_start_fish = alive(world);
     let mut count = 1;
-    if world.session.cycle >= 3
-        && world.settings.visitor_limit > 1
-        && (world.session.cycle % 3 == 0 || world.rng.range(0.0, 1.0) < 0.25)
-    {
-        count = 2
-    }
-    if world.session.cycle >= 6 && world.settings.visitor_limit > 2 && world.session.cycle % 4 == 0
-    {
-        count = 3
+    for _ in 1..world.settings.visitor_limit.clamp(1, JELLY_COUNT as i32) {
+        if world.rng.range(0.0, 1.0) < multiple_chance(world.session.cycle) {
+            count += 1;
+        }
     }
     for i in 0..JELLY_COUNT {
         world.jelly[i] = JellyEntity::default();
@@ -42,7 +38,6 @@ pub fn begin_visit(world: &mut World) {
             -jellyfish.behaviour.exit_side as f32,
             world.rng.range(-0.2, 0.2),
         );
-        jellyfish.behaviour.hunger = if world.settings.gentle { 90.0 } else { 120.0 };
         jellyfish.behaviour.kind = (world.session.cycle + i as i32) % 3;
         jellyfish.behaviour.phase = world.rng.range(0.0, 6.28);
         jellyfish.behaviour.turn_in = 4.0;
@@ -64,8 +59,11 @@ pub fn finish_visit(world: &mut World, events: &mut Events) {
         }
     }
     world.points.last_variety = kinds.iter().filter(|&&x| x).count() as i32;
-    world.points.score += world.points.last_survivors * (75 + 5 * world.session.cycle.min(8))
-        + world.points.last_variety * 60;
+    award(
+        world,
+        world.points.last_survivors * SURVIVOR_POINTS,
+        ScoreFeedback::Survivors,
+    );
     world.points.last_score = world.points.score;
     world.points.total_score += world.points.score;
     world.points.best_score = world.points.best_score.max(world.points.score);
@@ -80,7 +78,7 @@ pub fn population_and_visits(world: &mut World, dt: f32, events: &mut Events) {
         .jelly
         .iter()
         .any(|jellyfish| jellyfish.behaviour.state != JellyState::Hidden);
-    if !visitors {
+    if !visitors && world.session.water == Water::Calm {
         world.session.spawn_in -= dt;
         if world.session.spawn_in <= 0.0 {
             let count = world.rng.range(1.0, 4.99) as i32;
@@ -118,6 +116,33 @@ pub fn population_and_visits(world: &mut World, dt: f32, events: &mut Events) {
 }
 
 pub fn recovery_and_scoring(world: &mut World, dt: f32, events: &mut Events) {
+    // A wipeout wins over round completion, including the last visitor's defeat.
+    if !world.settings.aquarium && world.session.water == Water::Visit && alive(world) == 0 {
+        world.session.game_over = true;
+        events.game_over = true;
+        world.sabrina.song.active = false;
+        world.sabrina.song.strength = 0.0;
+        world.sabrina.motion.velocity = v(0.0, 0.0);
+    }
+    if world.session.game_over {
+        return;
+    }
+    for index in 0..FISH_COUNT {
+        if world.fish[index].life.active && world.fish[index].rescue.wave_escape > 0.0 {
+            world.fish[index].rescue.wave_escape -= dt;
+            if world.fish[index].rescue.wave_escape <= 0.0
+                && world
+                    .jelly
+                    .iter()
+                    .filter(|j| {
+                        matches!(j.behaviour.state, JellyState::Hungry | JellyState::Arriving)
+                    })
+                    .all(|j| (j.motion.pos - world.fish[index].motion.pos).length() >= 6.0)
+            {
+                award_rescue(world, index);
+            }
+        }
+    }
     if !world.session.game_over && world.sabrina.vitality.heal_delay <= 0.0 {
         world.sabrina.vitality.health = (world.sabrina.vitality.health
             + dt * if world.settings.gentle { 1.2 } else { 0.8 })

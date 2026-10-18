@@ -104,3 +104,19 @@ fn spells_fish_and_jelly_share_the_same_fraction() {
     near(render.fish[0].motion.pos.x, a.fish[0].motion.pos.x + 1.0);
     near(render.jelly[0].motion.pos.x, a.jelly[0].motion.pos.x + 1.0);
 }
+
+#[test]
+fn returning_crystal_interpolates_but_does_not_blend_outbound_transition() {
+    let mut before = world();
+    before.crystal.magic.state = Spell::Flying;
+    before.crystal.motion.pos = v(8.0, 10.0);
+    let mut current = before.clone();
+    current.crystal.magic.state = Spell::Returning;
+    current.crystal.motion.pos = v(7.0, 9.0);
+    let render = interpolate(&before, &current, 0.5);
+    assert_eq!(render.crystal.motion.pos, current.crystal.motion.pos);
+    before = current.clone();
+    current.crystal.motion.pos = v(5.0, 7.0);
+    let render = interpolate(&before, &current, 0.5);
+    assert_eq!(render.crystal.motion.pos, v(6.0, 8.0));
+}

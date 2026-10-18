@@ -10,6 +10,18 @@ pub fn jellyfish_and_contacts(world: &mut World, dt: f32, events: &mut Events) {
             continue;
         }
         jellyfish.behaviour.time += dt;
+        let bubbled = jellyfish.behaviour.bubble > 0.0;
+        jellyfish.behaviour.bubble = (jellyfish.behaviour.bubble - dt).max(0.0);
+        if jellyfish.behaviour.knockback.length() > 0.01 {
+            jellyfish.motion.pos =
+                bounds(jellyfish.motion.pos + jellyfish.behaviour.knockback * dt);
+        }
+        jellyfish.behaviour.knockback = jellyfish.behaviour.knockback * (-4.0 * dt).exp();
+        if bubbled {
+            jellyfish.motion.velocity = v(0.0, 0.0);
+            world.jelly[index] = jellyfish;
+            continue;
+        }
         jellyfish.behaviour.repel_flash = (jellyfish.behaviour.repel_flash - dt).max(0.0);
         jellyfish.behaviour.song_check = (jellyfish.behaviour.song_check - dt).max(0.0);
         jellyfish.behaviour.song_interest = (jellyfish.behaviour.song_interest - dt).max(0.0);
@@ -44,7 +56,6 @@ pub fn jellyfish_and_contacts(world: &mut World, dt: f32, events: &mut Events) {
                 }
             }
             _ => {
-                jellyfish.behaviour.hunger -= dt;
                 jellyfish.behaviour.turn_in -= dt;
                 if jellyfish.behaviour.turn_in <= 0.0 {
                     jellyfish.motion.direction =
@@ -85,8 +96,7 @@ pub fn jellyfish_and_contacts(world: &mut World, dt: f32, events: &mut Events) {
                 }
                 desired_direction.y +=
                     (world.session.time * 1.4 + jellyfish.behaviour.phase).sin() * 0.3;
-                let speed = if world.settings.gentle { 0.8 } else { 1.1 }
-                    + 0.04 * world.session.cycle.min(6) as f32;
+                let speed = visitor_speed(world);
                 jellyfish.motion.velocity = jellyfish.motion.velocity
                     + (desired_direction * speed - jellyfish.motion.velocity) * (dt * 2.0).min(1.0);
                 jellyfish.motion.pos = jellyfish.motion.pos + jellyfish.motion.velocity * dt;
@@ -144,7 +154,7 @@ pub fn jellyfish_and_contacts(world: &mut World, dt: f32, events: &mut Events) {
                     sabrina.song.strength = 0.0
                 }
             }
-            // Eat every contacting, unshielded fish, not just one per eat animation.
+            // Keep contact rules independent of the cosmetic eating animation.
             for fish in &mut world.fish {
                 if fish.life.active && fish.rescue.teleport <= 0.0 {
                     let touching = jelly_body(&jellyfish)
@@ -172,15 +182,6 @@ pub fn jellyfish_and_contacts(world: &mut World, dt: f32, events: &mut Events) {
                         jellyfish.behaviour.eat_wait = 0.55;
                     }
                 }
-            }
-            if jellyfish.behaviour.hunger <= 0.0
-                || (jellyfish.behaviour.eaten >= if world.settings.gentle { 10 } else { 14 }
-                    && world.session.visit_time >= if world.settings.gentle { 60.0 } else { 80.0 })
-                || world.session.visit_time > if world.settings.gentle { 100.0 } else { 130.0 }
-            {
-                send_home(&mut jellyfish);
-                world.points.score += 150;
-                events.leaving = true;
             }
         }
         world.jelly[index] = jellyfish;

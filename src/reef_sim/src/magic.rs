@@ -18,6 +18,7 @@ pub fn crystal_orbit(world: &World, seconds_behind: f32) -> CrystalOrbit {
 }
 
 fn touch_fish(world: &mut World, i: usize, events: &mut Events) {
+    let threatened = threat_distance(world, world.fish[i].motion.pos) < 4.0;
     let fish = &mut world.fish[i];
     if !fish.life.active || fish.rescue.shield > 0.0 {
         return;
@@ -29,11 +30,8 @@ fn touch_fish(world: &mut World, i: usize, events: &mut Events) {
     fish.rescue.teleport = 1.2;
     fish.rescue.shield = 4.0;
     events.teleported += 1;
-    if world.session.water == Water::Visit && fish.rescue.rescued_cycle != world.session.cycle {
-        fish.rescue.rescued_cycle = world.session.cycle;
-        world.points.score += 80;
-        world.points.rescues += 1;
-        world.points.visit_rescues += 1;
+    if threatened {
+        award_rescue(world, i);
     }
 }
 
@@ -51,8 +49,14 @@ pub fn crystal(world: &mut World, dt: f32, input: Input, events: &mut Events) {
         world.crystal.magic.charge_offset = orbit.offset;
         world.crystal.magic.charge_depth = orbit.depth;
         world.crystal.magic.target = Entity::default();
+        let pitch = if world.sabrina.motion.velocity.length() > 0.6 {
+            world.sabrina.swimming.pitch
+        } else {
+            0.0
+        };
+        world.crystal.magic.aim = v(world.sabrina.swimming.facing * pitch.cos(), pitch.sin());
         let mut closest = 1000.0;
-        for jellyfish in &world.jelly {
+        for jellyfish in world.jelly.iter().filter(|_| world.settings.gentle) {
             if matches!(
                 jellyfish.behaviour.state,
                 JellyState::Hungry | JellyState::Arriving
@@ -98,10 +102,7 @@ pub fn crystal(world: &mut World, dt: f32, input: Input, events: &mut Events) {
                     if let Some(jellyfish) = find_jelly(world, world.crystal.magic.target) {
                         (jellyfish.motion.pos - world.crystal.motion.pos).unit()
                     } else {
-                        v(
-                            world.sabrina.swimming.facing * world.sabrina.swimming.pitch.cos(),
-                            world.sabrina.swimming.pitch.sin(),
-                        )
+                        world.crystal.magic.aim
                     };
                 world.crystal.magic.state = Spell::Flying;
                 world.crystal.magic.time = 0.0;
@@ -130,7 +131,8 @@ pub fn crystal(world: &mut World, dt: f32, input: Input, events: &mut Events) {
                     touch_fish(world, i, events)
                 }
             }
-            for jellyfish in &mut world.jelly {
+            for index in 0..JELLY_COUNT {
+                let jellyfish = &world.jelly[index];
                 if !matches!(
                     jellyfish.behaviour.state,
                     JellyState::Hungry | JellyState::Arriving
@@ -148,10 +150,7 @@ pub fn crystal(world: &mut World, dt: f32, input: Input, events: &mut Events) {
                     ) <= 0.0
                 });
                 if hit {
-                    send_home(jellyfish);
-                    jellyfish.behaviour.repel_flash = 0.65;
-                    events.repelled += 1;
-                    world.points.score += 300;
+                    damage_jelly(world, index, CRYSTAL_DAMAGE, true, events);
                     world.crystal.magic.state = Spell::Burst;
                     world.crystal.magic.time = 0.0;
                     break;
@@ -160,16 +159,31 @@ pub fn crystal(world: &mut World, dt: f32, input: Input, events: &mut Events) {
             if world.crystal.motion.pos.x.abs() > 17.0
                 || world.crystal.motion.pos.y < 0.5
                 || world.crystal.motion.pos.y > 18.0
-                || world.crystal.magic.time > 4.0
+                || world.crystal.magic.time > 1.5
             {
-                world.crystal.magic.state = Spell::Burst;
+                world.crystal.magic.state = Spell::Returning;
                 world.crystal.magic.time = 0.0;
             }
         }
         Spell::Burst => {
-            if world.crystal.magic.time > 0.7 {
-                world.crystal.magic.state = Spell::Resting;
+            if world.crystal.magic.time > 0.2 {
+                world.crystal.magic.state = Spell::Returning;
                 world.crystal.magic.time = 0.0
+            }
+        }
+        Spell::Returning => {
+            let orbit = crystal_orbit(world, 0.0);
+            let destination = world.sabrina.motion.pos + orbit.offset;
+            let offset = destination - world.crystal.motion.pos;
+            world.crystal.motion.direction = offset.unit();
+            world.crystal.magic.depth +=
+                (orbit.depth - world.crystal.magic.depth) * (dt * 8.0).min(1.0);
+            if offset.length() <= dt * 18.0 {
+                world.crystal.motion.pos = destination;
+                world.crystal.magic.state = Spell::Resting;
+                world.crystal.magic.time = 0.0;
+            } else {
+                world.crystal.motion.pos = world.crystal.motion.pos + offset.unit() * dt * 18.0;
             }
         }
     }
@@ -211,6 +225,7 @@ pub fn water_wave(world: &mut World, dt: f32, input: Input, events: &mut Events)
     let previous = wave.time * 8.0;
     wave.time += dt;
     let front = (wave.time * 8.0).min(5.5);
+    let wave = *wave;
     for fish in &mut world.fish {
         if !fish.life.active || fish.rescue.teleport > 0.0 || fish.rescue.wave_hit == wave.cast_id {
             continue;
@@ -235,25 +250,45 @@ pub fn water_wave(world: &mut World, dt: f32, input: Input, events: &mut Events)
         fish.swimming.cruise_heading = wave.direction.y.atan2(wave.direction.x);
         fish.swimming.turn_in = 1.5;
         if world.session.water == Water::Visit
-            && fish.rescue.wave_rescued_cycle != world.session.cycle
+            && fish.rescue.rescued_cycle != world.session.cycle
+            && fish.rescue.wave_escape <= 0.0
         {
             for jellyfish in &world.jelly {
-                if !matches!(
-                    jellyfish.behaviour.state,
-                    JellyState::Hungry | JellyState::Arriving
-                ) {
+                if !dangerous(jellyfish) {
                     continue;
                 }
                 let away = fish.motion.pos - jellyfish.motion.pos;
-                if away.length() < 6.0 && away.dot(wave.direction) > 0.0 {
-                    fish.rescue.wave_rescued_cycle = world.session.cycle;
-                    world.points.score += 20;
+                if away.length() < 4.0 && away.dot(wave.direction) > 0.0 {
+                    fish.rescue.wave_escape = 1.0;
                     break;
                 }
             }
         }
     }
+    for index in 0..JELLY_COUNT {
+        let jellyfish = &mut world.jelly[index];
+        if !matches!(
+            jellyfish.behaviour.state,
+            JellyState::Hungry | JellyState::Arriving
+        ) || jellyfish.behaviour.wave_hit == wave.cast_id
+        {
+            continue;
+        }
+        let offset = jellyfish.motion.pos - wave.origin;
+        let ahead = offset.dot(wave.direction);
+        let sideways = (offset.x * wave.direction.y - offset.y * wave.direction.x).abs();
+        if (jellyfish.motion.pos - world.sabrina.motion.pos).length() <= WAVE_REACH
+            && ahead >= 0.0
+            && ahead <= front + 0.35
+            && ahead >= previous - 0.35
+            && sideways <= 0.8 + 0.38 * ahead
+        {
+            jellyfish.behaviour.wave_hit = wave.cast_id;
+            jellyfish.behaviour.knockback = wave.direction * 5.0;
+            damage_jelly(world, index, WAVE_DAMAGE, false, events);
+        }
+    }
     if wave.time >= 0.75 {
-        wave.active = false
+        world.sabrina.wave.active = false
     }
 }

@@ -392,9 +392,10 @@ fn draw(
 
 fn draw_hud(builder: &mut Builder<'_, '_, '_>, screen: Screen) {
     let lang = builder.lang;
-    builder.panel(rect(24.0, 22.0, 490.0, 100.0));
+    builder.panel(rect(24.0, 22.0, 490.0, 160.0));
     builder.label(rect(48.0, 42.0, 450.0, 32.0), 24.0, "", Some("phase"));
     builder.label(rect(48.0, 80.0, 450.0, 28.0), 18.0, "", Some("stats"));
+    builder.label(rect(48.0, 116.0, 450.0, 50.0), 17.0, "", Some("visitors"));
     builder.panel(rect(600.0, 22.0, 400.0, 92.0));
     builder.image(rect(610.0, 36.0, 56.0, 56.0), "heart");
     builder.label(rect(679.0, 37.0, 300.0, 32.0), 20.0, "", Some("health"));
@@ -424,6 +425,7 @@ fn draw_hud(builder: &mut Builder<'_, '_, '_>, screen: Screen) {
         None,
     );
     builder.label(rect(500.0, 130.0, 600.0, 90.0), 21.0, "", Some("score"));
+    builder.label(rect(500.0, 225.0, 600.0, 160.0), 22.0, "", Some("reward"));
     builder.label(rect(350.0, 700.0, 900.0, 48.0), 23.0, "", Some("notice"));
     builder.label(rect(350.0, 748.0, 900.0, 36.0), 19.0, "", Some("caption"));
     if screen == Screen::Playing {
@@ -664,11 +666,7 @@ fn draw_help_or_credits(builder: &mut Builder<'_, '_, '_>, screen: Screen) {
         None,
     );
     let text = if help {
-        table()
-            .iter()
-            .find(|(k, _)| k.starts_with("Swim with mouse, WASD"))
-            .map(|(_, v)| v[lang].clone())
-            .unwrap_or_default()
+        tr("Combat guide", lang)
     } else {
         [
             include_str!("../../../assets/credits/credits_en.txt"),
@@ -686,7 +684,7 @@ fn draw_help_or_credits(builder: &mut Builder<'_, '_, '_>, screen: Screen) {
     if help {
         builder.button(
             rect(280.0, 745.0, 310.0, 52.0),
-            "Listen again",
+            "Original voice guide",
             Action::Replay,
             false,
         );
@@ -695,6 +693,15 @@ fn draw_help_or_credits(builder: &mut Builder<'_, '_, '_>, screen: Screen) {
             "Pause / resume voice",
             Action::VoicePause,
             false,
+        );
+        builder.label(
+            rect(280.0, 708.0, 1040.0, 32.0),
+            15.0,
+            tr(
+                "Original recording uses earlier rules; follow the text above.",
+                lang,
+            ),
+            None,
         );
     } else {
         builder.button(
@@ -717,12 +724,7 @@ fn draw_game_over(builder: &mut Builder<'_, '_, '_>) {
         tr("Game over", lang),
         None,
     );
-    builder.label(
-        rect(490.0, 405.0, 620.0, 70.0),
-        21.0,
-        tr("Sabrina needs a rest. Try again when you are ready.", lang),
-        None,
-    );
+    builder.label(rect(490.0, 405.0, 620.0, 70.0), 21.0, "", Some("defeat"));
     builder.button(
         rect(490.0, 500.0, 620.0, 62.0),
         "Swim again",
@@ -870,11 +872,7 @@ fn actions(
                 Action::Credits => Screen::Credits,
                 _ => Screen::Help,
             };
-            if matches!(action, Action::Help) {
-                audio.help = Some(preferences.language)
-            } else {
-                audio.stop_voice = true;
-            }
+            audio.stop_voice = true;
         }
         Action::Done => {
             ui.screen = ui.return_to;
@@ -961,11 +959,57 @@ fn update(
     let language = preferences.language;
     for (key, mut text) in &mut texts {
         let value = match key.0 {
-            "phase" => tr(
+            "phase" => {
                 if simulation.0.session.water == reef_sim::Water::Visit {
-                    "A jellyfish is visiting!"
+                    format!("{}{}", tr("Round ", language), simulation.0.session.cycle)
                 } else {
-                    "A peaceful little sea"
+                    tr("A peaceful little sea", language)
+                }
+            }
+            "visitors" => {
+                let health: Vec<String> = simulation
+                    .0
+                    .jelly
+                    .iter()
+                    .filter(|j| {
+                        matches!(
+                            j.behaviour.state,
+                            reef_sim::JellyState::Hungry | reef_sim::JellyState::Arriving
+                        )
+                    })
+                    .map(|j| {
+                        format!(
+                            "{:.0}/100{}",
+                            j.behaviour.health,
+                            if j.behaviour.bubble > 0.0 { " ○" } else { "" }
+                        )
+                    })
+                    .collect();
+                if health.is_empty() {
+                    String::new()
+                } else {
+                    format!("{}{}", tr("Visitors · ", language), health.join("   "))
+                }
+            }
+            "reward" => [
+                (reef_sim::ScoreFeedback::Crystal, "Crystal hit"),
+                (reef_sim::ScoreFeedback::Wave, "Close wave hit"),
+                (reef_sim::ScoreFeedback::Rescue, "Fish rescued"),
+                (reef_sim::ScoreFeedback::Retreat, "Visitor repelled"),
+                (reef_sim::ScoreFeedback::Survivors, "Survivor bonus"),
+            ]
+            .into_iter()
+            .filter_map(|(kind, label)| {
+                let reward = simulation.0.points.rewards[kind as usize];
+                (reward.time > 0.0).then(|| format!("+{} · {}", reward.points, tr(label, language)))
+            })
+            .collect::<Vec<_>>()
+            .join("\n"),
+            "defeat" => tr(
+                if reef_sim::alive(&simulation.0) == 0 {
+                    "All fish were lost. Try again and protect the school!"
+                } else {
+                    "Sabrina needs a rest. Try again when you are ready."
                 },
                 language,
             ),
@@ -1032,7 +1076,7 @@ fn update(
             "score" => {
                 if ui.score_time > 0.0 {
                     format!(
-                        "{}\n+{}{}{}{}",
+                        "{}\n{}{}{}{}",
                         tr("The sea is peaceful again", language),
                         simulation.0.points.last_score,
                         tr(" points · ", language),

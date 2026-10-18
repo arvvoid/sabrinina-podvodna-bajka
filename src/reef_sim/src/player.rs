@@ -3,8 +3,8 @@
 //! Sabrina movement, ability timers and swimming pose state.
 use crate::*;
 
-pub fn recharge_duration(world: &World) -> f32 {
-    if world.settings.gentle { 150.0 } else { 180.0 }
+pub fn recharge_duration(_world: &World) -> f32 {
+    12.0
 }
 
 pub fn song_duration(world: &World) -> f32 {
@@ -15,8 +15,8 @@ pub fn song_recharge_duration(world: &World) -> f32 {
     if world.settings.gentle { 20.0 } else { 24.0 }
 }
 
-pub fn wave_recharge_duration(world: &World) -> f32 {
-    if world.settings.gentle { 3.0 } else { 4.0 }
+pub fn wave_recharge_duration(_world: &World) -> f32 {
+    3.0
 }
 
 pub fn song_radius(world: &World) -> f32 {
@@ -46,6 +46,9 @@ pub fn toggle_song(world: &mut World) -> bool {
 
 pub fn timers(world: &mut World, dt: f32) {
     world.session.time += dt;
+    for reward in &mut world.points.rewards {
+        reward.time = (reward.time - dt).max(0.0);
+    }
     let sabrina = &mut world.sabrina;
     if sabrina.throw_time >= 0.0 {
         sabrina.throw_time += dt;

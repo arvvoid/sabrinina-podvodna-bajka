@@ -133,7 +133,7 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     }
 
     // Protective fish shield.
-    if (kind == 8) {
+    if (kind == 8 || kind == 11) {
         let offset = (uv - vec2<f32>(0.5)) * 2.0;
         let radius = length(offset);
         let rim = exp(-pow((radius - 0.86) / 0.035, 2.0));
@@ -141,8 +141,13 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
         color = vec3<f32>(0.35, 0.88, 1.0);
         alpha = (rim * 0.4 + shine * 0.7) * amount;
     }
+    // Visitor health stays attached to the actor rather than the HUD.
+    if (kind == 10) {
+        color = select(vec3<f32>(0.12, 0.22, 0.28), vec3<f32>(0.35, 1.0, 0.65), uv.x <= amount);
+        alpha = 0.9;
+    }
     // Additive effects premultiply their RGB and leave destination alpha unchanged.
-    if (kind != 0 && kind != 3) {
+    if (kind != 0 && kind != 3 && kind != 10 && kind != 11) {
         return vec4<f32>(color * alpha, 0.0);
     }
     return vec4<f32>(color, alpha);

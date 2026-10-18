@@ -10,6 +10,8 @@ use std::path::PathBuf;
 pub struct Preferences {
     pub language: usize,
     pub best: i32,
+    #[serde(default)]
+    pub scoring_version: u8,
     pub gentle: bool,
     pub rest: f32,
     pub visitors: i32,
@@ -26,6 +28,7 @@ impl Default for Preferences {
         Self {
             language: 0,
             best: 0,
+            scoring_version: 2,
             gentle: true,
             rest: 55.0,
             visitors: 2,
@@ -91,7 +94,6 @@ impl Preferences {
             }
             match (section, key.trim()) {
                 ("game", "language") => read!(language),
-                ("game", "best") => read!(best),
                 ("game", "gentle") => read!(gentle),
                 ("game", "rest") => read!(rest),
                 ("game", "visitors") => read!(visitors),
@@ -114,6 +116,7 @@ impl Preferences {
             .or_else(Self::legacy)
             .unwrap_or_default();
         preferences.language %= 3;
+        preferences.migrate_score();
         preferences.quality %= 3;
         preferences.rest = preferences.rest.clamp(25.0, 150.0);
         preferences.visitors = preferences.visitors.clamp(1, 3);
@@ -121,6 +124,14 @@ impl Preferences {
         preferences.effects = preferences.effects.clamp(0.0, 1.0);
         preferences.voice = preferences.voice.clamp(0.0, 1.0);
         preferences
+    }
+
+    fn migrate_score(&mut self) {
+        if self.scoring_version != 2 {
+            info!("Resetting best score for the skill-based scoring rules.");
+            self.best = 0;
+            self.scoring_version = 2;
+        }
     }
 
     pub fn save(&self) {
@@ -149,5 +160,35 @@ impl Preferences {
             visitor_limit: self.visitors,
             reduced_motion: self.reduced_motion,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn old_records_reset_without_discarding_other_preferences() {
+        let mut preferences: Preferences =
+            serde_json::from_str(r#"{"best":12345,"gentle":false,"language":2}"#).unwrap();
+        assert_eq!(preferences.scoring_version, 0);
+        preferences.migrate_score();
+        assert_eq!(preferences.best, 0);
+        assert_eq!(preferences.scoring_version, 2);
+        assert!(!preferences.gentle);
+        assert_eq!(preferences.language, 2);
+    }
+
+    #[test]
+    fn current_records_survive_loading_and_repeated_migration() {
+        let mut preferences: Preferences =
+            serde_json::from_str(r#"{"best":450,"scoring_version":2}"#).unwrap();
+        preferences.migrate_score();
+        preferences.migrate_score();
+        assert_eq!(preferences.best, 450);
+        let saved = serde_json::to_string(&preferences).unwrap();
+        let restored: Preferences = serde_json::from_str(&saved).unwrap();
+        assert_eq!(restored.scoring_version, 2);
+        assert_eq!(restored.best, 450);
     }
 }

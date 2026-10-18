@@ -274,11 +274,12 @@ fn tick(
         let due = match kind.as_str() {
             "throw" => 3.25,
             "wave" => 3.5,
+            "combat" => 1.5,
             _ => 1.0,
         };
         if !*capture_action && simulation.0.session.time >= due {
             *capture_action = true;
-            input.cast = kind == "throw" || kind == "crystal";
+            input.cast = kind == "throw" || kind == "crystal" || kind == "combat";
             input.toggle_song = kind == "song";
             input.wave = kind == "wave";
         }

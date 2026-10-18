@@ -87,7 +87,7 @@ pub fn fish_swimming(world: &mut World, dt: f32) {
             desired_velocity = desired_velocity * 0.8 + school * (0.2 / neighbours as f32)
         }
         for jellyfish in &world.jelly {
-            if jellyfish.behaviour.state == JellyState::Hungry {
+            if dangerous(jellyfish) {
                 let away = fish.motion.pos - jellyfish.motion.pos;
                 let d = away.length();
                 if d < 3.4 {
@@ -145,9 +145,13 @@ pub fn fish_swimming(world: &mut World, dt: f32) {
         fish.rescue.song_escort = if hearing {
             fish.rescue.song_escort + dt
         } else {
+            fish.rescue.song_risk_cycle = -1;
             0.0
         };
-        if hearing && danger < 5.0 && world.session.water == Water::Visit {
+        if hearing
+            && threat_distance(world, fish.motion.pos) < 4.0
+            && world.session.water == Water::Visit
+        {
             fish.rescue.song_risk_cycle = world.session.cycle
         }
         if hearing
@@ -158,7 +162,9 @@ pub fn fish_swimming(world: &mut World, dt: f32) {
             && fish.rescue.song_rescued_cycle != world.session.cycle
         {
             fish.rescue.song_rescued_cycle = world.session.cycle;
-            world.points.score += 30;
+            world.fish[i] = fish;
+            award_rescue(world, i);
+            fish = world.fish[i];
         }
         let mut heading = fish.motion.direction.y.atan2(fish.motion.direction.x);
         let target = desired_velocity.y.atan2(desired_velocity.x);
