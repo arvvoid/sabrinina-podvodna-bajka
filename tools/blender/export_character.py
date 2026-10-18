@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: Apache-2.0
 """Export the opened, artist-edited .blend; never regenerate its geometry or keys.
 Usage: blender --background art/characters/sabrina.blend --python tools/blender/export_character.py
 """

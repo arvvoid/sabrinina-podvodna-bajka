@@ -1,6 +1,6 @@
 {
   "authoring_blender": "5.2.2 LTS",
-  "license": "Character artwork reserved; see ASSET_LICENSE.md. Authoring scripts MIT.",
+  "license": "Character artwork reserved; see ASSET_LICENSE.md. Authoring scripts Apache-2.0.",
   "assets": [
     {
       "asset": "jellyfish",

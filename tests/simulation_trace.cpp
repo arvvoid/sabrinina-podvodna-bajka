@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: Apache-2.0
 // Semantic trace for before/after comparisons on the same compiler/platform.
 // Excludes entity generations: restarting invalidates handles without changing play.
 #include "simulation/simulation.h"

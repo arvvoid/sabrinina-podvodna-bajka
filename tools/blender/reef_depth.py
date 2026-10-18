@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: Apache-2.0
 """Separate complete near-reef faces from the background; never cross actor depth.
 
 The camera is orthographic. Keeping XY and UVs unchanged preserves the original

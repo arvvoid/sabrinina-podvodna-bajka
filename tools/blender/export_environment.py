@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: Apache-2.0
 """Export the saved, artist-edited reef without rebuilding geometry or textures."""
 
 import bpy, json

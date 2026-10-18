@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: Apache-2.0
 import bpy
 from mathutils import Quaternion
 from geometry import coord

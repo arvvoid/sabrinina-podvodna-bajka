@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: Apache-2.0
 shader_type spatial;
 uniform vec4 tint : source_color = vec4(1.0);
 uniform bool textured = false;

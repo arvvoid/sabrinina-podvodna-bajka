@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: Apache-2.0
 """Prepare the owner's relic without modifying the downloaded model.
 blender -b --python tools/blender/prepare_crystal.py -- source.glb
 """
@@ -64,6 +64,6 @@ record = {
     "surfaces": 1,
     "bytes": output.stat().st_size,
     "adaptation": "Reduced textured GLB, preserved filigree and water ribbons, centered and scaled to 1.35 units. Untextured 8434-triangle FBX evaluated but not used.",
-    "license": "Owner-supplied artwork reserved separately from MIT code; see ASSET_LICENSE.md.",
+    "license": "Owner-supplied artwork reserved separately from Apache-2.0 code; see ASSET_LICENSE.md.",
 }
 (ROOT / "art/props/manifest.json").write_text(json.dumps(record, indent=2) + "\n")

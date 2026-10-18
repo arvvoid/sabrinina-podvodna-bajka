@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: Apache-2.0
 """Author initial .blend sources and game exports. Use export_character.py after hand edits."""
 
 import sys, json
@@ -91,7 +91,7 @@ manifest.write_text(
     json.dumps(
         {
             "authoring_blender": bpy.app.version_string,
-            "license": "Character artwork reserved; see ASSET_LICENSE.md. Authoring scripts MIT.",
+            "license": "Character artwork reserved; see ASSET_LICENSE.md. Authoring scripts Apache-2.0.",
             "assets": stats,
         },
         indent=2,

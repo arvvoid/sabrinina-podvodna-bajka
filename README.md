@@ -189,4 +189,4 @@ The game uses native C++ throughout; no gameplay GDScript is required. The repos
 
 ## Licensing
 
-Original source and technical documentation are **MIT licensed**. Recordings, character designs, artwork and branding are separately reserved. See [ASSET_LICENSE.md](ASSET_LICENSE.md). The included original assets are not relicensed by the source-code license.
+Original source and technical documentation are licensed under [Apache 2.0](LICENSE). See [NOTICE](NOTICE) for authorship. Recordings, character designs, artwork, story, world and branding are separately reserved, to the extent held by their respective rights holders. See [ASSET_LICENSE.md](ASSET_LICENSE.md). The included assets and third-party dependencies are not relicensed by the source-code license.

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: Apache-2.0
 import math
 from geometry import material, surface, ellipsoid, tube, chain_weights, finish_meshes
 from rigging import armature, actions, rotate

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: Apache-2.0
 """Render an honest preview of a saved asset, without changing its source."""
 
 import bpy, sys

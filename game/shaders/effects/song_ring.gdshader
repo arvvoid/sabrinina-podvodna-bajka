@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: Apache-2.0
 shader_type spatial;
 render_mode unshaded, blend_add, depth_draw_never, cull_disabled;
 uniform float opacity = 0.2;

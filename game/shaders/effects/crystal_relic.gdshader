@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: Apache-2.0
 shader_type spatial;
 render_mode cull_disabled;
 uniform sampler2D albedo_texture : source_color, filter_linear_mipmap;

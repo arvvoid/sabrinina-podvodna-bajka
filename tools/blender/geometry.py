@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: Apache-2.0
 """Small authoring helpers. Coordinates are game axes: X right, Y up, Z toward camera."""
 
 import math

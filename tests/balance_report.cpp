@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: Apache-2.0
 // Repeatable bot scenarios, not a substitute for child playtesting.
 #include "simulation/simulation.h"
 #include <algorithm>

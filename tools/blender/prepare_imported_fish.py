@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: Apache-2.0
 """Separate the owner's twelve-fish collection, bake compact maps and author swim rigs.
 Source-specific, destructive rebuild of the generated sources; use export_character.py
 for subsequent artist edits. The supplied GLB is never modified.
@@ -273,7 +273,7 @@ def main():
                 "source_triangles": 1883328,
                 "adaptation": "Separated twelve connected fish, reduced to 7800 triangles each, baked 512px color/normal maps, normalized size, weighted six-bone rigs and authored idle/swim loops. Legacy parrotfish/blue_wrasse slot names contain the supplied pink anthias/cyan chromis.",
                 "assets": [f[0] for f in FISH],
-                "license": "User-supplied artwork; reserved separately from MIT source. See ASSET_LICENSE.md.",
+                "license": "User-supplied artwork; reserved separately from Apache-2.0 source. See ASSET_LICENSE.md.",
             },
             indent=2,
         )

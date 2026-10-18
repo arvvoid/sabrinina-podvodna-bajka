@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: Apache-2.0
 """Adapt the owner's ruins diorama to the game's side-on swimming plane.
 blender --background --python tools/blender/prepare_reef.py -- source.glb
 The downloaded high-resolution source is never modified.

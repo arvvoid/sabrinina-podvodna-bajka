@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: Apache-2.0
 """Build a candidate from the owner's neutral-pose FBX, without replacing shipped art.
 
 blender -b --python tools/blender/prepare_tpose_sabrina.py -- source.fbx output_dir

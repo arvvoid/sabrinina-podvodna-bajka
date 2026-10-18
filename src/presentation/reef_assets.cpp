@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: Apache-2.0
 #include "reef_assets.h"
 #include "shader_library.h"
 #include <godot_cpp/classes/base_material3d.hpp>

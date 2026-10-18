@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: Apache-2.0
 #include "reef_game.h"
 #include "shader_library.h"
 #include "simulation/contacts.h"

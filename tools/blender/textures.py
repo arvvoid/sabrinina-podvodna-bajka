@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: Apache-2.0
 """Small packed normal textures: editable with the .blend and embedded in glTF."""
 
 import bpy

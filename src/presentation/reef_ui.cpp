@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: Apache-2.0
 #include "reef_game.h"
 #include <godot_cpp/classes/canvas_layer.hpp>
 #include <godot_cpp/classes/file_access.hpp>

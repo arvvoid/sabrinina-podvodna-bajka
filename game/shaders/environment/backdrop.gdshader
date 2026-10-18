@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: Apache-2.0
 shader_type spatial;
 render_mode unshaded, fog_disabled;
 // Authored display colors must also convert correctly on linear HDR renderers.

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: Apache-2.0
 """Shared keyed Sabrina poses. Reauthor the saved rig without rebuilding its mesh."""
 
 import math

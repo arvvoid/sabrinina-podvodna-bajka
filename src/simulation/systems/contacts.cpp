@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: Apache-2.0
 #include "simulation/contacts.h"
 #include "common.h"
 #include "simulation/generated/sabrina_contacts.h"

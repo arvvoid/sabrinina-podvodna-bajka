@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: Apache-2.0
 #include "character_assets.h"
 #include <godot_cpp/classes/animation.hpp>
 #include <godot_cpp/classes/mesh.hpp>

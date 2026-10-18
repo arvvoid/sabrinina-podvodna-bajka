@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: Apache-2.0
 #include "systems/common.h"
 #include "systems/systems.h"
 namespace reef {
