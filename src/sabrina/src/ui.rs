@@ -9,6 +9,7 @@ use crate::{
 };
 use bevy::{
     prelude::*,
+    render::renderer::RenderAdapterInfo,
     sprite::{BorderRect, TextureSlicer},
     ui::widget::NodeImageMode,
     window::{MonitorSelection, PrimaryWindow, WindowMode},
@@ -451,6 +452,7 @@ fn draw(
     mut scale: ResMut<UiScale>,
     options: Res<Options>,
     hints: Res<Hints>,
+    adapter: Res<RenderAdapterInfo>,
 ) {
     let zoom = (window.width() / CANVAS_WIDTH).min(window.height() / CANVAS_HEIGHT);
     scale.0 = zoom;
@@ -554,7 +556,7 @@ fn draw(
         draw_hud(&mut builder, ui.screen);
     }
     match ui.screen {
-        Screen::Menu => draw_menu(&mut builder, &preferences),
+        Screen::Menu => draw_menu(&mut builder, &preferences, renderer_label(&adapter)),
         Screen::Pause => draw_pause(&mut builder),
         Screen::Settings => draw_settings(&mut builder, &preferences),
         Screen::Credits | Screen::Help => draw_help_or_credits(&mut builder, ui.screen),
@@ -605,7 +607,7 @@ fn draw_hud(builder: &mut Builder<'_, '_, '_>, screen: Screen) {
     builder.background_alpha = 1.0;
 }
 
-fn draw_menu(builder: &mut Builder<'_, '_, '_>, preferences: &Preferences) {
+fn draw_menu(builder: &mut Builder<'_, '_, '_>, preferences: &Preferences, renderer: String) {
     let lang = builder.lang;
     builder.panel(rect(64.0, 65.0, 535.0, 775.0));
     builder.label(
@@ -682,11 +684,26 @@ fn draw_menu(builder: &mut Builder<'_, '_, '_>, preferences: &Preferences) {
         None,
     );
     builder.label(
-        rect(100.0, 798.0, 460.0, 28.0),
+        rect(100.0, 798.0, 270.0, 28.0),
         14.0,
         crate::build_info::menu_label(),
         None,
     );
+    let renderer_label = builder.label(rect(375.0, 798.0, 185.0, 28.0), 14.0, renderer, None);
+    builder
+        .commands
+        .entity(renderer_label)
+        .insert(TextLayout::justify(Justify::Right));
+}
+
+fn renderer_label(adapter: &RenderAdapterInfo) -> String {
+    let backend = format!("{:?}", adapter.backend);
+    let name = match backend.as_str() {
+        "Dx12" => "DX12",
+        "Gl" => "OpenGL",
+        name => name,
+    };
+    format!("Renderer: {name}")
 }
 
 fn draw_pause(builder: &mut Builder<'_, '_, '_>) {
