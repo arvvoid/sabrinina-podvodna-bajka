@@ -221,6 +221,51 @@ fn close_wave_hits_visible_body_including_tentacles_and_pushes_in_real_steps() {
 }
 
 #[test]
+fn wave_hits_visitors_touching_or_overlapping_sabrina_in_front_of_her_chest() {
+    // (speed, pitch, jellyfish offset): overlapping her body, on her head,
+    // under her torso, and on her outstretched hands while diving.
+    let cases = [
+        (0.0, 0.0, v(0.0, 0.0)),
+        (0.0, 0.0, v(-0.25, 1.0)),
+        (0.0, 0.0, v(0.0, -2.0)),
+        (3.0, 0.0, v(0.25, 2.0)),
+        (3.0, -0.6, v(3.0, -1.75)),
+    ];
+    for side in [-1.0f32, 1.0] {
+        for (speed, pitch, offset) in cases {
+            let mut world = encounter(true);
+            world.sabrina.motion.pos = v(0.0, 8.0);
+            world.sabrina.swimming.facing = side;
+            world.sabrina.swimming.yaw = if side < 0.0 {
+                std::f32::consts::PI
+            } else {
+                0.0
+            };
+            world.sabrina.swimming.pitch = pitch;
+            world.sabrina.motion.velocity = v(side * pitch.cos(), pitch.sin()) * speed;
+            world.jelly[0].motion.pos = world.sabrina.motion.pos + v(offset.x * side, offset.y);
+            let mut events = Events::default();
+            water_wave(
+                &mut world,
+                1.0 / 60.0,
+                Input {
+                    wave: true,
+                    ..Input::default()
+                },
+                &mut events,
+            );
+            for _ in 0..50 {
+                water_wave(&mut world, 1.0 / 60.0, Input::default(), &mut events);
+            }
+            assert_eq!(
+                world.jelly[0].behaviour.health, 90.0,
+                "side {side}, speed {speed}, pitch {pitch}, offset {offset:?}"
+            );
+        }
+    }
+}
+
+#[test]
 fn returned_crystal_orbits_while_cooldown_still_blocks_casts() {
     let mut world = encounter(true);
     world.crystal.magic.state = Spell::Returning;
@@ -378,7 +423,8 @@ fn actual_wave_rescue_needs_an_endangered_fish_that_survives() {
     for survived in [false, true] {
         let mut world = encounter(true);
         world.sabrina.motion.pos = v(0.0, 8.0);
-        world.jelly[0].motion.pos = v(0.0, 8.5);
+        // Behind Sabrina, so only the rescue (not a wave hit) can score.
+        world.jelly[0].motion.pos = v(-1.5, 8.5);
         world.fish[0].motion.pos = v(2.0, 8.5);
         let mut events = Events::default();
         water_wave(

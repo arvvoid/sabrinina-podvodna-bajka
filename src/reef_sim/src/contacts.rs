@@ -206,6 +206,12 @@ pub fn sabrina_body(sabrina: &SabrinaEntity) -> [Capsule; 16] {
     body
 }
 
+/// Head, torso and both arms: the parts that push water during a wave.
+pub fn sabrina_upper_body(sabrina: &SabrinaEntity) -> [Capsule; 6] {
+    let body = sabrina_body(sabrina);
+    [body[0], body[1], body[12], body[13], body[14], body[15]]
+}
+
 pub fn jelly_scale(jellyfish: &JellyEntity) -> f32 {
     0.95 + 0.9 * (1.0 - (-0.07 * jellyfish.behaviour.eaten as f32).exp())
 }
