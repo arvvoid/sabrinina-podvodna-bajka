@@ -97,7 +97,7 @@ cargo run --locked --release -p sabrina
 | Android (planned) | Vulkan | No mobile export available yet | Not tested |
 | iOS (planned) | Metal | No mobile export available yet | Not tested |
 
-The graphics backend defaults to Direct3D 12 on Windows, Vulkan on Linux and Metal on macOS. Backend flags allow testing alternatives: Windows accepts `--dx12`, `--vulkan` and `--opengl`; macOS accepts `--metal`, `--vulkan` and `--opengl`; Linux accepts `--vulkan` and `--opengl`. `--opengl` selects wgpu's GL/GLES backend and requires a compatible OpenGL driver; on Unix-like systems it also requires an available EGL implementation. A backend flag not supported on the current platform is ignored with a warning and the platform default is used. An explicitly selected backend still requires a compatible graphics driver and device; if it cannot initialize, the game does not silently switch backends. There is no automatic OpenGL fallback, and `WGPU_BACKEND` does not override this selection.
+Defaults are Direct3D 12 on Windows, Vulkan on Linux and Metal on macOS. See the runtime-options table for supported overrides. An unsupported flag warns and uses the platform default; if a selected backend cannot initialize, the game does not silently switch. `WGPU_BACKEND` does not override the selection. OpenGL requires a compatible driver and, on Unix-like systems, an available EGL implementation.
 
 Windows x86_64 MSVC builds embed the modern DXC shader compiler in the executable. No separate `dxcompiler.dll` or installed Windows SDK is needed to play. This avoids the legacy FXC rendering path, which produced dark silhouettes on the tested NVIDIA Windows machine. To build on Windows, install Rust and Visual Studio's **Desktop development with C++** workload, including a Windows SDK and the **C++ ATL for latest build tools** component, then run the Cargo command above in PowerShell.
 
@@ -109,22 +109,31 @@ All runtime assets are embedded at compile time: the executable runs without an 
 
 ### Runtime options
 
-Pass options after the executable name, for example `./tools/run.sh --vulkan --capture-school --fullhd`.
+Pass flags after the executable name, for example `./tools/run.sh --vulkan --capture-school --fullhd`.
 
-| Option | Description |
+| Flag / setting | Explanation |
 |---|---|
-| `--dx12` | Select Direct3D 12 on Windows. This is already the Windows default; ignored on other platforms. |
-| `--vulkan` | Select Vulkan on Windows or macOS for backend testing; it is the Linux default. |
-| `--metal` | Select Metal on macOS. This is already the macOS default; ignored on other platforms. |
-| `--opengl` | Select wgpu's GL/GLES backend where supported, for backend testing only. Requires a compatible driver and, on Unix-like systems, EGL. |
-| `--direct-draw` | Disable Bevy's indirect drawing for the scene camera and use regular draw calls. Diagnostic A/B option; indirect drawing remains the default. |
-| `--fullhd` | Use a 1920×1080 window instead of the default 1280×720. |
-| `--verify-input` | Run with a fixed 60 Hz time step for deterministic input verification; opens in a window instead of fullscreen. |
-| `--capture-<name>` | Run a visual/test scene; see the capture groups below. Captures do not save preferences. |
+| `--dx12` | Use Direct3D 12 on Windows (the default); ignored elsewhere. |
+| `--vulkan` | Use Vulkan on Linux (default), or as a test override on Windows and macOS. |
+| `--metal` | Use Metal on macOS (the default); ignored elsewhere. |
+| `--opengl` | Use wgpu's GL/GLES backend on Windows, Linux and macOS for testing; requires a compatible driver and, on Unix-like systems, EGL. |
+| `--direct-draw` | Use regular draw calls instead of Bevy's indirect drawing for A/B performance testing. |
+| `--fullhd` | Use 1920×1080 instead of the default 1280×720 window resolution. |
+| `--verify-input` | Use a fixed 60 Hz time step for deterministic input verification; opens windowed. |
+| `--capture-game`, `--capture-visit`, `--capture-crystal`, `--capture-throw`, `--capture-wave`, `--capture-song`, `--capture-combat`, `--capture-finale` | Capture gameplay scenes; `finale` shows the final four-visitor round. |
+| `--capture-school` | Run the 72-fish stress scene and report frame times and per-pass CPU/GPU timings. Add `--fullhd` for 1080p. |
+| `--capture-boot`, `--capture-menu`, `--capture-settings`, `--capture-language`, `--capture-help`, `--capture-credits`, `--capture-victory` | Capture the named screen. |
+| `--capture-graphics-low`, `--capture-graphics-balanced`, `--capture-graphics-high` | Capture graphics-quality settings. |
+| `--capture-pose-idle`, `--capture-pose-<name>`, `--capture-rig` | Capture Sabrina's idle pose, a named animation pose, or the character rig. |
+| `--capture-xbox`, `--capture-playstation`, `--capture-generic-pad` | Preview controller hints using a synthetic controller. |
+| `--capture-occlusion`, `--capture-occlusion-solid` | Compare the foreground reef reveal with the solid-reef view. |
+| `--capture-hr-<name>`, `--capture-it-<name>` | Capture any supported scene in Croatian or Italian. |
+| `--capture-demo` | Run a seeded, scripted 20-second gameplay scene for recording; it does not record video. |
+| `SABRINA_ASSETS=/path/to/assets` | Load an external asset directory instead of embedded assets. |
+| `SABRINA_CAPTURE_AA=fxaa` | Enable FXAA in captures. |
+| `SABRINA_BUILD_JOBS=4` | Limit build-script compilation parallelism. |
 
-Capture names include `game`, `visit`, `crystal`, `throw`, `wave`, `song`, `combat`, `finale`, `school`; `boot`, `menu`, `settings`, `language`, `help`, `credits`, `victory`; `graphics-low`, `graphics-balanced`, `graphics-high`; `pose-idle`, other `pose-<name>` animation previews, and `rig`; `xbox`, `playstation`, `generic-pad`; and `occlusion` or `occlusion-solid`. Prefix a capture name with `hr-` or `it-` for Croatian or Italian, for example `--capture-hr-boot`. `--capture-school --fullhd` runs the 72-fish stress scene and reports frame times plus per-pass CPU/GPU timings. Captures are saved to the system temporary directory. `--capture-demo` runs a seeded, scripted 20-second scene for recording; it does not record video itself.
-
-For development, `SABRINA_ASSETS=/absolute/path/to/assets` loads an external asset directory instead of the embedded assets, and `SABRINA_CAPTURE_AA=fxaa` enables FXAA in captures. `SABRINA_BUILD_JOBS=4` limits build-script compilation parallelism.
+Captures are saved to the system temporary directory and do not save preferences.
 
 ## Tagged releases
 
