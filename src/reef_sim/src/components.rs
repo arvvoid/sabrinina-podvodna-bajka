@@ -254,7 +254,8 @@ component!(SabrinaEntity {
     song: Song = Song::default(),
     wave: WaterWave = WaterWave::default(),
     cooldown: f32 = 0.0,
-    throw_time: f32 = -1.0
+    throw_time: f32 = -1.0,
+    throw_direction: V2 = v(1.0, 0.0)
 });
 component!(Settings {
     gentle: bool = true,

@@ -9,7 +9,7 @@ import sys
 import bpy
 
 ROOT = Path(__file__).resolve().parents[2]
-CLIPS = ["Idle", "Swim", "Turn_Left", "Turn_Right", "Sing", "Wave", "Hurt", "Throw"]
+CLIPS = ["Idle", "Swim", "Turn_Left", "Turn_Right", "Sing", "Wave", "Hurt", "Throw", "Dive"]
 SAMPLES = 32
 
 
@@ -48,6 +48,7 @@ def export_contacts(rig):
             clips.append(poses)
         data = {
             "palm_offset": round(rig.data.bones["Hand_R"].length * 0.5, 8),
+            "tail_length_scale": rig["tail_length_scale"],
             "clips": CLIPS,
             "arms": clips,
         }

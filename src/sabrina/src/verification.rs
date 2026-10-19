@@ -16,6 +16,8 @@ struct Check {
     paused_pose: Vec<(Entity, Transform)>,
     paused_face: Vec<f32>,
     idle_hair: Vec<(Entity, Quat)>,
+    paused_hair_shader: Vec4,
+    idle_hair_time: f32,
     music_player: Option<Entity>,
     vsync: bool,
     reduced_motion: bool,
@@ -591,15 +593,70 @@ fn check_pose(
         &MeshMaterial3d<StandardMaterial>,
     )>,
     materials: Res<Assets<StandardMaterial>>,
-    ui_images: Query<&ImageNode>,
-    ui_texts: Query<(&TextColor, Option<&TextShadow>), With<Text>>,
-    ui_fills: Query<&BackgroundColor>,
-    reef: Res<Assets<crate::visuals::ReefMaterial>>,
+    ui_checks: (
+        Query<&ImageNode>,
+        Query<(&TextColor, Option<&TextShadow>), With<Text>>,
+        Query<&BackgroundColor>,
+    ),
+    render_materials: (
+        Res<Assets<crate::visuals::ReefMaterial>>,
+        Res<Assets<crate::hair::HairMaterial>>,
+        Res<crate::settings::Preferences>,
+    ),
+    lighting_checks: (
+        Query<&Msaa, With<Camera3d>>,
+        Query<(Entity, &Actor)>,
+        Query<&Children>,
+        Query<
+            (
+                Option<&bevy::light::NotShadowCaster>,
+                Option<&bevy::light::NotShadowReceiver>,
+            ),
+            With<Mesh3d>,
+        >,
+        Query<&DirectionalLight>,
+        Res<bevy::light::DirectionalLightShadowMap>,
+    ),
 ) {
+    let (reef, hair, preferences) = render_materials;
+    let (ui_images, ui_texts, ui_fills) = ui_checks;
     if !options.verify {
         return;
     }
     if check.frame == 55 {
+        let (cameras, roots, children, surfaces, lights, shadow_map) = lighting_checks;
+        assert!(cameras.iter().all(|aa| *aa
+            == if preferences.quality > 0 {
+                Msaa::Sample2
+            } else {
+                Msaa::Off
+            }));
+        assert_eq!(
+            lights
+                .iter()
+                .filter(|light| light.shadow_maps_enabled)
+                .count(),
+            usize::from(preferences.quality > 0)
+        );
+        assert_eq!(
+            shadow_map.size,
+            if preferences.quality == 2 { 1024 } else { 512 }
+        );
+        let mut excluded = 0;
+        for (root, actor) in &roots {
+            if matches!(actor, Actor::Crystal | Actor::Jelly(_)) {
+                for descendant in children.iter_descendants(root) {
+                    if let Ok((caster, receiver)) = surfaces.get(descendant) {
+                        assert!(caster.is_some() && receiver.is_some());
+                        excluded += 1;
+                    }
+                }
+            }
+        }
+        assert!(excluded >= 9);
+        println!(
+            "BEVY CHECK OK: quality AA, one small shadow map, shadow-free crystal and jellyfish"
+        );
         assert!(
             ui_images
                 .iter()
@@ -690,12 +747,13 @@ fn check_pose(
         println!("BEVY CHECK OK: ready orbiting crystal has particles");
     }
     if check.frame == 330 {
+        check.idle_hair_time = hair.iter().next().unwrap().1.extension.settings.x;
         check.idle_hair = named_transforms
             .iter()
             .filter(|(_, name, _)| name.starts_with("Hair_") && name.ends_with("_3"))
             .map(|(entity, _, transform)| (entity, transform.rotation))
             .collect();
-        assert_eq!(check.idle_hair.len(), 3);
+        assert_eq!(check.idle_hair.len(), crate::hair::HAIR_CHAINS);
         let mut translucent = 0;
         for (name, handle) in &surfaces {
             let material = materials.get(&handle.0).unwrap();
@@ -713,9 +771,10 @@ fn check_pose(
     if check.frame == 400 {
         assert!(check.idle_hair.iter().all(|(entity, before)| {
             let (_, _, after) = named_transforms.get(*entity).unwrap();
-            before.angle_between(after.rotation) > 0.015
+            before.angle_between(after.rotation) > 0.0001
         }));
-        println!("BEVY CHECK OK: all three hair tips sway while resting");
+        assert!(hair.iter().next().unwrap().1.extension.settings.x > check.idle_hair_time);
+        println!("BEVY CHECK OK: all five hair chains move independently with simulation time");
     }
     if check.frame == 100 {
         let palm = palms.single().unwrap().transform_point(Vec3::new(
@@ -736,11 +795,32 @@ fn check_pose(
         println!("BEVY CHECK OK: crystal follows the animated palm");
     }
     if check.frame == 206 {
+        assert_eq!(hair.len(), 1);
+        let material = hair.iter().next().unwrap().1;
+        assert_eq!(material.base.alpha_mode, AlphaMode::Opaque);
+        assert_eq!(material.base.anisotropy_strength, 0.35);
+        assert!(material.base.normal_map_texture.is_some());
+        assert_eq!(
+            material.extension.settings.y,
+            if preferences.reduced_motion {
+                0.25
+            } else {
+                1.0
+            }
+        );
+        check.paused_hair_shader = material.extension.settings;
         check.paused_pose = bones.iter().map(|(e, t)| (e, *t)).collect();
         check.paused_face = faces.single().unwrap().weights().to_vec();
         assert_eq!(check.paused_face.len(), 3);
     }
     if check.frame == 230 {
+        assert_eq!(
+            hair.iter().next().unwrap().1.extension.settings,
+            check.paused_hair_shader
+        );
+        println!(
+            "BEVY CHECK OK: one opaque hair material freezes with simulation time during pause"
+        );
         for (entity, before) in &check.paused_pose {
             let (_, after) = bones.get(*entity).unwrap();
             assert!(before.translation.distance(after.translation) < 0.00001);

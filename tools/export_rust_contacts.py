@@ -23,14 +23,16 @@ def export(check=False):
         "Wave",
         "Hurt",
         "Throw",
+        "Dive",
     ]
-    assert len(data["arms"]) == 8
+    assert len(data["arms"]) == 9
     lines = [
         "// Copyright (c) 2026 Luka Dežulović",
         "// SPDX-License-Identifier: Apache-2.0",
         "// Baked Blender poses; regenerate with tools/export_rust_contacts.py.",
         f"pub const PALM_OFFSET: f32 = {data['palm_offset']:.8f};",
-        "pub static ARMS: [[[[f32; 3]; 7]; 32]; 8] = [",
+        f"pub const TAIL_LENGTH_SCALE: f32 = {data['tail_length_scale']:.6f};",
+        "pub static ARMS: [[[[f32; 3]; 7]; 32]; 9] = [",
     ]
     for clip in data["arms"]:
         assert len(clip) == 32

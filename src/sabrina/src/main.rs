@@ -13,6 +13,7 @@ mod audio;
 
 mod build_info;
 mod controls;
+mod hair;
 
 mod embedded_assets;
 
@@ -145,6 +146,7 @@ fn main() {
             bevy::diagnostic::FrameTimeDiagnosticsPlugin::default(),
             app::GamePlugin,
             assets::CharacterPlugin,
+            hair::HairPlugin,
             visuals::ReefPlugin,
             ui::ReefUiPlugin,
             audio::ReefAudioPlugin,

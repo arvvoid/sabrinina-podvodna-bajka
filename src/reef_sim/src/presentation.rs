@@ -38,6 +38,7 @@ pub fn interpolate(previous: &World, current: &World, alpha: f32) -> World {
         b.song.energy = mix(a.song.energy, b.song.energy, t);
         if a.throw_time >= 0.0 && b.throw_time >= 0.0 {
             b.throw_time = mix(a.throw_time, b.throw_time, t);
+            b.throw_direction = vector(a.throw_direction, b.throw_direction, t).unit();
         }
         if a.wave.active && b.wave.active && a.wave.cast_id == b.wave.cast_id {
             b.wave.time = mix(a.wave.time, b.wave.time, t);

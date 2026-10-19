@@ -55,6 +55,7 @@ pub fn crystal(world: &mut World, dt: f32, input: Input, events: &mut Events) {
             0.0
         };
         world.crystal.magic.aim = v(world.sabrina.swimming.facing * pitch.cos(), pitch.sin());
+        world.sabrina.throw_direction = world.crystal.magic.aim;
         let mut closest = 1000.0;
         for jellyfish in world.jelly.iter().filter(|_| world.settings.gentle) {
             if matches!(
@@ -81,6 +82,10 @@ pub fn crystal(world: &mut World, dt: f32, input: Input, events: &mut Events) {
             world.crystal.magic.depth = o.depth;
         }
         Spell::Charging => {
+            if let Some(target) = find_jelly(world, world.crystal.magic.target) {
+                world.sabrina.throw_direction =
+                    (target.motion.pos - world.sabrina.motion.pos).unit();
+            }
             let mut gather = (world.crystal.magic.time / 0.4).clamp(0.0, 1.0);
             gather = gather * gather * (3.0 - 2.0 * gather);
             let palm = sabrina_palm(&world.sabrina);

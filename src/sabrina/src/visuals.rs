@@ -191,11 +191,7 @@ fn setup(
         bevy::core_pipeline::prepass::DepthPrepass,
         Tonemapping::Reinhard,
         ShadowFilteringMethod::Gaussian,
-        if preferences.quality == 2 {
-            Msaa::Sample2
-        } else {
-            Msaa::Off
-        },
+        quality_msaa(preferences.quality),
         Fxaa {
             enabled: false,
             ..default()
@@ -550,8 +546,8 @@ fn actors(
                     s.motion.pos.y + 0.07 * (t * 1.8).sin() * motion,
                     0.5,
                 );
-                next.rotation =
-                    Quat::from_rotation_y(s.swimming.yaw) * Quat::from_rotation_z(s.swimming.pitch);
+                next.rotation = Quat::from_rotation_y(sim::sabrina_visual_yaw(s))
+                    * Quat::from_rotation_z(s.swimming.pitch);
                 let pulse = if s.vitality.invulnerable > 0.0 {
                     0.94 + 0.06 * (t * 5.0).sin()
                 } else {
@@ -972,11 +968,19 @@ fn uses_clock(kind: f32) -> bool {
     matches!(kind as i32, 0 | 1 | 2 | 3 | 7)
 }
 // Preserve total sunlight when changing shadow strength. Balanced contributes
-// only 12% shadowed light; broad fill keeps faces readable in the reef's shade.
+// only 18% shadowed light; broad fill keeps faces readable in the reef's shade.
 
 fn sunlight_weight(shadow_layer: bool, quality: u8) -> f32 {
-    let shadow = if quality == 2 { 0.22 } else { 0.12 };
+    let shadow = if quality == 2 { 0.22 } else { 0.18 };
     if shadow_layer { shadow } else { 1.0 - shadow }
+}
+
+fn quality_msaa(quality: u8) -> Msaa {
+    if quality > 0 {
+        Msaa::Sample2
+    } else {
+        Msaa::Off
+    }
 }
 
 fn lighting(
@@ -1013,15 +1017,16 @@ fn lighting(
     }
     for (mut fxaa, mut msaa) in &mut cameras {
         let probe_fxaa = options.capture.is_some() && options.capture_fxaa;
-        let enabled = preferences.quality == 2 && probe_fxaa;
-        let samples = if preferences.quality == 2 && !probe_fxaa {
-            Msaa::Sample2
-        } else {
+        let enabled = preferences.quality > 0 && probe_fxaa;
+        let samples = if probe_fxaa {
             Msaa::Off
+        } else {
+            quality_msaa(preferences.quality)
         };
         if *msaa != samples {
             *msaa = samples;
         }
+
         if fxaa.enabled != enabled {
             fxaa.enabled = enabled;
         }
@@ -1067,7 +1072,7 @@ fn capture(
         return;
     }
     *elapsed += time.delta_secs();
-    let deadline = if options.school || kind == "demo" {
+    let deadline = if options.school || kind == "demo" || kind == "pose-stroke" {
         20.0
     } else {
         4.0
@@ -1155,5 +1160,24 @@ fn crystal_light(
             0.0,
             0.0,
         );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn balanced_has_low_cost_aa_and_conservative_shadows() {
+        assert_eq!(quality_msaa(0), Msaa::Off);
+        assert_eq!(quality_msaa(1), Msaa::Sample2);
+        assert_eq!(quality_msaa(2), Msaa::Sample2);
+        assert_eq!(sunlight_weight(true, 1), 0.18);
+        for quality in 0..=2 {
+            assert_eq!(
+                sunlight_weight(true, quality) + sunlight_weight(false, quality),
+                1.0
+            );
+        }
     }
 }

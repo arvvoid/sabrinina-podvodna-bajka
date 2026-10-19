@@ -39,6 +39,8 @@ bpy.ops.export_scene.gltf(
     export_animation_mode="ACTIONS",
     export_anim_single_armature=True,
     export_skins=True,
+    export_tangents=asset == "sabrina",
+    export_optimize_animation_keep_anim_armature=asset != "sabrina",
     export_def_bones=True,
     export_force_sampling=True,
     export_frame_range=False,

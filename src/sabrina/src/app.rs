@@ -318,7 +318,9 @@ fn tick(
     if !ui.loaded
         || ui.paused()
         || options.capture.as_deref().is_some_and(|k| {
-            k.starts_with("graphics-") || (k.starts_with("pose-") && k != "pose-idle") || k == "rig"
+            k.starts_with("graphics-")
+                || (k.starts_with("pose-") && k != "pose-idle" && k != "pose-stroke")
+                || k == "rig"
         })
     {
         return;
@@ -359,6 +361,9 @@ fn tick(
     if options.capture.as_deref() == Some("pose-idle") {
         input.movement = sim::v(0.0, 0.0);
     }
+    if options.capture.as_deref() == Some("pose-stroke") {
+        input.movement = sim::v(0.65, 0.0);
+    }
     // Consume one-shot actions once, even when a rendered frame runs several ticks.
     pending.0.cast = false;
     pending.0.wave = false;
@@ -366,6 +371,9 @@ fn tick(
     simulation.0.settings.reduced_motion = prefs.reduced_motion;
     previous.0 = Some(simulation.0.clone());
     let frame_events = sim::step(&mut simulation.0, 1.0 / 60.0, input);
+    if options.capture.as_deref() == Some("pose-stroke") {
+        simulation.0.sabrina.motion.pos = sim::v(0.0, 8.0);
+    }
     if frame_events.visit_ended {
         ui.score_time = 10.0;
         prefs.best = prefs.best.max(simulation.0.points.best_score);

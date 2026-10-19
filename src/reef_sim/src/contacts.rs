@@ -71,7 +71,7 @@ fn fallback(a: usize, b: usize) -> V2 {
     v(angle.cos(), angle.sin())
 }
 
-fn arm_sample(sabrina: &SabrinaEntity, index: usize) -> [f32; 3] {
+fn raw_arm_sample(sabrina: &SabrinaEntity, index: usize) -> [f32; 3] {
     let poses = &crate::generated_contacts::ARMS[sabrina_pose(sabrina) as usize];
     let sample = sabrina_pose_phase(sabrina) * 31.0;
     let frame = (sample as usize).min(30);
@@ -85,6 +85,34 @@ fn arm_sample(sabrina: &SabrinaEntity, index: usize) -> [f32; 3] {
     ]
 }
 
+fn arm_sample(sabrina: &SabrinaEntity, index: usize) -> [f32; 3] {
+    let point = raw_arm_sample(sabrina, index);
+    let (axis, angle) = sabrina_cast_rotation(sabrina);
+    if angle == 0.0 {
+        return point;
+    }
+    // Samples are left shoulder/elbow/hand, right shoulder/elbow/hand, right palm.
+    let shoulder = raw_arm_sample(sabrina, if index < 3 { 0 } else { 3 });
+    let offset = [
+        point[0] - shoulder[0],
+        point[1] - shoulder[1],
+        point[2] - shoulder[2],
+    ];
+    let cross = [
+        axis[1] * offset[2] - axis[2] * offset[1],
+        axis[2] * offset[0] - axis[0] * offset[2],
+        axis[0] * offset[1] - axis[1] * offset[0],
+    ];
+    let dot = axis[0] * offset[0] + axis[1] * offset[1] + axis[2] * offset[2];
+    // Rodrigues' formula rotates about the shoulder, matching the rendered arm.
+    std::array::from_fn(|i| {
+        shoulder[i]
+            + offset[i] * angle.cos()
+            + cross[i] * angle.sin()
+            + axis[i] * dot * (1.0 - angle.cos())
+    })
+}
+
 pub fn sabrina_palm_offset() -> f32 {
     crate::generated_contacts::PALM_OFFSET
 }
@@ -92,13 +120,10 @@ pub fn sabrina_palm_offset() -> f32 {
 pub fn sabrina_palm(sabrina: &SabrinaEntity) -> CrystalOrbit {
     let [x, y, z] = arm_sample(sabrina, 6);
     let xy = v(x, y).rotate(sabrina.swimming.pitch);
+    let yaw = sabrina_visual_yaw(sabrina);
     CrystalOrbit {
-        offset: sabrina.motion.pos
-            + v(
-                xy.x * sabrina.swimming.yaw.cos() + z * sabrina.swimming.yaw.sin(),
-                xy.y,
-            ),
-        depth: 0.5 - xy.x * sabrina.swimming.yaw.sin() + z * sabrina.swimming.yaw.cos(),
+        offset: sabrina.motion.pos + v(xy.x * yaw.cos() + z * yaw.sin(), xy.y),
+        depth: 0.5 - xy.x * yaw.sin() + z * yaw.cos(),
     }
 }
 
@@ -113,9 +138,10 @@ pub fn fish_body(fish: &FishEntity) -> Capsule {
 }
 
 pub fn sabrina_body(sabrina: &SabrinaEntity) -> [Capsule; 16] {
+    let yaw = sabrina_visual_yaw(sabrina);
     let point = |p: V2| {
         let p = p.rotate(sabrina.swimming.pitch);
-        sabrina.motion.pos + v(p.x * sabrina.swimming.yaw.cos(), p.y)
+        sabrina.motion.pos + v(p.x * yaw.cos(), p.y)
     };
     let shape = |a, b, r| cap(point(a), point(b), r);
     let mut body = [Capsule::default(); 16];
@@ -153,7 +179,8 @@ pub fn sabrina_body(sabrina: &SabrinaEntity) -> [Capsule; 16] {
             0.0
         } * resting;
         angle += effort * (0.13 + 0.028 * i as f32) * (phase - i as f32 * 0.72).sin();
-        let next = end + (rest[i + 1] - rest[i]).rotate(angle);
+        let next = end
+            + (rest[i + 1] - rest[i]).rotate(angle) * crate::generated_contacts::TAIL_LENGTH_SCALE;
         body[i + 2] = shape(end, next, radii[i]);
         end = next;
     }
@@ -161,19 +188,16 @@ pub fn sabrina_body(sabrina: &SabrinaEntity) -> [Capsule; 16] {
     let tip = fan + 0.20 * effort * (phase - 4.7).sin();
     for side in 0..2 {
         let sign = if side == 0 { 1.0 } else { -1.0 };
-        let middle = end + v(-0.4224, sign * 0.4224).rotate(fan);
-        let edge = middle + v(-0.38016, sign * 0.2112).rotate(tip);
+        let length = crate::generated_contacts::TAIL_LENGTH_SCALE;
+        let middle = end + v(-0.4224 * length, sign * 0.4224).rotate(fan);
+        let edge = middle + v(-0.38016 * length, sign * 0.2112).rotate(tip);
         body[8 + side * 2] = shape(end, middle, 0.22);
         body[9 + side * 2] = shape(middle, edge, 0.20);
     }
     let arm_point = |index| {
         let [x, y, z] = arm_sample(sabrina, index);
         let xy = v(x, y).rotate(sabrina.swimming.pitch);
-        sabrina.motion.pos
-            + v(
-                xy.x * sabrina.swimming.yaw.cos() + z * sabrina.swimming.yaw.sin(),
-                xy.y,
-            )
+        sabrina.motion.pos + v(xy.x * yaw.cos() + z * yaw.sin(), xy.y)
     };
     for side in 0..2 {
         body[12 + side * 2] = cap(arm_point(side * 3), arm_point(side * 3 + 1), 0.16);
