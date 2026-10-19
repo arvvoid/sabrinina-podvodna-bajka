@@ -4,7 +4,7 @@
 use crate::{
     app::{self, Options, PendingInput, Screen, SessionUi, Simulation},
     audio::AudioRequests,
-    controls::{Control, Hints, Style},
+    controls::{Control, Direction, Hints, MenuNavigation, Style},
     settings::Preferences,
 };
 use bevy::{
@@ -89,6 +89,7 @@ enum Action {
     Fps,
     Quality,
     Motion,
+    Rumble,
     Gentle,
     Visitors,
     Done,
@@ -128,7 +129,8 @@ struct Focus {
     key: String,
     last_screen: Option<Screen>,
     count: usize,
-    stick_wait: f32,
+    navigation: MenuNavigation,
+    controller: Option<Entity>,
 }
 
 pub struct ReefUiPlugin;
@@ -141,7 +143,9 @@ impl Plugin for ReefUiPlugin {
             .add_systems(Update, update_fps)
             .add_systems(
                 PreUpdate,
-                crate::controls::update.after(bevy::input::InputSystems),
+                crate::controls::update
+                    .after(bevy::input::InputSystems)
+                    .before(crate::app::input),
             )
             .add_systems(PreUpdate, actions.after(crate::app::input))
             .add_systems(
@@ -458,7 +462,7 @@ fn draw(
     scale.0 = zoom;
     // Rebuild only when layout or settings change; HUD values update separately.
     let key = format!(
-        "{:?}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{:?}:{}",
+        "{:?}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{:?}:{}:{}",
         ui.screen,
         preferences.language,
         preferences.quality,
@@ -475,7 +479,8 @@ fn draw(
         window.width(),
         window.height(),
         hints.style,
-        preferences.show_fps
+        preferences.show_fps,
+        preferences.rumble
     );
     if key == focus.key {
         return;
@@ -484,6 +489,7 @@ fn draw(
     if focus.last_screen != Some(ui.screen) {
         focus.index = 0;
         focus.last_screen = Some(ui.screen);
+        focus.navigation.reset();
     }
     for root in &roots {
         commands.entity(root).despawn();
@@ -854,6 +860,19 @@ fn draw_settings(builder: &mut Builder<'_, '_, '_>, preferences: &Preferences) {
         Action::Vsync,
         false,
     );
+    builder.button(
+        rect(315.0, 725.0, 450.0, 58.0),
+        &format!(
+            "{}{}",
+            tr("Rumble: ", lang),
+            tr(
+                ["off", "Gentle", "Normal"][preferences.rumble.min(2) as usize],
+                lang
+            )
+        ),
+        Action::Rumble,
+        false,
+    );
     builder.button(rect(815.0, 725.0, 465.0, 58.0), "Done", Action::Done, true);
 }
 
@@ -1004,10 +1023,36 @@ fn draw_victory(builder: &mut Builder<'_, '_, '_>) {
     );
 }
 
+fn neighbor<'a>(current: &Hit, direction: Direction, hits: impl Iterator<Item = &'a Hit>) -> usize {
+    let axis = direction.vector() * Vec2::new(1.0, -1.0);
+    let center = |r: Rect| Vec2::new(r.x + r.w * 0.5, r.y + r.h * 0.5);
+    hits.filter(|hit| hit.index != current.index)
+        .filter_map(|hit| {
+            let delta = center(hit.rect) - center(current.rect);
+            let along = delta.dot(axis);
+            if along <= 1.0 {
+                return None;
+            }
+            let across = if axis.x == 0.0 {
+                (delta.x.abs() - (hit.rect.w + current.rect.w) * 0.5).max(0.0)
+            } else {
+                (delta.y.abs() - (hit.rect.h + current.rect.h) * 0.5).max(0.0)
+            };
+            Some((hit.index, across, delta.length_squared()))
+        })
+        .min_by(|a, b| {
+            a.1.total_cmp(&b.1)
+                .then(a.2.total_cmp(&b.2))
+                .then(a.0.cmp(&b.0))
+        })
+        .map_or(current.index, |(index, _, _)| index)
+}
+
 fn actions(
     keys: Res<ButtonInput<KeyCode>>,
     mouse: Res<ButtonInput<MouseButton>>,
     pads: Query<&Gamepad>,
+    hints: Res<Hints>,
     mut window: Single<&mut Window, With<PrimaryWindow>>,
     hits: Query<&Hit>,
     mut focus: ResMut<Focus>,
@@ -1018,9 +1063,31 @@ fn actions(
     mut audio: ResMut<AudioRequests>,
     options: Res<Options>,
     mut exit: MessageWriter<AppExit>,
-    time: Res<Time>,
+    time: Res<Time<Real>>,
 ) {
     if options.capture.is_some() {
+        return;
+    }
+    if !window.focused && !options.verify {
+        focus.navigation.reset();
+        pending.0 = reef_sim::Input::default();
+        return;
+    }
+    if focus.last_screen != Some(ui.screen) {
+        focus.navigation.reset();
+        return;
+    }
+    if focus.controller != hints.active {
+        focus.controller = hints.active;
+        focus.navigation.reset();
+    }
+    let pad = hints.active.and_then(|entity| pads.get(entity).ok());
+    if ui.screen != Screen::Playing && pad.is_some_and(|pad| pad.just_pressed(GamepadButton::East))
+    {
+        app::pause(&mut ui);
+        pending.0 = reef_sim::Input::default();
+        audio.stop_voice = true;
+        preferences.save();
         return;
     }
     let zoom = (window.width() / CANVAS_WIDTH).min(window.height() / CANVAS_HEIGHT);
@@ -1031,46 +1098,39 @@ fn actions(
                 (window.height() / zoom - CANVAS_HEIGHT) / 2.0,
             )
     });
-    let mut next = keys.just_pressed(KeyCode::Tab) || keys.just_pressed(KeyCode::ArrowDown);
-    let mut prev = keys.just_pressed(KeyCode::ArrowUp);
-    let mut left = keys.just_pressed(KeyCode::ArrowLeft);
-    let mut right = keys.just_pressed(KeyCode::ArrowRight);
-    focus.stick_wait = (focus.stick_wait - time.delta_secs()).max(0.0);
-    let mut stick_active = false;
-    let mut activate = keys.just_pressed(KeyCode::Enter) || keys.just_pressed(KeyCode::Space);
-    for pad in &pads {
-        next |= pad.just_pressed(GamepadButton::DPadDown);
-        prev |= pad.just_pressed(GamepadButton::DPadUp);
-        activate |= pad.just_pressed(GamepadButton::South);
-        left |= pad.just_pressed(GamepadButton::DPadLeft);
-        right |= pad.just_pressed(GamepadButton::DPadRight);
-        let stick = pad.left_stick();
-        stick_active |= stick.length() > 0.55;
-        if stick.length() > 0.55 && focus.stick_wait <= 0.0 && ui.screen != Screen::Playing {
-            if stick.y.abs() > stick.x.abs() {
-                next |= stick.y < -0.55;
-                prev |= stick.y > 0.55;
+    let menu = ui.screen != Screen::Playing;
+    let activate = menu
+        && (keys.just_pressed(KeyCode::Enter)
+            || keys.just_pressed(KeyCode::Space)
+            || pad.is_some_and(|pad| pad.just_pressed(GamepadButton::South)));
+    let controller_direction = focus.navigation.update(pad, time.delta_secs());
+    let direction = [
+        (KeyCode::ArrowUp, Direction::Up),
+        (KeyCode::ArrowDown, Direction::Down),
+        (KeyCode::ArrowLeft, Direction::Left),
+        (KeyCode::ArrowRight, Direction::Right),
+    ]
+    .into_iter()
+    .find_map(|(key, dir)| keys.just_pressed(key).then_some(dir))
+    .or(controller_direction)
+    .filter(|_| menu && !activate);
+    let adjusting = hits
+        .iter()
+        .any(|hit| hit.index == focus.index && hit.slider)
+        && matches!(direction, Some(Direction::Left | Direction::Right));
+    if menu && !activate {
+        if keys.just_pressed(KeyCode::Tab) && focus.count > 0 {
+            let step = if keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight) {
+                focus.count - 1
             } else {
-                left |= stick.x < -0.55;
-                right |= stick.x > 0.55;
-            }
-            focus.stick_wait = 0.25;
-        }
-    }
-    if !stick_active {
-        focus.stick_wait = 0.0;
-    }
-    if ui.screen == Screen::Playing {
-        activate = false;
-        next = false;
-        prev = false;
-    }
-    if focus.count > 0 {
-        if next {
-            focus.index = (focus.index + 1) % focus.count;
-        }
-        if prev {
-            focus.index = (focus.index + focus.count - 1) % focus.count;
+                1
+            };
+            focus.index = (focus.index + step) % focus.count;
+        } else if !adjusting
+            && let Some(direction) = direction
+            && let Some(current) = hits.iter().find(|hit| hit.index == focus.index)
+        {
+            focus.index = neighbor(current, direction, hits.iter());
         }
     }
     let mut action = None;
@@ -1095,8 +1155,12 @@ fn actions(
             if activate && !hit.slider {
                 action = Some(hit.action)
             }
-            if hit.slider && (left || right) {
-                let delta = if right { 0.05 } else { -0.05 };
+            if hit.slider && adjusting {
+                let delta = if direction == Some(Direction::Right) {
+                    0.05
+                } else {
+                    -0.05
+                };
                 fraction = Some(
                     (match hit.action {
                         Action::Music => preferences.music,
@@ -1168,6 +1232,7 @@ fn actions(
         }
         Action::Fps => preferences.show_fps = !preferences.show_fps,
         Action::Motion => preferences.reduced_motion = !preferences.reduced_motion,
+        Action::Rumble => preferences.rumble = (preferences.rumble + 1) % 3,
         Action::Gentle => {
             preferences.gentle = !preferences.gentle;
             simulation.0.settings.gentle = preferences.gentle
@@ -1464,6 +1529,228 @@ fn update(
         let handle = server.load(format!("ui/reef_png/{file}.png"));
         if image.image != handle {
             image.image = handle;
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bevy::input::{
+        InputPlugin,
+        gamepad::{RawGamepadButtonChangedEvent, RawGamepadEvent},
+    };
+
+    fn hit(index: usize, x: f32, y: f32, slider: bool) -> Hit {
+        Hit {
+            rect: rect(x, y, 100.0, 50.0),
+            action: Action::Play,
+            index,
+            slider,
+        }
+    }
+
+    #[test]
+    fn spatial_focus_follows_rows_and_columns_without_wrapping() {
+        let hits = [
+            hit(0, 0.0, 0.0, false),
+            hit(1, 120.0, 0.0, false),
+            hit(2, 0.0, 100.0, false),
+            hit(3, 120.0, 100.0, false),
+        ];
+        assert_eq!(neighbor(&hits[0], Direction::Right, hits.iter()), 1);
+        assert_eq!(neighbor(&hits[0], Direction::Down, hits.iter()), 2);
+        assert_eq!(neighbor(&hits[3], Direction::Up, hits.iter()), 1);
+        assert_eq!(neighbor(&hits[3], Direction::Left, hits.iter()), 2);
+        assert_eq!(neighbor(&hits[0], Direction::Up, hits.iter()), 0);
+        assert_eq!(neighbor(&hits[3], Direction::Down, hits.iter()), 3);
+    }
+
+    fn input_app() -> (App, Entity) {
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, InputPlugin))
+            .add_message::<AppExit>()
+            .init_resource::<Hints>()
+            .init_resource::<PendingInput>()
+            .init_resource::<Preferences>()
+            .init_resource::<AudioRequests>()
+            .insert_resource(Options {
+                verify: true,
+                ..default()
+            })
+            .insert_resource(SessionUi {
+                screen: Screen::Menu,
+                ..default()
+            })
+            .insert_resource(Simulation(reef_sim::World::default()))
+            .insert_resource(Focus {
+                last_screen: Some(Screen::Menu),
+                count: 2,
+                ..default()
+            })
+            .add_systems(
+                PreUpdate,
+                (crate::controls::update, app::input, actions)
+                    .chain()
+                    .after(bevy::input::InputSystems),
+            );
+        app.world_mut().spawn((
+            Window {
+                focused: true,
+                ..default()
+            },
+            PrimaryWindow,
+        ));
+        let pad = app.world_mut().spawn(Gamepad::default()).id();
+        app.world_mut().spawn(hit(0, 0.0, 0.0, false));
+        app.world_mut().spawn(Hit {
+            action: Action::Settings,
+            ..hit(1, 120.0, 0.0, false)
+        });
+        app.update();
+        (app, pad)
+    }
+
+    fn button(app: &mut App, pad: Entity, button: GamepadButton, value: f32) {
+        app.world_mut()
+            .write_message(RawGamepadEvent::Button(RawGamepadButtonChangedEvent::new(
+                pad, button, value,
+            )));
+    }
+
+    #[test]
+    fn raw_dpad_and_quick_confirm_taps_reach_menu_once() {
+        let (mut app, pad) = input_app();
+        button(&mut app, pad, GamepadButton::DPadRight, 1.0);
+        button(&mut app, pad, GamepadButton::DPadRight, 0.0);
+        app.update();
+        assert_eq!(app.world().resource::<Focus>().index, 1);
+        button(&mut app, pad, GamepadButton::South, 1.0);
+        button(&mut app, pad, GamepadButton::South, 0.0);
+        app.update();
+        assert_eq!(app.world().resource::<SessionUi>().screen, Screen::Settings);
+        assert!(!app.world().resource::<PendingInput>().0.cast);
+        app.update();
+        assert_eq!(app.world().resource::<SessionUi>().screen, Screen::Settings);
+    }
+
+    #[test]
+    fn confirm_does_not_move_focus_on_a_direction_repeat() {
+        let (mut app, pad) = input_app();
+        button(&mut app, pad, GamepadButton::DPadRight, 1.0);
+        button(&mut app, pad, GamepadButton::South, 1.0);
+        app.update();
+        assert_eq!(app.world().resource::<SessionUi>().screen, Screen::Playing);
+        assert!(!app.world().resource::<PendingInput>().0.cast);
+    }
+
+    #[test]
+    fn back_returns_from_submenu_without_casting_wave() {
+        let (mut app, pad) = input_app();
+        app.world_mut().resource_mut::<SessionUi>().screen = Screen::Settings;
+        app.world_mut().resource_mut::<Focus>().last_screen = Some(Screen::Settings);
+        button(&mut app, pad, GamepadButton::East, 1.0);
+        app.update();
+        assert_eq!(app.world().resource::<SessionUi>().screen, Screen::Menu);
+        assert!(!app.world().resource::<PendingInput>().0.wave);
+    }
+
+    #[test]
+    fn screen_transition_cannot_activate_old_hits() {
+        let (mut app, pad) = input_app();
+        {
+            let mut ui = app.world_mut().resource_mut::<SessionUi>();
+            ui.screen = Screen::Playing;
+            ui.started = true;
+        }
+        app.world_mut().resource_mut::<Focus>().last_screen = Some(Screen::Playing);
+        button(&mut app, pad, GamepadButton::Start, 1.0);
+        button(&mut app, pad, GamepadButton::South, 1.0);
+        app.update();
+        assert_eq!(app.world().resource::<SessionUi>().screen, Screen::Pause);
+        assert!(!app.world().resource::<PendingInput>().0.cast);
+    }
+
+    #[test]
+    fn slider_adjustment_keeps_focus_and_each_fresh_tap_registers() {
+        let (mut app, pad) = input_app();
+        for mut hit in app
+            .world_mut()
+            .query::<&mut Hit>()
+            .iter_mut(app.world_mut())
+        {
+            if hit.index == 0 {
+                hit.action = Action::Music;
+                hit.slider = true;
+            }
+        }
+        for step in 1..=6 {
+            button(&mut app, pad, GamepadButton::DPadRight, 1.0);
+            button(&mut app, pad, GamepadButton::DPadRight, 0.0);
+            app.update();
+            assert_eq!(app.world().resource::<Focus>().index, 0);
+            assert!(
+                (app.world().resource::<Preferences>().music - (0.3 + step as f32 * 0.05)).abs()
+                    < 0.001
+            );
+        }
+    }
+
+    #[test]
+    fn newly_started_gameplay_input_is_not_discarded_with_old_menu_hits() {
+        let (mut app, pad) = input_app();
+        app.world_mut().resource_mut::<SessionUi>().screen = Screen::Playing;
+        button(&mut app, pad, GamepadButton::West, 1.0);
+        app.update();
+        assert!(app.world().resource::<PendingInput>().0.toggle_song);
+    }
+
+    #[test]
+    fn unfocused_window_ignores_controller_actions_and_clears_pending_input() {
+        let (mut app, pad) = input_app();
+        app.world_mut().resource_mut::<Options>().verify = false;
+        app.world_mut().resource_mut::<SessionUi>().pointer_mode = true;
+        for mut window in app
+            .world_mut()
+            .query::<&mut Window>()
+            .iter_mut(app.world_mut())
+        {
+            window.focused = false;
+        }
+        app.world_mut().resource_mut::<PendingInput>().0.cast = true;
+        button(&mut app, pad, GamepadButton::South, 1.0);
+        app.update();
+        assert_eq!(app.world().resource::<SessionUi>().screen, Screen::Menu);
+        assert!(!app.world().resource::<PendingInput>().0.cast);
+        assert!(!app.world().resource::<SessionUi>().pointer_mode);
+    }
+
+    #[test]
+    fn confirmation_toggles_once_per_press_not_once_per_held_frame() {
+        let (mut app, pad) = input_app();
+        for mut hit in app
+            .world_mut()
+            .query::<&mut Hit>()
+            .iter_mut(app.world_mut())
+        {
+            if hit.index == 0 {
+                hit.action = Action::Vsync;
+            }
+        }
+        button(&mut app, pad, GamepadButton::South, 1.0);
+        app.update();
+        assert!(!app.world().resource::<Preferences>().vsync);
+        for _ in 0..10 {
+            app.update();
+            assert!(!app.world().resource::<Preferences>().vsync);
+        }
+        button(&mut app, pad, GamepadButton::South, 0.0);
+        app.update();
+        for expected in [true, false, true, false, true, false] {
+            button(&mut app, pad, GamepadButton::South, 1.0);
+            button(&mut app, pad, GamepadButton::South, 0.0);
+            app.update();
+            assert_eq!(app.world().resource::<Preferences>().vsync, expected);
         }
     }
 }

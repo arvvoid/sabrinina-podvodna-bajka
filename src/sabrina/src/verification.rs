@@ -18,6 +18,8 @@ struct Check {
     idle_hair: Vec<(Entity, Quat)>,
     music_player: Option<Entity>,
     vsync: bool,
+    reduced_motion: bool,
+    rumble: u8,
 }
 
 #[derive(Component)]
@@ -32,6 +34,7 @@ impl Plugin for VerificationPlugin {
                 PreUpdate,
                 drive
                     .after(bevy::input::InputSystems)
+                    .before(crate::controls::update)
                     .before(crate::app::input),
             )
             .add_systems(
@@ -465,9 +468,108 @@ fn drive(
             assert_eq!(window.present_mode, preferences.present_mode());
             if frame == 595 {
                 println!("BEVY CHECK OK: settings V-sync button switches the present mode");
-                println!("BEVY INPUT INTEGRATION COMPLETE");
-                exit.write(AppExit::Success);
             }
+        }
+        600 => {
+            commands
+                .entity(test_pads.single().unwrap())
+                .insert(Gamepad::default());
+            crate::app::home(&mut simulation.0, &mut ui, &preferences);
+        }
+        605 | 615 => {
+            gamepads
+                .single_mut()
+                .unwrap()
+                .digital_mut()
+                .press(GamepadButton::DPadDown);
+        }
+        610 => {
+            gamepads
+                .single_mut()
+                .unwrap()
+                .digital_mut()
+                .press(GamepadButton::DPadRight);
+        }
+        612 => {
+            gamepads
+                .single_mut()
+                .unwrap()
+                .digital_mut()
+                .press(GamepadButton::South);
+        }
+        614 => {
+            assert_eq!(ui.screen, Screen::Settings);
+            check.reduced_motion = preferences.reduced_motion;
+        }
+        616 => {
+            // Fullscreen -> Motion; confirm toggles once rather than changing screens.
+            gamepads
+                .single_mut()
+                .unwrap()
+                .digital_mut()
+                .press(GamepadButton::South);
+        }
+        618 => {
+            assert_ne!(preferences.reduced_motion, check.reduced_motion);
+            gamepads
+                .single_mut()
+                .unwrap()
+                .digital_mut()
+                .press(GamepadButton::East);
+        }
+        620 => {
+            assert_eq!(ui.screen, Screen::Menu);
+            gamepads
+                .single_mut()
+                .unwrap()
+                .digital_mut()
+                .press(GamepadButton::South);
+        }
+        625 => {
+            assert_eq!(ui.screen, Screen::Playing);
+            gamepads
+                .single_mut()
+                .unwrap()
+                .digital_mut()
+                .press(GamepadButton::Start);
+        }
+        630 => {
+            assert_eq!(ui.screen, Screen::Pause);
+            gamepads
+                .single_mut()
+                .unwrap()
+                .digital_mut()
+                .press(GamepadButton::East);
+        }
+        635 => {
+            assert_eq!(ui.screen, Screen::Playing);
+            println!("BEVY CHECK OK: controller D-pad spatial navigation, confirm, back and pause");
+            check.rumble = preferences.rumble;
+            ui.return_to = Screen::Playing;
+            ui.screen = Screen::Settings;
+        }
+        640 | 650 | 660 => {
+            let position = pixel(&window, Vec2::new(540.0, 750.0));
+            window.set_cursor_position(Some(position));
+            mouse.press(MouseButton::Left);
+        }
+        645 | 655 | 665 => {
+            let steps = ((frame - 635) / 10) as u8;
+            assert_eq!(preferences.rumble, (check.rumble + steps) % 3);
+            let label = format!(
+                "{}{}",
+                crate::ui::tr("Rumble: ", preferences.language),
+                crate::ui::tr(
+                    ["off", "Gentle", "Normal"][preferences.rumble as usize],
+                    preferences.language
+                )
+            );
+            assert!(texts.iter().any(|text| text.0 == label));
+        }
+        670 => {
+            println!("BEVY CHECK OK: localized rumble settings cycle through all three levels");
+            println!("BEVY INPUT INTEGRATION COMPLETE");
+            exit.write(AppExit::Success);
         }
         _ => {}
     }

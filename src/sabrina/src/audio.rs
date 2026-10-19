@@ -32,12 +32,15 @@ struct MusicState {
 
 pub struct ReefAudioPlugin;
 
+#[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
+pub(crate) struct ConsumeEvents;
+
 impl Plugin for ReefAudioPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<AudioRequests>()
             .init_resource::<MusicState>()
             .add_systems(Startup, setup)
-            .add_systems(Update, update);
+            .add_systems(Update, update.in_set(ConsumeEvents));
     }
 }
 

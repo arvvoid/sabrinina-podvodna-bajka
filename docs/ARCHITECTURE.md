@@ -42,14 +42,21 @@ Water, reef caustics and crystal materials use WESL files authored in `assets/sh
 
 Only primitives under the `Reef_Near_Left` glTF node use alpha blending. The reef shader receives Sabrina's interpolated position and softens opacity from 100% to a minimum of 75% inside a small ellipse around her, only on geometry in front of her. The main reef remains opaque, and the reveal is disabled in the menu. Collision geometry is unchanged.
 
-`controls.rs` derives presentation-only hints from connected `Gamepad` components and their OS-provided names/vendor IDs. A recognized Sony controller uses PlayStation symbols; Xbox/XInput devices use Xbox letters; unknown devices use neutral positional labels. Hints stick to the selected connected pad until another pad is used or it disconnects. Without any pads they return to keyboard/mouse. No gameplay button mappings are changed. HUD buttons, footer and the localized guide share the same bindings and explicit font, including coloured glyphs.
+`controls.rs` selects one active controller for both input and hints. Fresh button presses take precedence; a new stick deflection can switch devices, but a continuously held inactive stick cannot steal input back. Selection runs after Bevy's `InputSystems` and before gameplay input. A recognized Sony controller uses PlayStation symbols; Xbox/XInput devices use Xbox letters; unknown devices use neutral positional labels. Disconnecting all pads restores keyboard/mouse hints. Gameplay bindings and swimming dead zones are unchanged.
+
+Menu navigation is separate from swimming: spatial neighbors follow button rectangles, while Tab/Shift+Tab retains ordered traversal. D-pad directions and the dominant stick axis repeat after 400 ms, then every 140 ms, at most once per rendered frame. Stick engagement is 0.55 with release at 0.30 and a latched direction; D-pad input takes priority. Screen changes require stick neutral before navigation, and stale hit targets cannot activate during transitions. Confirm is edge-triggered and takes priority over navigation; the right face button backs out of menus but remains Wave during play. Gameplay one-shots remain buffered until one fixed tick consumes them. Tests inject raw Bevy gamepad events, including press/release in the same frame, at 20–240 rendered FPS.
+
+`rumble.rs` observes confirmed simulation events before audio drains `FrameEvents`. It coalesces each rendered frame to one priority-ranked pulse, replaces rather than adds overlapping effects, and suppresses lower/equal priority pulses until the current one finishes. Normal strength is bounded to 0.40 strong / 0.30 weak for 80–180 ms; Gentle halves strength and Off disables it. Rumble targets the active pad and stops on menu entry, focus loss, controller change or exit. Capture/verification modes do not drive physical motors. Bevy/GilRs handles hardware support; actual perceived strength still requires controller playtesting.
+
+V-sync uses Bevy 0.20's `AutoVsync` capability fallback (`FifoRelaxed`, then `Fifo`) both at startup and when toggled. Late relaxed-FIFO frames may tear. Unit checks cover the requested mode, not the GPU's resolved surface configuration.
 
 ## Code map
 
 | File in `src/sabrina/src/` | Responsibility |
 |---|---|
 | `app.rs` | Fixed update, input, actions and session transitions |
-| `controls.rs` | Controller identification, hotplug-aware bindings and button colours |
+| `controls.rs` | Active controller, menu repeat/hysteresis, bindings and button colours |
+| `rumble.rs` | Bounded, prioritized controller feedback from gameplay events |
 | `presentation.rs` | Interpolated render snapshot |
 | `assets.rs` | Loading, shared resources, LODs, animation and attachments |
 | `embedded_assets.rs` | Default in-memory asset source backed by compiled-in bytes |

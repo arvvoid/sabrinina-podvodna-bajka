@@ -221,6 +221,7 @@ pub fn input(
     mouse: Res<ButtonInput<MouseButton>>,
     motion: Res<AccumulatedMouseMotion>,
     pads: Query<&Gamepad>,
+    hints: Res<crate::controls::Hints>,
     mut window: Single<&mut Window, With<PrimaryWindow>>,
     camera: Query<(&Camera, &GlobalTransform), With<Camera3d>>,
     mut ui: ResMut<SessionUi>,
@@ -229,6 +230,11 @@ pub fn input(
     options: Res<Options>,
 ) {
     if options.capture.is_some() {
+        return;
+    }
+    if !window.focused && !options.verify {
+        pending.0 = sim::Input::default();
+        ui.pointer_mode = false;
         return;
     }
     let mut pausing = keys.just_pressed(KeyCode::Escape);
@@ -243,7 +249,7 @@ pub fn input(
         (keys.pressed(KeyCode::KeyW) || keys.pressed(KeyCode::ArrowUp)) as u8 as f32
             - (keys.pressed(KeyCode::KeyS) || keys.pressed(KeyCode::ArrowDown)) as u8 as f32,
     );
-    for pad in &pads {
+    if let Some(pad) = hints.active.and_then(|entity| pads.get(entity).ok()) {
         let stick = pad.left_stick();
         if stick.length() > 0.2 {
             movement += stick * ((stick.length() - 0.2) / 0.8 / stick.length());
@@ -255,7 +261,13 @@ pub fn input(
             pad.just_pressed(GamepadButton::South) || pad.just_pressed(GamepadButton::RightTrigger);
     }
     if pausing {
-        pause(&mut ui)
+        let screen = ui.screen;
+        pause(&mut ui);
+        if ui.screen != screen {
+            pending.0 = sim::Input::default();
+            prefs.save();
+            return;
+        }
     }
     if keys.just_pressed(KeyCode::F11) {
         prefs.fullscreen = !prefs.fullscreen;
@@ -370,4 +382,76 @@ fn tick(
         ui.caption.clear();
     }
     events.0.push(frame_events);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bevy::input::{
+        InputPlugin,
+        gamepad::{RawGamepadButtonChangedEvent, RawGamepadEvent},
+    };
+    use std::time::Duration;
+
+    #[test]
+    fn quick_gameplay_taps_survive_frames_with_zero_or_multiple_fixed_ticks() {
+        for fps in [20.0, 60.0, 144.0, 240.0] {
+            let mut app = App::new();
+            let preferences = Preferences::default();
+            let mut world = sim::World::default();
+            sim::reset(&mut world, 27, preferences.simulation(true));
+            app.add_plugins((MinimalPlugins, InputPlugin))
+                .init_resource::<crate::controls::Hints>()
+                .init_resource::<PendingInput>()
+                .init_resource::<FrameEvents>()
+                .init_resource::<crate::presentation::Previous>()
+                .insert_resource(preferences)
+                .insert_resource(Simulation(world))
+                .insert_resource(Options {
+                    verify: true,
+                    ..default()
+                })
+                .insert_resource(SessionUi {
+                    screen: Screen::Playing,
+                    loaded: true,
+                    ..default()
+                })
+                .insert_resource(Time::<Fixed>::from_hz(60.0))
+                .insert_resource(bevy::time::TimeUpdateStrategy::ManualDuration(
+                    Duration::from_secs_f64(1.0 / fps),
+                ))
+                .add_systems(
+                    PreUpdate,
+                    (crate::controls::update, input)
+                        .chain()
+                        .after(bevy::input::InputSystems),
+                )
+                .add_systems(FixedUpdate, tick);
+            app.world_mut().spawn((
+                Window {
+                    focused: true,
+                    ..default()
+                },
+                PrimaryWindow,
+            ));
+            let pad = app.world_mut().spawn(Gamepad::default()).id();
+            app.update();
+            for expected in [true, false, true, false, true, false] {
+                for value in [1.0, 0.0] {
+                    app.world_mut().write_message(RawGamepadEvent::Button(
+                        RawGamepadButtonChangedEvent::new(pad, GamepadButton::West, value),
+                    ));
+                }
+                for _ in 0..12 {
+                    app.update();
+                }
+                assert_eq!(
+                    app.world().resource::<Simulation>().0.sabrina.song.active,
+                    expected,
+                    "A quick song tap must be consumed exactly once at {fps} FPS"
+                );
+                assert!(!app.world().resource::<PendingInput>().0.toggle_song);
+            }
+        }
+    }
 }

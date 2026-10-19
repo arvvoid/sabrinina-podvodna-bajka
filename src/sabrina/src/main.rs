@@ -20,6 +20,7 @@ mod mipmaps;
 
 mod presentation;
 
+mod rumble;
 mod settings;
 
 mod ui;
@@ -147,6 +148,7 @@ fn main() {
             visuals::ReefPlugin,
             ui::ReefUiPlugin,
             audio::ReefAudioPlugin,
+            rumble::RumblePlugin,
             verification::VerificationPlugin,
         ));
     if diagnostics {
