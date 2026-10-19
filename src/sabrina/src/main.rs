@@ -184,15 +184,18 @@ fn backend_supported(platform: Platform, backend: app::RenderBackend) -> bool {
     match platform {
         Platform::Windows => matches!(
             backend,
-            app::RenderBackend::Dx12 | app::RenderBackend::Vulkan
+            app::RenderBackend::Dx12 | app::RenderBackend::Vulkan | app::RenderBackend::OpenGl
         ),
         Platform::Apple => {
             matches!(
                 backend,
-                app::RenderBackend::Metal | app::RenderBackend::Vulkan
+                app::RenderBackend::Metal | app::RenderBackend::Vulkan | app::RenderBackend::OpenGl
             )
         }
-        Platform::Other => backend == app::RenderBackend::Vulkan,
+        Platform::Other => matches!(
+            backend,
+            app::RenderBackend::Vulkan | app::RenderBackend::OpenGl
+        ),
     }
 }
 
@@ -220,6 +223,7 @@ fn gpu_settings(requested: Option<app::RenderBackend>) -> WgpuSettings {
         app::RenderBackend::Dx12 => Backends::DX12,
         app::RenderBackend::Vulkan => Backends::VULKAN,
         app::RenderBackend::Metal => Backends::METAL,
+        app::RenderBackend::OpenGl => Backends::GL,
     };
     let mut gpu = WgpuSettings {
         backends: Some(backend),
@@ -259,6 +263,10 @@ mod tests {
             app::RenderBackend::from_flag("--metal"),
             Some(app::RenderBackend::Metal)
         );
+        assert_eq!(
+            app::RenderBackend::from_flag("--opengl"),
+            Some(app::RenderBackend::OpenGl)
+        );
         assert_eq!(app::RenderBackend::from_flag("--vulkam"), None);
     }
 
@@ -270,6 +278,7 @@ mod tests {
             app::RenderBackend::Dx12 => Backends::DX12,
             app::RenderBackend::Vulkan => Backends::VULKAN,
             app::RenderBackend::Metal => Backends::METAL,
+            app::RenderBackend::OpenGl => Backends::GL,
         };
         assert_eq!(gpu.backends, Some(expected));
         assert!(!gpu.backends.unwrap().contains(Backends::GL));
@@ -290,9 +299,31 @@ mod tests {
         assert_eq!(selected_backend(Platform::Apple, Some(Metal)), Metal);
         assert_eq!(selected_backend(Platform::Apple, Some(Vulkan)), Vulkan);
         assert_eq!(selected_backend(Platform::Apple, Some(Dx12)), Metal);
+        assert_eq!(
+            selected_backend(Platform::Windows, Some(app::RenderBackend::OpenGl)),
+            app::RenderBackend::OpenGl
+        );
+        assert_eq!(
+            selected_backend(Platform::Apple, Some(app::RenderBackend::OpenGl)),
+            app::RenderBackend::OpenGl
+        );
         assert_eq!(selected_backend(Platform::Other, Some(Vulkan)), Vulkan);
+        assert_eq!(
+            selected_backend(Platform::Other, Some(app::RenderBackend::OpenGl)),
+            app::RenderBackend::OpenGl
+        );
         assert_eq!(selected_backend(Platform::Other, Some(Dx12)), Vulkan);
         assert_eq!(selected_backend(Platform::Other, Some(Metal)), Vulkan);
+    }
+
+    #[test]
+    fn opengl_override_selects_only_the_gl_backend() {
+        let gpu = gpu_settings(Some(app::RenderBackend::OpenGl));
+        assert_eq!(gpu.backends, Some(Backends::GL));
+        assert!(
+            !gpu.instance_flags
+                .contains(bevy::render::settings::InstanceFlags::VALIDATION_INDIRECT_CALL)
+        );
     }
 
     #[cfg(all(target_os = "windows", target_arch = "x86_64", target_env = "msvc"))]

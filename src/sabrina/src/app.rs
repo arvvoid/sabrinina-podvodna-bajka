@@ -14,6 +14,7 @@ pub enum RenderBackend {
     Dx12,
     Vulkan,
     Metal,
+    OpenGl,
 }
 
 impl RenderBackend {
@@ -22,6 +23,7 @@ impl RenderBackend {
             "--dx12" => Some(Self::Dx12),
             "--vulkan" => Some(Self::Vulkan),
             "--metal" => Some(Self::Metal),
+            "--opengl" => Some(Self::OpenGl),
             _ => None,
         }
     }
@@ -31,6 +33,7 @@ impl RenderBackend {
             Self::Dx12 => "--dx12",
             Self::Vulkan => "--vulkan",
             Self::Metal => "--metal",
+            Self::OpenGl => "--opengl",
         }
     }
 }

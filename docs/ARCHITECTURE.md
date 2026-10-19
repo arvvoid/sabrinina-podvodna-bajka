@@ -26,7 +26,7 @@ Score feedback lives in the simulation snapshot, not the audio event queue; audi
 
 ## Rendering and animation
 
-Backend selection is fixed: Windows uses Direct3D 12, Linux uses Vulkan, and Apple targets use Metal. Renderer environment variables cannot select a different backend, and OpenGL support is not enabled. Windows x86_64 MSVC builds statically link DXC so rendering does not depend on a compiler DLL found on the player's machine or working directory. Keep DX12 indirect-call validation enabled; the Vulkan/Metal paths do not need it.
+Backend defaults are platform-native: Windows uses Direct3D 12, Linux uses Vulkan, and Apple targets use Metal. `--dx12`, `--vulkan`, `--metal` and `--opengl` select available testing overrides; unsupported flags for the current platform fall back to its default with a warning. OpenGL uses wgpu's GL/GLES backend and requires a compatible driver and, on Unix-like systems, EGL. Renderer environment variables cannot select a different backend. Windows x86_64 MSVC builds statically link DXC so rendering does not depend on a compiler DLL found on the player's machine or working directory. Keep DX12 indirect-call validation enabled when DX12 is selected; the Vulkan/Metal/GL paths do not need it.
 
 Loading uses a plain full-viewport background with localized UI rather than text baked into splash artwork. Model dependency progress fills 90% of the bar; the menu opens only once the 77 animated character instances (Sabrina, 72 fish and four jellyfish) are ready. The language chooser lists all three native language names explicitly and supports the shared mouse/keyboard/controller navigation.
 
