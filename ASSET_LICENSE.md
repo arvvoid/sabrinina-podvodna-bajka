@@ -41,7 +41,7 @@ the asset licensing terms above.
 | Derived mesh levels | Same artwork and restrictions as the corresponding model |
 | Voices and magic sounds | Recordings carried over from the original Scratch project |
 | Calm music, visitor music and arrival stinger | Owner-supplied generated MIDI compositions in `art/music/`, rendered to `assets/audio/` with FluidSynth and FluidR3 GM |
-| UI SVGs and PNGs | Original game artwork under `assets/ui/` |
+| UI SVGs and PNGs, including loading screen | Project artwork under `assets/ui/`; the loading-screen image was supplied for this project |
 
 The [original Scratch project](https://scratch.mit.edu/projects/1203591608/)
 is the design reference. Its assets are not relicensed by this repository's

@@ -527,31 +527,36 @@ fn draw(
         return;
     }
     if ui.screen == Screen::Loading {
+        let viewport_width = window.width() / zoom;
+        let viewport_height = window.height() / zoom;
+        let image_height = viewport_height.max(viewport_width / (1365.0 / 768.0));
+        let image_width = image_height * (1365.0 / 768.0);
         let e = builder
             .commands
             .spawn((
-                Node {
-                    position_type: PositionType::Absolute,
-                    left: px(-(window.width() / zoom - CANVAS_WIDTH) / 2.0),
-                    top: px(-(window.height() / zoom - CANVAS_HEIGHT) / 2.0),
-                    width: px(window.width() / zoom),
-                    height: px(window.height() / zoom),
+                ImageNode {
+                    image: server.load("ui/loading.png"),
                     ..default()
                 },
-                BackgroundColor(Color::srgb(0.025, 0.17, 0.22)),
+                Node {
+                    position_type: PositionType::Absolute,
+                    left: px((CANVAS_WIDTH - image_width) / 2.0),
+                    top: px((CANVAS_HEIGHT - image_height) / 2.0),
+                    width: px(image_width),
+                    height: px(image_height),
+                    ..default()
+                },
             ))
             .id();
         builder.commands.entity(root).add_child(e);
-        builder.panel(rect(420.0, 225.0, 760.0, 450.0));
-        builder.label(
-            rect(485.0, 285.0, 630.0, 180.0),
-            40.0,
-            tr("Sabrina's\nUnderwater\nFairy Tale", lang),
-            None,
-        );
-        builder.label(rect(485.0, 505.0, 630.0, 60.0), 22.0, "", Some("loading"));
+        builder.background_alpha = 0.2;
+        let status = builder.label(rect(500.0, 760.0, 600.0, 34.0), 18.0, "", Some("loading"));
+        builder
+            .commands
+            .entity(status)
+            .insert(TextLayout::justify(Justify::Center));
         builder.meter(
-            rect(485.0, 600.0, 630.0, 14.0),
+            rect(650.0, 842.0, 300.0, 4.0),
             Color::srgb(0.38, 1.0, 0.76),
             "loading",
         );
