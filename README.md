@@ -97,7 +97,7 @@ cargo run --locked --release -p sabrina
 | Android (planned) | Vulkan | No mobile export available yet | Not tested |
 | iOS (planned) | Metal | No mobile export available yet | Not tested |
 
-The graphics backend is fixed per platform. There is no OpenGL fallback or backend override; the old `SABRINA_RENDERER` setting and `WGPU_BACKEND` do not change this selection. A device must support its platform's backend.
+The graphics backend defaults to Direct3D 12 on Windows, Vulkan on Linux and Metal on macOS. Backend flags allow testing supported alternatives: Windows accepts `--dx12` and `--vulkan`; macOS accepts `--metal` and `--vulkan`; Linux accepts `--vulkan` only. A backend flag not supported on the current platform is ignored with a warning and the platform default is used. An explicitly selected backend still requires a compatible graphics driver and device. There is no OpenGL fallback, and `WGPU_BACKEND` does not override this selection.
 
 Windows x86_64 MSVC builds embed the modern DXC shader compiler in the executable. No separate `dxcompiler.dll` or installed Windows SDK is needed to play. This avoids the legacy FXC rendering path, which produced dark silhouettes on the tested NVIDIA Windows machine. To build on Windows, install Rust and Visual Studio's **Desktop development with C++** workload, including a Windows SDK and the **C++ ATL for latest build tools** component, then run the Cargo command above in PowerShell.
 
@@ -106,6 +106,24 @@ Windows verification also passed all 51 automated tests and strict Clippy checks
 All runtime assets are embedded at compile time: the executable runs without an `assets/` directory or the source tree, and does not extract assets to disk. This applies to local and tagged release builds. Rebuild after changing assets, or set `SABRINA_ASSETS=/absolute/path/to/assets` to use an external asset tree while developing artwork. Blender is needed only to edit artwork.
 
 `./tools/package-bevy.sh` creates a portable directory under `dist/` containing the executable and accompanying documentation/license notices. The game is **asset-self-contained, not fully statically linked**: Linux still needs system libraries such as glibc, ALSA and libudev, and all platforms need their graphics drivers and OS windowing/audio support. Keep the accompanying notices when redistributing.
+
+### Runtime options
+
+Pass options after the executable name, for example `./tools/run.sh --vulkan --capture-school --fullhd`.
+
+| Option | Description |
+|---|---|
+| `--dx12` | Select Direct3D 12 on Windows. This is already the Windows default; ignored on other platforms. |
+| `--vulkan` | Select Vulkan on Windows or macOS for backend testing; it is the Linux default. |
+| `--metal` | Select Metal on macOS. This is already the macOS default; ignored on other platforms. |
+| `--direct-draw` | Disable Bevy's indirect drawing for the scene camera and use regular draw calls. Diagnostic A/B option; indirect drawing remains the default. |
+| `--fullhd` | Use a 1920×1080 window instead of the default 1280×720. |
+| `--verify-input` | Run with a fixed 60 Hz time step for deterministic input verification; opens in a window instead of fullscreen. |
+| `--capture-<name>` | Run a visual/test scene; see the capture groups below. Captures do not save preferences. |
+
+Capture names include `game`, `visit`, `crystal`, `throw`, `wave`, `song`, `combat`, `finale`, `school`; `boot`, `menu`, `settings`, `language`, `help`, `credits`, `victory`; `graphics-low`, `graphics-balanced`, `graphics-high`; `pose-idle`, other `pose-<name>` animation previews, and `rig`; `xbox`, `playstation`, `generic-pad`; and `occlusion` or `occlusion-solid`. Prefix a capture name with `hr-` or `it-` for Croatian or Italian, for example `--capture-hr-boot`. `--capture-school --fullhd` runs the 72-fish stress scene and reports frame times plus per-pass CPU/GPU timings. Captures are saved to the system temporary directory. `--capture-demo` runs a seeded, scripted 20-second scene for recording; it does not record video itself.
+
+For development, `SABRINA_ASSETS=/absolute/path/to/assets` loads an external asset directory instead of the embedded assets, and `SABRINA_CAPTURE_AA=fxaa` enables FXAA in captures. `SABRINA_BUILD_JOBS=4` limits build-script compilation parallelism.
 
 ## Tagged releases
 
@@ -166,12 +184,6 @@ python3 tools/validate_render_lods.py
 python3 tools/export_rust_contacts.py --check
 ./tools/run.sh --verify-input
 ```
-
-For visual checks, use `--capture-game`, `--capture-visit`, `--capture-throw`, `--capture-combat` (bubble, visitor health and hit feedback), `--capture-pose-idle` or `--capture-graphics-high`. `--capture-school --fullhd` runs a 72-fish stress scene and reports frame times plus per-pass CPU/GPU timings. Add `--direct-draw` to any run to disable Bevy's indirect drawing (normal draw calls instead), which also skips the indirect-argument validation pass wgpu requires on Direct3D 12; compare both on slow Windows PCs. Captures go to the system temporary directory and do not save preferences.
-
-`--capture-boot`, `--capture-language`, `--capture-victory` and `--capture-finale` preview the loading screen, language chooser, victory screen and four-visitor final round. `--capture-demo` runs a seeded, scripted 20-second gameplay scene for video recording, using normal movement and spell rules in a borderless window; it does not record video itself. None of these modes save preferences.
-
-`--capture-xbox`, `--capture-playstation` and `--capture-generic-pad` preview connected-device hints using synthetic controllers. `--capture-occlusion` and `--capture-occlusion-solid` compare the subtle foreground reveal with the solid reef.
 
 ## Next steps
 

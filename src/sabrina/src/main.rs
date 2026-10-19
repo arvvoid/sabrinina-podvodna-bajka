@@ -54,7 +54,7 @@ fn main() {
             };
         }
     }
-    let gpu = gpu_settings();
+    let gpu = gpu_settings(options.backend);
     println!(
         "RENDER CONFIG: {:?}, DX12 compiler {:?}, indirect drawing {}",
         gpu.backends,
@@ -155,13 +155,71 @@ fn main() {
     app.run();
 }
 
-fn gpu_settings() -> WgpuSettings {
-    let backend = if cfg!(target_os = "macos") || cfg!(target_os = "ios") {
-        Backends::METAL
-    } else if cfg!(target_os = "windows") {
-        Backends::DX12
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Platform {
+    Windows,
+    Apple,
+    Other,
+}
+
+fn current_platform() -> Platform {
+    if cfg!(target_os = "windows") {
+        Platform::Windows
+    } else if cfg!(any(target_os = "macos", target_os = "ios")) {
+        Platform::Apple
     } else {
-        Backends::VULKAN
+        Platform::Other
+    }
+}
+
+fn default_backend(platform: Platform) -> app::RenderBackend {
+    match platform {
+        Platform::Windows => app::RenderBackend::Dx12,
+        Platform::Apple => app::RenderBackend::Metal,
+        Platform::Other => app::RenderBackend::Vulkan,
+    }
+}
+
+fn backend_supported(platform: Platform, backend: app::RenderBackend) -> bool {
+    match platform {
+        Platform::Windows => matches!(
+            backend,
+            app::RenderBackend::Dx12 | app::RenderBackend::Vulkan
+        ),
+        Platform::Apple => {
+            matches!(
+                backend,
+                app::RenderBackend::Metal | app::RenderBackend::Vulkan
+            )
+        }
+        Platform::Other => backend == app::RenderBackend::Vulkan,
+    }
+}
+
+fn selected_backend(
+    platform: Platform,
+    requested: Option<app::RenderBackend>,
+) -> app::RenderBackend {
+    requested
+        .filter(|backend| backend_supported(platform, *backend))
+        .unwrap_or_else(|| default_backend(platform))
+}
+
+fn gpu_settings(requested: Option<app::RenderBackend>) -> WgpuSettings {
+    let platform = current_platform();
+    let backend = selected_backend(platform, requested);
+    if let Some(requested) = requested.filter(|requested| !backend_supported(platform, *requested))
+    {
+        eprintln!(
+            "Ignoring {} on this platform; using {}",
+            requested.flag(),
+            backend.flag()
+        );
+    }
+    let backend = match backend {
+        app::RenderBackend::Dx12 => Backends::DX12,
+        app::RenderBackend::Vulkan => Backends::VULKAN,
+        app::RenderBackend::Metal => Backends::METAL,
     };
     let mut gpu = WgpuSettings {
         backends: Some(backend),
@@ -188,14 +246,30 @@ mod tests {
     use super::*;
 
     #[test]
+    fn renderer_flags_parse_known_backends_only() {
+        assert_eq!(
+            app::RenderBackend::from_flag("--dx12"),
+            Some(app::RenderBackend::Dx12)
+        );
+        assert_eq!(
+            app::RenderBackend::from_flag("--vulkan"),
+            Some(app::RenderBackend::Vulkan)
+        );
+        assert_eq!(
+            app::RenderBackend::from_flag("--metal"),
+            Some(app::RenderBackend::Metal)
+        );
+        assert_eq!(app::RenderBackend::from_flag("--vulkam"), None);
+    }
+
+    #[test]
     fn renderer_is_native_without_backend_fallbacks() {
-        let gpu = gpu_settings();
-        let expected = if cfg!(target_os = "macos") || cfg!(target_os = "ios") {
-            Backends::METAL
-        } else if cfg!(target_os = "windows") {
-            Backends::DX12
-        } else {
-            Backends::VULKAN
+        let backend = default_backend(current_platform());
+        let gpu = gpu_settings(None);
+        let expected = match backend {
+            app::RenderBackend::Dx12 => Backends::DX12,
+            app::RenderBackend::Vulkan => Backends::VULKAN,
+            app::RenderBackend::Metal => Backends::METAL,
         };
         assert_eq!(gpu.backends, Some(expected));
         assert!(!gpu.backends.unwrap().contains(Backends::GL));
@@ -206,11 +280,26 @@ mod tests {
         );
     }
 
+    #[test]
+    fn renderer_overrides_are_platform_limited() {
+        use app::RenderBackend::{Dx12, Metal, Vulkan};
+
+        assert_eq!(selected_backend(Platform::Windows, Some(Dx12)), Dx12);
+        assert_eq!(selected_backend(Platform::Windows, Some(Vulkan)), Vulkan);
+        assert_eq!(selected_backend(Platform::Windows, Some(Metal)), Dx12);
+        assert_eq!(selected_backend(Platform::Apple, Some(Metal)), Metal);
+        assert_eq!(selected_backend(Platform::Apple, Some(Vulkan)), Vulkan);
+        assert_eq!(selected_backend(Platform::Apple, Some(Dx12)), Metal);
+        assert_eq!(selected_backend(Platform::Other, Some(Vulkan)), Vulkan);
+        assert_eq!(selected_backend(Platform::Other, Some(Dx12)), Vulkan);
+        assert_eq!(selected_backend(Platform::Other, Some(Metal)), Vulkan);
+    }
+
     #[cfg(all(target_os = "windows", target_arch = "x86_64", target_env = "msvc"))]
     #[test]
     fn windows_uses_embedded_dxc_without_a_runtime_dll() {
         assert!(matches!(
-            gpu_settings().dx12_shader_compiler,
+            gpu_settings(Some(app::RenderBackend::Dx12)).dx12_shader_compiler,
             bevy::render::settings::Dx12Compiler::StaticDxc
         ));
     }

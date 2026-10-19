@@ -9,6 +9,32 @@ use bevy::{
 };
 use reef_sim as sim;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RenderBackend {
+    Dx12,
+    Vulkan,
+    Metal,
+}
+
+impl RenderBackend {
+    pub fn from_flag(argument: &str) -> Option<Self> {
+        match argument {
+            "--dx12" => Some(Self::Dx12),
+            "--vulkan" => Some(Self::Vulkan),
+            "--metal" => Some(Self::Metal),
+            _ => None,
+        }
+    }
+
+    pub fn flag(self) -> &'static str {
+        match self {
+            Self::Dx12 => "--dx12",
+            Self::Vulkan => "--vulkan",
+            Self::Metal => "--metal",
+        }
+    }
+}
+
 #[derive(Resource, Default)]
 pub struct Options {
     pub capture: Option<String>,
@@ -17,6 +43,7 @@ pub struct Options {
     pub fullhd: bool,
     pub capture_fxaa: bool,
     pub direct_draw: bool,
+    pub backend: Option<RenderBackend>,
 }
 
 impl Options {
@@ -34,6 +61,9 @@ impl Options {
             }
             if argument == "--direct-draw" {
                 options.direct_draw = true;
+            }
+            if let Some(backend) = RenderBackend::from_flag(&argument) {
+                options.backend = Some(backend);
             }
             if let Some(kind) = argument.strip_prefix("--capture-") {
                 options.capture = Some(kind.into());
