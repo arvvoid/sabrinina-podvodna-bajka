@@ -63,11 +63,15 @@ Settings offer Gentle and Lively difficulty, encounter pacing and a peaceful, no
 
 HUD and help hints follow the connected controller, including button colours. With multiple controllers, hints follow the one most recently used; disconnecting all controllers restores keyboard/mouse hints. Unrecognized controllers use neutral bottom/left/right button labels. Detection uses the device name and USB vendor ID reported by the OS; remappers such as Steam Input may expose a different controller type. Keyboard/mouse input remains available while a controller is connected.
 
+Menus support the **D-pad and left stick in all four directions**, following the on-screen layout. Holding a direction repeats after a short delay; stick hysteresis prevents jitter around the threshold. Left/right adjusts a selected slider. **A / × confirms, B / ○ goes back**, and Start / Options pauses or resumes. Release the stick after opening a menu before navigating. Tab / Shift+Tab still cycles through controls. Input and hints use the same active controller; a fresh button press or new deliberate stick movement switches controllers, not a continuously held stick on another device.
+
+**Controller rumble** has saved **Off, Gentle and Normal** settings. Supported controllers receive brief, restrained pulses for crystal launches, hits, waves and damage to Sabrina—not continuous vibration while swimming or singing. Simultaneous effects do not stack; damage takes priority. Rumble stops on pause, focus loss, controller changes or exit. Support depends on the controller, driver and connection; unsupported devices remain playable without vibration.
+
 HUD backgrounds and progress fills are semi-transparent. The lower-left foreground reef fades only slightly around Sabrina when it covers her (at most 25% transparent), leaving the rest of the scenery solid.
 
 Enable **Show FPS counter** in Settings to display a small, smoothed frames-per-second counter in the upper-right corner, below the HUD buttons. It is off by default, works in menus and during play, and is saved with your preferences.
 
-English, Croatian and Italian are available through the main menu's **Language… / Jezik… / Lingua…** button. Select a language by name in the chooser; a checkmark identifies the selected language. Graphics, sound, controls and best score are saved locally. The loading screen uses localized text and asset-loading progress, then waits for character instances before opening the menu. The first launch uses fullscreen and Balanced graphics. Balanced has subtle soft shadows; High adds finer shadows and 2× MSAA; Light reduces effects and disables shadows.
+English, Croatian and Italian are available through the main menu's **Language… / Jezik… / Lingua…** button. Select a language by name in the chooser; a checkmark identifies the selected language. Graphics, sound, controls and best score are saved locally. The loading screen uses localized text and asset-loading progress, then waits for character instances before opening the menu. The first launch uses fullscreen and Balanced graphics. Balanced has subtle soft shadows; High adds finer shadows and 2× MSAA; Light reduces effects and disables shadows. **V-sync** is on by default. Bevy's `AutoVsync` selects relaxed FIFO when the surface supports it, otherwise standard FIFO. Relaxed FIFO presents late frames without waiting for another refresh, but those frames may tear; neither mode guarantees a frame rate. Turn V-sync off in Settings to request uncapped presentation and potentially reduce input latency (may tear; falls back to supported modes).
 
 ## Build and run
 
@@ -97,15 +101,58 @@ cargo run --locked --release -p sabrina
 | Android (planned) | Vulkan | No mobile export available yet | Not tested |
 | iOS (planned) | Metal | No mobile export available yet | Not tested |
 
-The graphics backend is fixed per platform. There is no OpenGL fallback or backend override; the old `SABRINA_RENDERER` setting and `WGPU_BACKEND` do not change this selection. A device must support its platform's backend.
+#### Manual hardware testing
+
+Additional playtesting results reported on 20 October 2026:
+
+| System | CPU | GPU | Reported result |
+|---|---|---|---|
+| Intel Core i7-11800H | Intel UHD Graphics (Tiger Lake-H GT1) | Works well; 50-60 FPS, 60+ FPS lower graphics |
+| Intel Core i7-11800H | NVIDIA GeForce RTX 3070 Laptop GPU, 8 GiB VRAM | Works well; 400+ FPS |
+| Older desktop | Intel Core i7-2600K | NVIDIA GeForce GTX 1060 | Works well; stable 60+ FPS |
+
+These are informal playtesting observations, not directly comparable benchmarks or minimum requirements. Resolution, graphics quality, frame-limit settings and test scene were not recorded for these results. Development, fine tuning and requirement assessment still in progress.
+
+Defaults are Direct3D 12 on Windows, Vulkan on Linux and Metal on macOS. See the runtime-options table for supported overrides. An unsupported flag warns and uses the platform default; if a selected backend cannot initialize, the game does not silently switch. OpenGL requires a compatible driver and, on Unix-like systems, an available EGL implementation.
+
+On multi-GPU/eGPU systems, `WGPU_ADAPTER_NAME` requests an adapter by a case-insensitive part of its name, without changing the backend. For example, on Linux: `WGPU_ADAPTER_NAME="RTX 3070 Laptop" cargo run --locked --release -p sabrina`. Check the startup `RENDER DEVICE` line: Bevy falls back to automatic selection if no compatible adapter matches. Selecting the internal GPU can work around an eGPU presentation/driver failure without disconnecting the eGPU.
 
 Windows x86_64 MSVC builds embed the modern DXC shader compiler in the executable. No separate `dxcompiler.dll` or installed Windows SDK is needed to play. This avoids the legacy FXC rendering path, which produced dark silhouettes on the tested NVIDIA Windows machine. To build on Windows, install Rust and Visual Studio's **Desktop development with C++** workload, including a Windows SDK and the **C++ ATL for latest build tools** component, then run the Cargo command above in PowerShell.
-
-Windows verification also passed all 51 automated tests and strict Clippy checks. The High-quality 1080p 72-fish stress scene averaged 60.9 FPS, with no measured frames exceeding 25 ms on that machine. These results are hardware-specific, not a performance guarantee. Broader Windows hardware testing, macOS runtime, physical controllers and mobile exports still need testing; synthetic controller checks do not replace physical-controller testing.
 
 All runtime assets are embedded at compile time: the executable runs without an `assets/` directory or the source tree, and does not extract assets to disk. This applies to local and tagged release builds. Rebuild after changing assets, or set `SABRINA_ASSETS=/absolute/path/to/assets` to use an external asset tree while developing artwork. Blender is needed only to edit artwork.
 
 `./tools/package-bevy.sh` creates a portable directory under `dist/` containing the executable and accompanying documentation/license notices. The game is **asset-self-contained, not fully statically linked**: Linux still needs system libraries such as glibc, ALSA and libudev, and all platforms need their graphics drivers and OS windowing/audio support. Keep the accompanying notices when redistributing.
+
+### Runtime options
+
+Pass flags after the executable name, for example `./tools/run.sh --vulkan --capture-school --fullhd`.
+
+| Flag / setting | Explanation |
+|---|---|
+| `--dx12` | Use Direct3D 12 on Windows (the default); ignored elsewhere. |
+| `--vulkan` | Use Vulkan on Linux (default), or as a test override on Windows and macOS. |
+| `--metal` | Use Metal on macOS (the default); ignored elsewhere. |
+| `--opengl` | Use wgpu's GL/GLES backend on Windows, Linux and macOS for testing; requires a compatible driver and, on Unix-like systems, EGL. |
+| `--direct-draw` | Force regular draw calls instead of Bevy's indirect drawing (the default on DX12). |
+| `--indirect-draw` | Force Bevy's indirect drawing, overriding the DX12 direct-draw default. Indirect drawing remains the default on other backends. If both draw flags are passed, the last one wins. |
+| `--fullhd` | Use 1920×1080 instead of the default 1280×720 window resolution. |
+| `--verify-input` | Use a fixed 60 Hz time step for deterministic input verification; opens windowed. |
+| `--capture-game`, `--capture-visit`, `--capture-crystal`, `--capture-throw`, `--capture-wave`, `--capture-song`, `--capture-combat`, `--capture-finale` | Capture gameplay scenes; `finale` shows the final four-visitor round. |
+| `--capture-school` | Run the 72-fish stress scene and report frame times and per-pass CPU/GPU timings. Add `--fullhd` for 1080p. |
+| `--capture-boot`, `--capture-menu`, `--capture-settings`, `--capture-language`, `--capture-help`, `--capture-credits`, `--capture-victory` | Capture the named screen. |
+| `--capture-graphics-low`, `--capture-graphics-balanced`, `--capture-graphics-high` | Capture graphics-quality settings. |
+| `--capture-pose-idle`, `--capture-pose-<name>`, `--capture-rig` | Capture Sabrina's idle pose, a named animation pose, or the character rig. |
+| `--capture-pose-wave`, `--capture-pose-throw`, `--capture-pose-throw-gather` | Close-up push, crystal release, or wind-up. Append `-left`, `-climb`, `-dive` or `-upright` to check casting alignment. |
+| `--capture-pose-stroke` | Run 20 seconds of close-up swimming cycles, holding Sabrina in frame for motion inspection. |
+| `--capture-xbox`, `--capture-playstation`, `--capture-generic-pad` | Preview controller hints using a synthetic controller. |
+| `--capture-occlusion`, `--capture-occlusion-solid` | Compare the foreground reef reveal with the solid-reef view. |
+| `--capture-hr-<name>`, `--capture-it-<name>` | Capture any supported scene in Croatian or Italian. |
+| `--capture-demo` | Run a seeded, scripted 20-second gameplay scene for recording; it does not record video. |
+| `SABRINA_ASSETS=/path/to/assets` | Load an external asset directory instead of embedded assets. |
+| `SABRINA_CAPTURE_AA=fxaa` | Enable FXAA in captures. |
+| `SABRINA_BUILD_JOBS=4` | Limit build-script compilation parallelism. |
+
+Captures are saved to the system temporary directory and do not save preferences.
 
 ## Tagged releases
 
@@ -166,12 +213,6 @@ python3 tools/validate_render_lods.py
 python3 tools/export_rust_contacts.py --check
 ./tools/run.sh --verify-input
 ```
-
-For visual checks, use `--capture-game`, `--capture-visit`, `--capture-throw`, `--capture-combat` (bubble, visitor health and hit feedback), `--capture-pose-idle` or `--capture-graphics-high`. `--capture-school --fullhd` runs a 72-fish stress scene and reports frame times. Captures go to the system temporary directory and do not save preferences.
-
-`--capture-boot`, `--capture-language`, `--capture-victory` and `--capture-finale` preview the loading screen, language chooser, victory screen and four-visitor final round. `--capture-demo` runs a seeded, scripted 20-second gameplay scene for video recording, using normal movement and spell rules in a borderless window; it does not record video itself. None of these modes save preferences.
-
-`--capture-xbox`, `--capture-playstation` and `--capture-generic-pad` preview connected-device hints using synthetic controllers. `--capture-occlusion` and `--capture-occlusion-solid` compare the subtle foreground reveal with the solid reef.
 
 ## Next steps
 

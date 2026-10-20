@@ -38,6 +38,7 @@ mod tests {
             "audio/music_calm.ogg",
             "audio/music_visit.ogg",
             "audio/jelly_appears.ogg",
+            "ui/loading.png",
             "shaders/water.wesl",
             "shaders/crystal.wesl",
             "fonts/LICENSE-DejaVu.txt",

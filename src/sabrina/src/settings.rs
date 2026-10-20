@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Luka Dežulović
 // SPDX-License-Identifier: Apache-2.0
 //! Local preferences and one-time import of settings from the Godot prototype.
-use bevy::prelude::*;
+use bevy::{prelude::*, window::PresentMode};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
@@ -16,9 +16,11 @@ pub struct Preferences {
     pub rest: f32,
     pub visitors: i32,
     pub fullscreen: bool,
+    pub vsync: bool,
     pub show_fps: bool,
     pub quality: u8,
     pub reduced_motion: bool,
+    pub rumble: u8,
     pub music: f32,
     pub effects: f32,
     pub voice: f32,
@@ -34,9 +36,11 @@ impl Default for Preferences {
             rest: 55.0,
             visitors: 2,
             fullscreen: true,
+            vsync: true,
             show_fps: false,
             quality: 1,
             reduced_motion: false,
+            rumble: 2,
             music: 0.30,
             effects: 0.55,
             voice: 0.90,
@@ -120,6 +124,7 @@ impl Preferences {
         preferences.language %= 3;
         preferences.migrate_score();
         preferences.quality %= 3;
+        preferences.rumble = preferences.rumble.min(2);
         preferences.rest = preferences.rest.clamp(25.0, 150.0);
         preferences.visitors = preferences.visitors.clamp(1, 3);
         preferences.music = preferences.music.clamp(0.0, 1.0);
@@ -137,7 +142,9 @@ impl Preferences {
     }
 
     pub fn save(&self) {
-        if std::env::args().any(|a| a == "--verify-input" || a.starts_with("--capture-")) {
+        if cfg!(test)
+            || std::env::args().any(|a| a == "--verify-input" || a.starts_with("--capture-"))
+        {
             return;
         }
         let path = Self::path();
@@ -151,6 +158,15 @@ impl Preferences {
             && let Err(e) = std::fs::write(path, data)
         {
             warn!("Cannot save preferences: {e}")
+        }
+    }
+
+    /// Bevy tries relaxed FIFO, then FIFO. Late relaxed-FIFO frames may tear.
+    pub fn present_mode(&self) -> PresentMode {
+        if self.vsync {
+            PresentMode::AutoVsync
+        } else {
+            PresentMode::AutoNoVsync
         }
     }
 
@@ -170,6 +186,18 @@ mod tests {
     use super::*;
 
     #[test]
+    fn rumble_defaults_to_normal_and_all_levels_survive_serialization() {
+        let mut preferences: Preferences = serde_json::from_str("{}").unwrap();
+        assert_eq!(preferences.rumble, 2);
+        for level in 0..=2 {
+            preferences.rumble = level;
+            let restored: Preferences =
+                serde_json::from_str(&serde_json::to_string(&preferences).unwrap()).unwrap();
+            assert_eq!(restored.rumble, level);
+        }
+    }
+
+    #[test]
     fn fps_counter_defaults_off_and_survives_serialization() {
         let mut preferences: Preferences = serde_json::from_str("{}").unwrap();
         assert!(!preferences.show_fps);
@@ -177,6 +205,18 @@ mod tests {
         let saved = serde_json::to_string(&preferences).unwrap();
         let restored: Preferences = serde_json::from_str(&saved).unwrap();
         assert!(restored.show_fps);
+    }
+
+    #[test]
+    fn vsync_defaults_on_and_selects_present_mode() {
+        let mut preferences: Preferences = serde_json::from_str(r#"{"show_fps":true}"#).unwrap();
+        assert!(preferences.vsync);
+        assert_eq!(preferences.present_mode(), PresentMode::AutoVsync);
+        preferences.vsync = false;
+        let saved = serde_json::to_string(&preferences).unwrap();
+        let restored: Preferences = serde_json::from_str(&saved).unwrap();
+        assert!(!restored.vsync);
+        assert_eq!(restored.present_mode(), PresentMode::AutoNoVsync);
     }
 
     #[test]

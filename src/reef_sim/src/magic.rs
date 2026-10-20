@@ -55,6 +55,7 @@ pub fn crystal(world: &mut World, dt: f32, input: Input, events: &mut Events) {
             0.0
         };
         world.crystal.magic.aim = v(world.sabrina.swimming.facing * pitch.cos(), pitch.sin());
+        world.sabrina.throw_direction = world.crystal.magic.aim;
         let mut closest = 1000.0;
         for jellyfish in world.jelly.iter().filter(|_| world.settings.gentle) {
             if matches!(
@@ -81,6 +82,10 @@ pub fn crystal(world: &mut World, dt: f32, input: Input, events: &mut Events) {
             world.crystal.magic.depth = o.depth;
         }
         Spell::Charging => {
+            if let Some(target) = find_jelly(world, world.crystal.magic.target) {
+                world.sabrina.throw_direction =
+                    (target.motion.pos - world.sabrina.motion.pos).unit();
+            }
             let mut gather = (world.crystal.magic.time / 0.4).clamp(0.0, 1.0);
             gather = gather * gather * (3.0 - 2.0 * gather);
             let palm = sabrina_palm(&world.sabrina);
@@ -226,6 +231,12 @@ pub fn water_wave(world: &mut World, dt: f32, input: Input, events: &mut Events)
     wave.time += dt;
     let front = (wave.time * 8.0).min(5.5);
     let wave = *wave;
+    // A jellyfish touching her head, torso or arms during the cast is hit even
+    // outside the forward sweep; the margin covers water pushed off her skin.
+    let pushing = sabrina_upper_body(&world.sabrina).map(|part| Capsule {
+        radius: part.radius + 0.25,
+        ..part
+    });
     for fish in &mut world.fish {
         if !fish.life.active || fish.rescue.teleport > 0.0 || fish.rescue.wave_hit == wave.cast_id {
             continue;
@@ -274,7 +285,6 @@ pub fn water_wave(world: &mut World, dt: f32, input: Input, events: &mut Events)
         {
             continue;
         }
-        let offset = jellyfish.motion.pos - wave.origin;
         let chest = wave.origin - wave.direction * 0.75;
         // Test the bell and tentacles, not just the visitor's centre. The wave
         // starts at the chest so a very close visitor is not behind its hitbox.
@@ -290,11 +300,24 @@ pub fn water_wave(world: &mut World, dt: f32, input: Input, events: &mut Events)
             b: chest,
             radius: WAVE_REACH,
         };
-        let hit = offset.dot(wave.direction) + 0.75 > 0.0
-            && from <= to
-            && jelly_body(jellyfish).iter().any(|&surface| {
-                contact_gap(reach, surface) <= 0.0 && contact_gap(sweep, surface) <= 0.0
-            });
+        // A visitor touching Sabrina often has its centre level with or just
+        // behind her chest, so judge "in front" by its leading visible edge.
+        let in_front = |surface: Capsule| {
+            (surface.a - chest)
+                .dot(wave.direction)
+                .max((surface.b - chest).dot(wave.direction))
+                + surface.radius
+                > 0.0
+        };
+        let hit = jelly_body(jellyfish).iter().any(|&surface| {
+            let swept = from <= to
+                && contact_gap(reach, surface) <= 0.0
+                && contact_gap(sweep, surface) <= 0.0;
+            let touching = pushing
+                .iter()
+                .any(|&part| contact_gap(part, surface) <= 0.0);
+            in_front(surface) && (swept || touching)
+        });
         if hit {
             jellyfish.behaviour.wave_hit = wave.cast_id;
             jellyfish.behaviour.knockback = wave.direction * 5.0;

@@ -20,6 +20,7 @@ EXPECTED = {
             "Hurt",
             "Turn_Left",
             "Turn_Right",
+            "Dive",
         },
         {
             "Root",
@@ -199,7 +200,7 @@ def validate_crystal():
         points = values(document, binary, primitive["attributes"]["POSITION"])
         assert 1.34 < max(p[1] for p in points) - min(p[1] for p in points) < 1.36
         triangles += len(values(document, binary, primitive["indices"])) // 3
-    assert 0 < triangles <= 14000
+    assert 0 < triangles <= 3100, "Crystal must remain within its small-screen budget"
     assert all("uri" not in i and max(image_size(document, binary, i)) <= 1024 for i in document["images"])
     assert document["materials"][0]["pbrMetallicRoughness"].get("baseColorTexture")
     assert document["materials"][0].get("normalTexture")
@@ -218,14 +219,45 @@ def main():
         joints = skin["joints"]
         names = {document["nodes"][j]["name"] for j in joints}
         assert bones <= names, f"{name}: missing joints {bones-names}"
-        assert len(joints) <= 64, f"{name}: bone budget exceeded"
+        assert len(joints) <= (96 if name == "sabrina" else 64), f"{name}: bone budget exceeded"
         if name == "sabrina":
+            assert all(image.get("mimeType") in {"image/png", "image/jpeg"} for image in document["images"]), (
+                "Character textures must use the game's supported PNG/JPEG formats"
+            )
             by_name = {document["nodes"][j]["name"]: j for j in joints}
+            assert not any(
+                token in joint.lower()
+                for joint in names
+                for token in ("thigh", "calf", "knee", "foot", "toe", "ankle")
+            ), "Mermaid must not retain humanoid leg joints"
+            required = {f"Tail_{i}" for i in range(1, 7)}
+            required |= {f"Hair_{lane}_{segment}" for lane in range(5) for segment in range(1, 6)}
+            required |= {
+                f"{finger}_{side}_{segment}"
+                for finger in ("Thumb", "Index", "Mid", "Ring", "Pinky")
+                for side in ("L", "R") for segment in range(1, 4)
+            }
+            required |= {
+                f"{fin}_{side}_{segment}"
+                for fin in ("HipFin", "LowerFin")
+                for side in ("L", "R") for segment in (1, 2)
+            }
+            required |= {f"{fin}_{side}" for fin in ("Fluke", "FlukeTip") for side in ("L", "R")}
+            required |= {f"Elbow_{side}" for side in ("L", "R")}
+            assert required <= names, f"Mermaid missing anatomical joints: {required - names}"
+            for prefix, count in [("Tail", 6)] + [(f"Hair_{lane}", 5) for lane in range(5)]:
+                for segment in range(2, count + 1):
+                    parent = document["nodes"][by_name[f"{prefix}_{segment - 1}"]]
+                    assert by_name[f"{prefix}_{segment}"] in parent.get("children", [])
             for side in ("L", "R"):
                 shoulder = document["nodes"][by_name["Clavicle_" + side]]
                 assert by_name["UpperArm_" + side] in shoulder.get(
                     "children", []
                 ), "Arm must inherit its collarbone"
+                upper = document["nodes"][by_name["UpperArm_" + side]]
+                assert {
+                    by_name["Forearm_" + side], by_name["Elbow_" + side]
+                } <= set(upper.get("children", [])), "Elbow support must not change the forearm chain"
 
         assert len(values(document, binary, skin["inverseBindMatrices"])) == len(joints)
         animations = {attributes["name"]: attributes for attributes in document["animations"]}
@@ -280,6 +312,7 @@ def main():
                 max(image_size(document, binary, i)) <= texture_limit for i in document["images"]
             ), f"{name}: texture budget exceeded"
         triangles = 0
+        weighted_joints = set()
         for mesh in document["meshes"]:
             for primitive in mesh["primitives"]:
                 attributes = primitive["attributes"]
@@ -301,9 +334,18 @@ def main():
                 assert all(
                     0 <= j < len(joints) for row in indices for j in row
                 ), f"{name}: joint index outside skin"
+                weighted_joints.update(
+                    document["nodes"][joints[index]]["name"]
+                    for row_weights, row_indices in zip(weights, indices)
+                    for weight, index in zip(row_weights, row_indices) if weight > 0.01
+                )
                 triangles += len(values(document, binary, primitive["indices"])) // 3
-        budget = 60000 if name == "sabrina" else 12000 if name == "jellyfish" else 8000
+        budget = 65000 if name == "sabrina" else 12000 if name == "jellyfish" else 8000
         assert triangles <= budget, f"{name}: triangle budget exceeded ({triangles})"
+        if name == "sabrina":
+            assert required <= weighted_joints, (
+                f"Mermaid anatomical joints without meaningful skin weights: {required - weighted_joints}"
+            )
         assert all(
             "uri" not in image for image in document.get("images", [])
         ), f"{name}: textures must be embedded"
@@ -311,7 +353,16 @@ def main():
             f"{name}: {triangles} triangles, {len(joints)} bones, {len(clips)} animated clips; skin and textures OK"
         )
     document, binary = read_glb(ROOT / "assets/models/sabrina.glb")
+    hair_meshes = []
+    facial_meshes = []
     for mesh in document["meshes"]:
+        names = {
+            document["materials"][p["material"]]["name"] for p in mesh["primitives"]
+        }
+        if names == {"Sabrina_Hair"}:
+            hair_meshes.append(mesh)
+            continue
+        facial_meshes.append(mesh)
         assert mesh.get("extras", {}).get("targetNames") == [
             "Blink",
             "SoftSmile",
@@ -320,13 +371,61 @@ def main():
         assert all(
             w == 0 for w in mesh.get("weights", [])
         ), "Neutral facial weights must be zero"
+        affected = [False] * 3
         for primitive in mesh["primitives"]:
             assert len(primitive["targets"]) == 3
             count = document["accessors"][primitive["attributes"]["POSITION"]]["count"]
-            for target in primitive["targets"]:
+            for index, target in enumerate(primitive["targets"]):
                 delta = values(document, binary, target["POSITION"])
                 assert len(delta) == count
-                assert 0 < max(sum(x * x for x in row) ** 0.5 for row in delta) < 0.08
+                maximum = max(sum(x * x for x in row) ** 0.5 for row in delta)
+                assert maximum < 0.08
+                affected[index] |= maximum > 0
+        assert all(affected), "Each facial expression must actually deform the face"
+    assert len(facial_meshes) == len(hair_meshes) == 1
+    hair = hair_meshes[0]
+    assert len(hair["primitives"]) == 1, "Hair ribbons must share one material surface"
+    primitive = hair["primitives"][0]
+    assert not primitive.get("targets"), "Hair must not duplicate facial morph targets"
+    assert 10000 < len(values(document, binary, primitive["indices"])) // 3 < 25000
+    attributes = primitive["attributes"]
+    assert "TANGENT" in attributes, "Anisotropic lighting requires exported tangents"
+    tangents = values(document, binary, attributes["TANGENT"])
+    assert all(
+        abs(sum(x * x for x in tangent[:3]) - 1) < 0.001
+        and abs(abs(tangent[3]) - 1) < 0.001
+        for tangent in tangents
+    ), "Invalid hair tangent basis"
+    weights = values(document, binary, attributes["WEIGHTS_0"])
+    indices = values(document, binary, attributes["JOINTS_0"])
+    joints = document["skins"][0]["joints"]
+    assert sum(
+        any(document["nodes"][joints[i]]["name"] == "Head" and w > 0.999
+            for i, w in zip(row_indices, row_weights))
+        for row_indices, row_weights in zip(indices, weights)
+    ) > 100, "Scalp and face-adjacent roots must stay pinned to Head"
+    weighted = {
+        document["nodes"][joints[index]]["name"]
+        for row_weights, row_indices in zip(weights, indices)
+        for weight, index in zip(row_weights, row_indices) if weight > 0.0001
+    }
+    assert {f"Hair_{lane}_{segment}" for lane in range(5) for segment in range(1, 6)} <= weighted
+    assert all(
+        weight < 0.0001
+        or document["nodes"][joints[index]]["name"] == "Head"
+        or document["nodes"][joints[index]]["name"].startswith("Hair_")
+        for row_weights, row_indices in zip(weights, indices)
+        for weight, index in zip(row_weights, row_indices)
+    ), "Hair must not inherit arm or tail skin weights"
+    assert all(
+        not document["nodes"][channel["target"]["node"]]["name"].startswith("Hair_")
+        for animation in document["animations"]
+        for channel in animation["channels"]
+    ), "Runtime spring chains must not compete with baked hair animation tracks"
+    material = document["materials"][primitive["material"]]
+    assert material.get("normalTexture")
+    assert material["pbrMetallicRoughness"].get("baseColorTexture")
+    print("Sabrina: textured sculpted groom, 25 weighted hair joints and pinned scalp OK")
     print(
         "Sabrina: neutral facial weights and bounded Blink/SoftSmile/Singing morphs OK"
     )

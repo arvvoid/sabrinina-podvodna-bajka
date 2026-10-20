@@ -120,3 +120,131 @@ fn returning_crystal_interpolates_but_does_not_blend_outbound_transition() {
     let render = interpolate(&before, &current, 0.5);
     assert_eq!(render.crystal.motion.pos, v(6.0, 8.0));
 }
+
+#[test]
+fn cast_arms_follow_spell_direction_despite_body_pitch_and_turning() {
+    for yaw in [0.0, -1.1, std::f32::consts::PI] {
+        for pitch in [-1.1, 0.0, 0.65, 1.1] {
+            for direction in [v(1.0, 0.0), v(-1.0, 0.0), v(0.6, 0.8), v(-0.6, -0.8)] {
+                for wave in [true, false] {
+                    let mut s = SabrinaEntity::default();
+                    s.swimming.yaw = yaw;
+                    s.swimming.pitch = pitch;
+                    s.wave.active = wave;
+                    s.wave.time = 0.2;
+                    s.wave.direction = direction;
+                    s.throw_time = if wave { -1.0 } else { 1.1 };
+                    s.throw_direction = direction;
+                    let yaw = sabrina_visual_yaw(&s);
+                    let (axis, angle) = sabrina_cast_rotation(&s);
+                    let x = angle.cos();
+                    let y = axis[2] * angle.sin();
+                    let z = -axis[1] * angle.sin();
+                    let xy = v(x, y).rotate(pitch);
+                    near(xy.x * yaw.cos() + z * yaw.sin(), direction.x);
+                    near(xy.y, direction.y);
+                    near(-xy.x * yaw.sin() + z * yaw.cos(), 0.0);
+                    let palm = sabrina_palm(&s);
+                    let shoulder = sabrina_body(&s)[14].a;
+                    let reach = palm.offset - shoulder;
+                    assert!(
+                        reach.dot(direction) > 0.55,
+                        "cast must extend toward spell: {reach:?}"
+                    );
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn idle_sculls_moving_arms_glide_and_cast_release_is_not_mid_charge() {
+    let mut s = SabrinaEntity::default();
+    s.swimming.pitch = 0.0;
+    for (speed, minimum, maximum) in [(0.0, 0.15, 1.0), (5.0, 0.01, 0.4)] {
+        s.motion.velocity = v(speed, 0.0);
+        let mut points = Vec::new();
+        for i in 0..32 {
+            s.swimming.phase = i as f32 / 32.0 * std::f32::consts::TAU;
+            points.push(sabrina_palm(&s).offset);
+        }
+        let travel = points
+            .iter()
+            .flat_map(|a| points.iter().map(move |b| (*a - *b).length()))
+            .fold(0.0_f32, f32::max);
+        assert!(
+            travel > minimum && travel < maximum,
+            "{speed}: palm travel {travel}"
+        );
+    }
+    s.throw_time = 0.8;
+    let gathered = sabrina_palm(&s).offset;
+    s.throw_time = 1.1;
+    let release = sabrina_palm(&s).offset;
+    assert!(release.x - gathered.x > 0.6);
+}
+
+#[test]
+fn three_quarter_view_faces_camera_on_both_sides_without_flipping_turns() {
+    let mut s = SabrinaEntity::default();
+    for yaw in [0.0, std::f32::consts::PI] {
+        s.swimming.yaw = yaw;
+        let visual = sabrina_visual_yaw(&s);
+        near((visual - yaw).abs(), std::f32::consts::FRAC_PI_6);
+        assert!(-visual.sin() > 0.49);
+        assert!(visual.cos() * yaw.cos() > 0.85);
+    }
+    s.swimming.yaw = -1.0;
+    let before = sabrina_visual_yaw(&s);
+    s.swimming.yaw -= 0.001;
+    assert!((sabrina_visual_yaw(&s) - before).abs() < 0.002);
+}
+
+#[test]
+fn swimming_arms_follow_direction_but_do_not_override_idle_or_spells() {
+    let mut s = SabrinaEntity::default();
+    s.swimming.pitch = -0.8;
+    assert_eq!(sabrina_pose(&s), SabrinaPose::Idle);
+    for facing in [-1.0, 1.0] {
+        s.swimming.yaw = if facing < 0.0 {
+            -std::f32::consts::PI
+        } else {
+            0.0
+        };
+        s.swimming.facing = facing;
+        for (velocity, pitch, expected) in [
+            (v(facing * 5.0, 0.0), 0.0, SabrinaPose::Swim),
+            (v(facing * 3.0, 5.0), 0.8, SabrinaPose::Swim),
+            (v(facing * 3.0, -5.0), -0.8, SabrinaPose::Dive),
+            (v(0.0, -5.0), -1.1, SabrinaPose::Dive),
+        ] {
+            s.motion.velocity = velocity;
+            s.swimming.pitch = pitch;
+            assert_eq!(sabrina_pose(&s), expected);
+            for frame in 0..32 {
+                s.swimming.phase = frame as f32 / 32.0 * std::f32::consts::TAU;
+                let palm = sabrina_palm(&s).offset - s.motion.pos;
+                let forward = v(facing * pitch.cos(), pitch.sin());
+                if expected == SabrinaPose::Dive {
+                    assert!(palm.dot(forward) > 1.2, "Dive hands must lead the body");
+                } else {
+                    let shoulder = sabrina_body(&s)[14].a - s.motion.pos;
+                    assert!(
+                        (palm - shoulder).dot(forward) < 0.0,
+                        "Gliding hands must trail the shoulder: {palm:?}, {shoulder:?}"
+                    );
+                }
+            }
+        }
+    }
+    s.swimming.yaw = -1.0;
+    assert_eq!(sabrina_pose(&s), SabrinaPose::Dive);
+    s.song.active = true;
+    assert_eq!(sabrina_pose(&s), SabrinaPose::Sing);
+    s.wave.active = true;
+    assert_eq!(sabrina_pose(&s), SabrinaPose::Wave);
+    s.throw_time = 0.5;
+    assert_eq!(sabrina_pose(&s), SabrinaPose::Throw);
+    s.vitality.hurt_flash = 0.1;
+    assert_eq!(sabrina_pose(&s), SabrinaPose::Hurt);
+}

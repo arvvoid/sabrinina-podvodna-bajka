@@ -318,12 +318,44 @@ pub(crate) fn finish_load(
             }
             if k.contains("dive") {
                 simulation.0.sabrina.swimming.pitch = -1.1;
+                simulation.0.sabrina.motion.velocity = reef_sim::v(2.0, -4.0);
             }
             if k.contains("climb") {
                 simulation.0.sabrina.swimming.pitch = 1.1;
+                simulation.0.sabrina.motion.velocity = reef_sim::v(2.0, 4.0);
             }
             if k.contains("left") {
                 simulation.0.sabrina.swimming.yaw = std::f32::consts::PI;
+                simulation.0.sabrina.swimming.facing = -1.0;
+                simulation.0.sabrina.motion.velocity.x *= -1.0;
+            }
+            if k.starts_with("pose-wave") || k.starts_with("pose-throw") {
+                let s = &mut simulation.0.sabrina;
+                if k.contains("upright") {
+                    s.motion.velocity = reef_sim::v(0.0, 0.0);
+                    s.swimming.pitch = 0.65;
+                }
+                let pitch = if k.contains("upright") {
+                    0.0
+                } else {
+                    s.swimming.pitch
+                };
+                let direction = reef_sim::v(
+                    if k.contains("left") {
+                        -pitch.cos()
+                    } else {
+                        pitch.cos()
+                    },
+                    pitch.sin(),
+                );
+                if k.starts_with("pose-wave") {
+                    s.wave.active = true;
+                    s.wave.time = 0.18;
+                    s.wave.direction = direction;
+                } else {
+                    s.throw_time = if k.contains("gather") { 0.8 } else { 1.1 };
+                    s.throw_direction = direction;
+                }
             }
         }
     }
@@ -501,12 +533,12 @@ fn rig_ready(
                 },
             ));
         }
-        if spec.actor == Actor::Crystal {
+        if matches!(spec.actor, Actor::Crystal | Actor::Jelly(_)) {
             commands
                 .entity(entity)
                 .insert((bevy::light::NotShadowCaster, bevy::light::NotShadowReceiver));
         }
-        if matches!(spec.actor, Actor::Fish(_) | Actor::Jelly(_)) {
+        if matches!(spec.actor, Actor::Fish(_)) {
             // Small swimmers retain received reef lighting without adding a
             // second skinned draw for every fish or dark patches on Sabrina.
             commands.entity(entity).insert(bevy::light::NotShadowCaster);
@@ -551,11 +583,6 @@ fn rig_ready(
                 && let Some(source) = materials.get(&handle.0)
             {
                 let mut material = source.clone();
-                if spec.actor == Actor::Sabrina {
-                    material.metallic = 0.04;
-                    material.perceptual_roughness = 0.62;
-                    material.reflectance = 0.28;
-                }
                 if let Actor::Jelly(k) = spec.actor
                     && material_name.is_some_and(|name| name.0 == "Jelly_Skin")
                 {
@@ -597,6 +624,18 @@ fn rig_ready(
         if spec.actor == Actor::Sabrina
             && let Ok(name) = names.get(entity)
         {
+            if name.starts_with("Hair_") {
+                let rotation = relative_rotation(entity, event.entity, &transforms, &parents);
+                if let Ok(transform) = transforms.get(entity) {
+                    if let Some(bone) =
+                        crate::hair::HairBone::new(name, transform.rotation, rotation)
+                    {
+                        commands.entity(entity).insert(bone);
+                    } else {
+                        warn!("Unrecognized Sabrina hair joint: {name}");
+                    }
+                }
+            }
             if name.as_str() == "Hand_R" {
                 commands.entity(entity).insert(Palm);
             }
@@ -605,15 +644,8 @@ fn rig_ready(
                 "Tail_2",
                 "Neck",
                 "Head",
-                "Hair_Back_1",
-                "Hair_Left_1",
-                "Hair_Right_1",
-                "Hair_Back_2",
-                "Hair_Back_3",
-                "Hair_Left_2",
-                "Hair_Left_3",
-                "Hair_Right_2",
-                "Hair_Right_3",
+                "UpperArm_L",
+                "UpperArm_R",
             ]
             .contains(&name.as_str())
             {
@@ -669,6 +701,24 @@ fn animate(
             }
     };
     for (mut player, mut rig) in &mut players {
+        let hidden = match rig.actor {
+            Actor::Fish(i) => {
+                let f = &rendered.0.fish[i];
+                !f.life.active && f.life.pop_time <= 0.22
+            }
+            Actor::Jelly(i) => rendered.0.jelly[i].behaviour.state == reef_sim::JellyState::Hidden,
+            _ => false,
+        };
+        if hidden {
+            // Zero weights make Bevy skip every bone of an unseen rig, so it is
+            // neither evaluated nor re-propagated. Visible rigs restore weights.
+            if player.playing_animations().any(|(_, a)| a.weight() != 0.0) {
+                for (_, a) in player.playing_animations_mut() {
+                    a.set_weight(0.0);
+                }
+            }
+            continue;
+        }
         let (name, phase, speed) = match rig.actor {
             Actor::Sabrina => {
                 let s = &rendered.0.sabrina;
@@ -681,6 +731,7 @@ fn animate(
                     "Wave",
                     "Hurt",
                     "Throw",
+                    "Dive",
                 ];
                 (
                     names[reef_sim::sabrina_pose(s) as usize],
@@ -690,9 +741,6 @@ fn animate(
             }
             Actor::Fish(i) => {
                 let f = &rendered.0.fish[i];
-                if !f.life.active && f.life.pop_time <= 0.22 {
-                    continue;
-                }
                 (
                     "Swim",
                     None,
@@ -701,9 +749,6 @@ fn animate(
             }
             Actor::Jelly(i) => {
                 let j = &rendered.0.jelly[i];
-                if j.behaviour.state == reef_sim::JellyState::Hidden {
-                    continue;
-                }
                 (
                     if j.behaviour.bubble > 0.0 {
                         "Drift"
@@ -741,7 +786,8 @@ fn animate(
             rig.phase = rendered.0.fish[i].swimming.tail_phase / std::f32::consts::TAU * 1.2;
         }
         // Explicit crossfades use game time, so pausing also freezes a blend.
-        rig.blend = (rig.blend + dt / 0.22).min(1.0);
+        let blend_time = if name == "Wave" { 0.06 } else { 0.22 };
+        rig.blend = (rig.blend + dt / blend_time).min(1.0);
         let mut remaining = 1.0;
         for &(old, weight) in &rig.outgoing {
             if rig.blend >= 1.0 {
@@ -782,7 +828,7 @@ fn restore_bones(mut bones: Query<(&mut Transform, &mut CorrectBone)>) {
     }
 }
 
-fn correct_bones(
+pub(crate) fn correct_bones(
     rendered: Res<Presentation>,
     preferences: Res<Preferences>,
     mut set: ParamSet<(Query<&Transform>, Query<&mut Transform>)>,
@@ -808,59 +854,35 @@ fn correct_bones(
         "Tail_2",
         "Neck",
         "Head",
-        "Hair_Back_1",
-        "Hair_Left_1",
-        "Hair_Right_1",
-        "Hair_Back_2",
-        "Hair_Left_2",
-        "Hair_Right_2",
-        "Hair_Back_3",
-        "Hair_Left_3",
-        "Hair_Right_3",
+        "UpperArm_L",
+        "UpperArm_R",
     ] {
         for (e, mut bone) in &mut bones {
             if bone.name != name {
                 continue;
             }
+            let (cast_axis, cast_angle) = reef_sim::sabrina_cast_rotation(s);
             let angle = match name {
                 "Tail_1" => 0.30 * rest,
                 "Tail_2" => 0.10 * rest,
                 "Neck" => gaze * 0.35,
                 "Head" => gaze * 0.65,
-                _ => {
-                    if name.ends_with("_1") {
-                        -gaze
-                    } else {
-                        0.0
-                    }
-                }
+                "UpperArm_L" | "UpperArm_R" => cast_angle,
+                _ => 0.0,
             };
             let axis = if name.starts_with("Tail") {
                 bone.rest_axis
             } else {
-                relative_rotation(e, bone.root, &set.p0(), &parents).inverse() * Vec3::Z
+                relative_rotation(e, bone.root, &set.p0(), &parents).inverse()
+                    * if name.starts_with("UpperArm") {
+                        Vec3::from_array(cast_axis)
+                    } else {
+                        Vec3::Z
+                    }
             };
             if let Ok(mut t) = set.p1().get_mut(e) {
                 bone.original = Some(t.rotation);
                 t.rotation *= Quat::from_axis_angle(axis.normalize_or_zero(), angle);
-                if name.starts_with("Hair_") {
-                    let segment = name.as_bytes()[name.len() - 1] as f32 - b'1' as f32;
-                    let offset = if name.contains("Left") {
-                        1.1
-                    } else if name.contains("Right") {
-                        2.4
-                    } else {
-                        0.0
-                    };
-                    let phase = time * 1.35 - segment * 0.95 + offset;
-                    // Small roots, freer tips: delayed independent currents keep
-                    // the scalp attached and avoid rigid synchronized hair motion.
-                    let amplitude = (0.025 + segment * 0.065) * (1.0 - effort * 0.25) * motion;
-                    t.rotation *= Quat::from_rotation_x(amplitude * phase.sin())
-                        * Quat::from_rotation_z(
-                            amplitude * 0.65 * (time * 0.91 - segment * 0.8 + offset + 0.6).sin(),
-                        );
-                }
             }
         }
     }

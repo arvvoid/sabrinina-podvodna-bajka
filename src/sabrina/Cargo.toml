@@ -6,7 +6,8 @@ rust-version.workspace = true
 license.workspace = true
 [dependencies]
 reef_sim = { path = "../reef_sim" }
-bevy = { version = "=0.20.0", default-features = false, features = ["std", "default_app", "3d_bevy_render", "ui_bevy_render", "scene", "bevy_winit", "x11", "bevy_gilrs", "multi_threaded", "default_font", "audio", "wav"] }
+bevy = { version = "=0.20.0", default-features = false, features = ["std", "default_app", "3d_bevy_render", "pbr_anisotropy_texture", "ui_bevy_render", "scene", "bevy_winit", "x11", "bevy_gilrs", "multi_threaded", "default_font", "audio", "wav", "jpeg"] }
+bevy_render = { version = "=0.20.0", features = ["gles"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 

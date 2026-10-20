@@ -168,6 +168,7 @@ pub enum SabrinaPose {
     Wave,
     Hurt,
     Throw,
+    Dive,
 }
 
 pub fn sabrina_pose(sabrina: &SabrinaEntity) -> SabrinaPose {
@@ -184,6 +185,11 @@ pub fn sabrina_pose(sabrina: &SabrinaEntity) -> SabrinaPose {
         return SabrinaPose::Sing;
     }
     let effort = (sabrina.motion.velocity.length() / 7.2).min(1.0);
+    // Require actual downward travel as well as pitch so idle and casts do not
+    // accidentally enter the forward-reaching dive pose.
+    if effort > 0.12 && sabrina.swimming.pitch < -0.3 && sabrina.motion.velocity.y < -0.5 {
+        return SabrinaPose::Dive;
+    }
     if sabrina.swimming.yaw.sin().abs() > 0.4 && effort > 0.15 {
         return if sabrina.swimming.facing < 0.0 {
             SabrinaPose::TurnLeft
@@ -204,4 +210,46 @@ pub fn sabrina_pose_phase(sabrina: &SabrinaEntity) -> f32 {
         SabrinaPose::Wave => (sabrina.wave.time / 0.75).clamp(0.0, 1.0),
         _ => (sabrina.swimming.phase % 6.28318530718) / 6.28318530718,
     }
+}
+
+/// Gentle three-quarter presentation, mirrored smoothly through turns.
+pub fn sabrina_visual_yaw(sabrina: &SabrinaEntity) -> f32 {
+    let yaw = sabrina.swimming.yaw;
+    // Cosine mirrors the camera-facing bias continuously instead of flipping it.
+    yaw - std::f32::consts::FRAC_PI_6 * yaw.cos()
+}
+
+/// Model-local axis/angle shared by the rendered arms and sampled contacts.
+pub fn sabrina_cast_rotation(sabrina: &SabrinaEntity) -> ([f32; 3], f32) {
+    let (direction, blend_weight) = match sabrina_pose(sabrina) {
+        SabrinaPose::Wave => (
+            sabrina.wave.direction,
+            (sabrina.wave.time / 0.08).clamp(0.0, 1.0)
+                * ((0.75 - sabrina.wave.time) / 0.25).clamp(0.0, 1.0),
+        ),
+        SabrinaPose::Throw => (
+            sabrina.throw_direction,
+            (sabrina.throw_time / 0.3).clamp(0.0, 1.0)
+                * ((1.6 - sabrina.throw_time) / 0.3).clamp(0.0, 1.0),
+        ),
+        _ => return ([0.0, 0.0, 1.0], 0.0),
+    };
+    let direction = direction.unit();
+    let yaw = sabrina_visual_yaw(sabrina);
+    // Undo the actor's yaw, then pitch, to express the spell aim in model space.
+    let local_xy = v(direction.x * yaw.cos(), direction.y).rotate(-sabrina.swimming.pitch);
+    let local_z = direction.x * yaw.sin();
+    // The authored reach points along +X; its cross product with the aim gives
+    // the correction axis. Parallel aims need a stable fallback axis.
+    let perpendicular_length = (local_xy.y * local_xy.y + local_z * local_z).sqrt();
+    let axis = if perpendicular_length > 0.00001 {
+        [
+            0.0,
+            -local_z / perpendicular_length,
+            local_xy.y / perpendicular_length,
+        ]
+    } else {
+        [0.0, 0.0, 1.0]
+    };
+    (axis, local_xy.x.clamp(-1.0, 1.0).acos() * blend_weight)
 }
