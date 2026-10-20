@@ -17,6 +17,7 @@ mod hair;
 
 mod embedded_assets;
 
+mod loading;
 mod mipmaps;
 
 mod presentation;
@@ -163,6 +164,7 @@ fn main() {
             bevy::diagnostic::FrameTimeDiagnosticsPlugin::default(),
             app::GamePlugin,
             assets::CharacterPlugin,
+            loading::LoadingPlugin,
             hair::HairPlugin,
             visuals::ReefPlugin,
             ui::ReefUiPlugin,

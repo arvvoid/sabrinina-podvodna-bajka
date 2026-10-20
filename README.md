@@ -126,6 +126,8 @@ Windows x86_64 MSVC builds embed the modern DXC shader compiler in the executabl
 
 All runtime assets are embedded at compile time: the executable runs without an `assets/` directory or the source tree, and does not extract assets to disk. This applies to local and tagged release builds. Rebuild after changing assets, or set `SABRINA_ASSETS=/absolute/path/to/assets` to use an external asset tree while developing artwork. Blender is needed only to edit artwork.
 
+The picture-based loading screen tracks asset loading, character setup and graphics warm-up. Models (including render LODs), textures, UI images, fonts, audio and custom shaders are preloaded and retained. Actors and effects render behind the splash while the current graphics pipelines compile; the menu opens only after the pipeline queue settles. This reduces first-use stalls, but changing graphics settings or encountering a new rendering variant can still require additional driver work. The main-menu title artwork follows the selected English, Croatian or Italian language.
+
 `./tools/package-bevy.sh` creates a portable directory under `dist/` containing the executable and accompanying documentation/license notices. The game is **asset-self-contained, not fully statically linked**: Linux still needs system libraries such as glibc, ALSA and libudev, and all platforms need their graphics drivers and OS windowing/audio support. Keep the accompanying notices when redistributing.
 
 ### Runtime options

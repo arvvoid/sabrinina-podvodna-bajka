@@ -72,6 +72,40 @@ fn rect(x: f32, y: f32, w: f32, h: f32) -> Rect {
     Rect { x, y, w, h }
 }
 
+fn loading_image_rect(viewport_width: f32, viewport_height: f32) -> Rect {
+    let height = viewport_height.max(viewport_width / (1365.0 / 768.0));
+    let width = height * (1365.0 / 768.0);
+    rect(
+        (CANVAS_WIDTH - width) / 2.0,
+        (CANVAS_HEIGHT - height) / 2.0,
+        width,
+        height,
+    )
+}
+
+fn on_loading_image(image: Rect, area: Rect) -> Rect {
+    let scale = image.w / 1365.0;
+    rect(
+        image.x + area.x * scale,
+        image.y + area.y * scale,
+        area.w * scale,
+        area.h * scale,
+    )
+}
+
+fn loading_overlay(image: Rect) -> (Rect, Rect) {
+    let mut status = on_loading_image(image, rect(481.5, 674.0, 402.0, 35.0));
+    let mut bar = on_loading_image(image, rect(534.5, 738.0, 296.0, 8.0));
+    let shift = (bar.y + bar.h - (CANVAS_HEIGHT - 24.0)).max(0.0);
+    status.y -= shift;
+    bar.y -= shift;
+    (status, bar)
+}
+
+fn title_path(language: usize) -> &'static str {
+    ["ui/title_eng.png", "ui/title_hr.png", "ui/title_it.png"][language % 3]
+}
+
 #[derive(Component, Clone, Copy)]
 enum Action {
     Play,
@@ -528,8 +562,8 @@ fn draw(
     if ui.screen == Screen::Loading {
         let viewport_width = window.width() / zoom;
         let viewport_height = window.height() / zoom;
-        let image_height = viewport_height.max(viewport_width / (1365.0 / 768.0));
-        let image_width = image_height * (1365.0 / 768.0);
+        let image = loading_image_rect(viewport_width, viewport_height);
+        let (status_area, bar_area) = loading_overlay(image);
         let e = builder
             .commands
             .spawn((
@@ -537,28 +571,16 @@ fn draw(
                     image: server.load("ui/loading.png"),
                     ..default()
                 },
-                Node {
-                    position_type: PositionType::Absolute,
-                    left: px((CANVAS_WIDTH - image_width) / 2.0),
-                    top: px((CANVAS_HEIGHT - image_height) / 2.0),
-                    width: px(image_width),
-                    height: px(image_height),
-                    ..default()
-                },
+                image.node(),
             ))
             .id();
         builder.commands.entity(root).add_child(e);
-        builder.background_alpha = 0.2;
-        let status = builder.label(rect(500.0, 760.0, 600.0, 34.0), 18.0, "", Some("loading"));
-        builder
-            .commands
-            .entity(status)
-            .insert(TextLayout::justify(Justify::Center));
-        builder.meter(
-            rect(650.0, 842.0, 300.0, 4.0),
-            Color::srgb(0.38, 1.0, 0.76),
-            "loading",
-        );
+        let status = builder.label(status_area, 16.0 * image.w / 1365.0, "", Some("loading"));
+        builder.commands.entity(status).insert((
+            TextLayout::justify(Justify::Center),
+            BackgroundColor(Color::srgb(0.02, 0.13, 0.20)),
+        ));
+        builder.meter(bar_area, Color::srgb(0.38, 1.0, 0.76), "loading");
         focus.count = 0;
         return;
     }
@@ -626,12 +648,14 @@ fn draw_menu(builder: &mut Builder<'_, '_, '_>, preferences: &Preferences, rende
         tr("A REMAKE BY LUKA DEŽULOVIĆ", lang),
         None,
     );
-    builder.label(
-        rect(100.0, 137.0, 460.0, 170.0),
-        44.0,
-        tr("Sabrina's\nUnderwater\nFairy Tale", lang),
-        None,
-    );
+    let title = builder
+        .commands
+        .spawn((
+            ImageNode::new(builder.server.load(title_path(lang))),
+            rect(76.0, 145.0, 510.0, 170.0).node(),
+        ))
+        .id();
+    builder.commands.entity(builder.root).add_child(title);
     builder.label(
         rect(100.0, 340.0, 450.0, 76.0),
         21.0,
@@ -1294,20 +1318,27 @@ fn update(
     mut bars: Query<(&Meter, &mut Node)>,
     focus: Res<Focus>,
     mut hits: Query<(&Hit, &mut ImageNode)>,
-    server: Res<AssetServer>,
     library: Res<crate::assets::Library>,
+    loading: Res<crate::loading::Loading>,
+    server: Res<AssetServer>,
 ) {
     let sabrina = &simulation.0.sabrina;
     let language = preferences.language;
     for (key, mut text) in &mut texts {
         let value = match key.0 {
-            "loading" => tr(
-                if library.ready {
-                    "Preparing the characters…"
-                } else {
-                    "Bringing the reef to life…"
-                },
-                language,
+            "loading" => format!(
+                "{}  {:.0}%",
+                tr(
+                    if loading.warming {
+                        "Preparing graphics…"
+                    } else if library.ready {
+                        "Preparing the characters…"
+                    } else {
+                        "Bringing the reef to life…"
+                    },
+                    language,
+                ),
+                loading.progress * 100.0
             ),
             "victory" => format!(
                 "{}{}\n{}{}",
@@ -1457,22 +1488,7 @@ fn update(
     }
     for (meter, mut node) in &mut bars {
         let amount = match meter.0 {
-            "loading" => {
-                let total = library.handles.len() + library.lods.len();
-                let loaded = library
-                    .handles
-                    .iter()
-                    .chain(library.lods.values())
-                    .filter(|handle| server.is_loaded_with_dependencies(handle.id()))
-                    .count();
-                if ui.loaded {
-                    1.0
-                } else if total == 0 {
-                    0.0
-                } else {
-                    loaded as f32 / total as f32 * 0.9
-                }
-            }
+            "loading" => loading.progress,
             "health" => sabrina.vitality.health / 100.0,
             "song" => sabrina.song.energy / 100.0,
             "crystal" => 1.0 - sabrina.cooldown / reef_sim::recharge_duration(&simulation.0),
@@ -1544,6 +1560,29 @@ mod tests {
         InputPlugin,
         gamepad::{RawGamepadButtonChangedEvent, RawGamepadEvent},
     };
+
+    #[test]
+    fn title_artwork_matches_translation_language_order() {
+        assert_eq!(title_path(0), "ui/title_eng.png");
+        assert_eq!(title_path(1), "ui/title_hr.png");
+        assert_eq!(title_path(2), "ui/title_it.png");
+    }
+
+    #[test]
+    fn loading_bar_follows_artwork_and_stays_visible_on_wide_and_tall_windows() {
+        for (width, height) in [(1280.0_f32, 720.0_f32), (2560.0, 1080.0), (720.0, 1280.0)] {
+            let zoom = (width / CANVAS_WIDTH).min(height / CANVAS_HEIGHT);
+            let image = loading_image_rect(width / zoom, height / zoom);
+            let (status, bar) = loading_overlay(image);
+            assert!((bar.x + bar.w / 2.0 - CANVAS_WIDTH / 2.0).abs() < 1.0);
+            assert!(bar.y + bar.h <= CANVAS_HEIGHT - 23.99);
+            assert!(bar.y > status.y + status.h);
+            assert!((bar.w / image.w - 296.0 / 1365.0).abs() < 0.00001);
+        }
+        let image = loading_image_rect(CANVAS_WIDTH, CANVAS_HEIGHT);
+        let (_, bar) = loading_overlay(image);
+        assert!((bar.y - (image.y + 738.0 * image.w / 1365.0)).abs() < 0.001);
+    }
 
     fn hit(index: usize, x: f32, y: f32, slider: bool) -> Hit {
         Hit {

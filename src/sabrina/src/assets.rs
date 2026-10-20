@@ -167,7 +167,10 @@ impl Plugin for CharacterPlugin {
         app.init_resource::<Library>()
             .init_resource::<RigCache>()
             .add_systems(Startup, load)
-            .add_systems(Update, (finish_load, sync_models).chain())
+            .add_systems(
+                Update,
+                (crate::loading::ready, finish_load, sync_models).chain(),
+            )
             .add_systems(
                 Update,
                 animate
@@ -211,6 +214,7 @@ pub(crate) fn finish_load(
     materials: Res<Assets<bevy::gltf::GltfMaterial>>,
     mut images: ResMut<Assets<Image>>,
     rigs: Query<&RigPlayer>,
+    loading: Res<crate::loading::Loading>,
 ) {
     if ui.loaded {
         return;
@@ -256,6 +260,9 @@ pub(crate) fn finish_load(
         return;
     }
     if rigs.iter().count() < 1 + reef_sim::FISH_COUNT + reef_sim::JELLY_COUNT {
+        return;
+    }
+    if loading.progress < 1.0 {
         return;
     }
     ui.loaded = true;
