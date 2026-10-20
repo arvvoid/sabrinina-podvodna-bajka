@@ -822,7 +822,7 @@ fn draw_menu(builder: &mut Builder<'_, '_, '_>, preferences: &Preferences, rende
             false,
         ),
         (
-            rect(100.0, 742.0, 220.0, 48.0),
+            rect(100.0, 732.0, 220.0, 48.0),
             "Goodbye",
             Action::Quit,
             false,
@@ -831,24 +831,24 @@ fn draw_menu(builder: &mut Builder<'_, '_, '_>, preferences: &Preferences, rende
         builder.button(r, key, action, primary);
     }
     builder.label(
-        rect(340.0, 742.0, 220.0, 48.0),
+        rect(340.0, 732.0, 220.0, 48.0),
         17.0,
         format!("{}{}", tr("Best visit: ", lang), preferences.best),
         None,
     );
     builder.label(
-        rect(100.0, 794.0, 270.0, 22.0),
+        rect(100.0, 782.0, 270.0, 22.0),
         13.5,
         crate::build_info::menu_label(),
         None,
     );
-    let renderer_label = builder.label(rect(375.0, 794.0, 185.0, 22.0), 13.5, renderer, None);
+    let renderer_label = builder.label(rect(375.0, 782.0, 185.0, 22.0), 13.5, renderer, None);
     builder
         .commands
         .entity(renderer_label)
         .insert(TextLayout::justify(Justify::Right));
     builder.label(
-        rect(100.0, 818.0, 460.0, 16.0),
+        rect(100.0, 806.0, 460.0, 16.0),
         10.0,
         "Copyright © 2026 Luka Dežulović",
         None,
