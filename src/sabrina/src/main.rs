@@ -29,6 +29,8 @@ mod ui;
 mod verification;
 
 mod visuals;
+#[cfg(any(target_os = "windows", test))]
+mod xinput;
 use bevy::{
     prelude::*,
     render::{
@@ -106,6 +108,42 @@ fn main() {
     if external_assets.is_none() {
         embedded_assets::register(&mut app);
     }
+    let plugins = DefaultPlugins
+        .set(AssetPlugin {
+            file_path: external_assets.unwrap_or_else(|| "assets".into()),
+            ..default()
+        })
+        .set(WindowPlugin {
+            primary_window: Some(Window {
+                title: "Sabrinina podvodna bajka".into(),
+                resolution: resolution.into(),
+                mode,
+                decorations,
+                present_mode,
+                ..default()
+            }),
+            ..default()
+        })
+        .set(RenderPlugin {
+            render_creation: RenderCreation::Automatic(Box::new(gpu)),
+            ..default()
+        });
+    #[cfg(target_os = "windows")]
+    let plugins = if options.wgi {
+        println!("CONTROLLER BACKEND: Windows Gaming Input (GilRs)");
+        plugins
+    } else {
+        println!("CONTROLLER BACKEND: native XInput (Xbox / Steam Input)");
+        plugins.disable::<bevy::gilrs::GilrsPlugin>()
+    };
+    #[cfg(not(target_os = "windows"))]
+    if options.wgi {
+        eprintln!("Ignoring --wgi: this override is only available on Windows");
+    }
+    #[cfg(target_os = "windows")]
+    if !options.wgi {
+        app.add_plugins(xinput::XInputPlugin);
+    }
     app.add_systems(
         Startup,
         |adapter: Res<bevy::render::renderer::RenderAdapterInfo>| {
@@ -120,28 +158,7 @@ fn main() {
         .insert_resource(time_update)
         .insert_resource(options)
         .insert_resource(prefs)
-        .add_plugins(
-            DefaultPlugins
-                .set(AssetPlugin {
-                    file_path: external_assets.unwrap_or_else(|| "assets".into()),
-                    ..default()
-                })
-                .set(WindowPlugin {
-                    primary_window: Some(Window {
-                        title: "Sabrinina podvodna bajka".into(),
-                        resolution: resolution.into(),
-                        mode,
-                        decorations,
-                        present_mode,
-                        ..default()
-                    }),
-                    ..default()
-                })
-                .set(RenderPlugin {
-                    render_creation: RenderCreation::Automatic(Box::new(gpu)),
-                    ..default()
-                }),
-        )
+        .add_plugins(plugins)
         .add_plugins((
             bevy::diagnostic::FrameTimeDiagnosticsPlugin::default(),
             app::GamePlugin,
