@@ -217,7 +217,7 @@ fn setup(
         },
     ));
     if options.direct_draw {
-        // Diagnostic A/B switch: plain draws avoid wgpu's per-frame DX12
+        // Direct draws (the DX12 default) avoid wgpu's per-frame DX12
         // indirect-argument validation pass. Bevy requires it at spawn time.
         camera.insert(bevy::render::view::NoIndirectDrawing);
     }

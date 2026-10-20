@@ -101,13 +101,23 @@ cargo run --locked --release -p sabrina
 | Android (planned) | Vulkan | No mobile export available yet | Not tested |
 | iOS (planned) | Metal | No mobile export available yet | Not tested |
 
-Defaults are Direct3D 12 on Windows, Vulkan on Linux and Metal on macOS. See the runtime-options table for supported overrides. An unsupported flag warns and uses the platform default; if a selected backend cannot initialize, the game does not silently switch. `WGPU_BACKEND` does not override the selection. OpenGL requires a compatible driver and, on Unix-like systems, an available EGL implementation.
+#### Manual hardware testing
+
+Additional playtesting results reported on 20 October 2026:
+
+| System | CPU | GPU | Reported result |
+|---|---|---|---|
+| Intel Core i7-11800H | Intel UHD Graphics (Tiger Lake-H GT1) | Works well; 50-60 FPS, 60+ FPS lower graphics |
+| Intel Core i7-11800H | NVIDIA GeForce RTX 3070 Laptop GPU, 8 GiB VRAM | Works well; 400+ FPS |
+| Older desktop | Intel Core i7-2600K | NVIDIA GeForce GTX 1060 | Works well; stable 60+ FPS |
+
+These are informal playtesting observations, not directly comparable benchmarks or minimum requirements. Resolution, graphics quality, frame-limit settings and test scene were not recorded for these results. Development, fine tuning and requirement assessment still in progress.
+
+Defaults are Direct3D 12 on Windows, Vulkan on Linux and Metal on macOS. See the runtime-options table for supported overrides. An unsupported flag warns and uses the platform default; if a selected backend cannot initialize, the game does not silently switch. OpenGL requires a compatible driver and, on Unix-like systems, an available EGL implementation.
 
 On multi-GPU/eGPU systems, `WGPU_ADAPTER_NAME` requests an adapter by a case-insensitive part of its name, without changing the backend. For example, on Linux: `WGPU_ADAPTER_NAME="RTX 3070 Laptop" cargo run --locked --release -p sabrina`. Check the startup `RENDER DEVICE` line: Bevy falls back to automatic selection if no compatible adapter matches. Selecting the internal GPU can work around an eGPU presentation/driver failure without disconnecting the eGPU.
 
 Windows x86_64 MSVC builds embed the modern DXC shader compiler in the executable. No separate `dxcompiler.dll` or installed Windows SDK is needed to play. This avoids the legacy FXC rendering path, which produced dark silhouettes on the tested NVIDIA Windows machine. To build on Windows, install Rust and Visual Studio's **Desktop development with C++** workload, including a Windows SDK and the **C++ ATL for latest build tools** component, then run the Cargo command above in PowerShell.
-
-Windows verification also passed all 51 automated tests and strict Clippy checks. The High-quality 1080p 72-fish stress scene averaged 60.9 FPS, with no measured frames exceeding 25 ms on that machine. These results are hardware-specific, not a performance guarantee. Broader Windows hardware testing, macOS runtime, physical controllers and mobile exports still need testing; synthetic controller checks do not replace physical-controller testing.
 
 All runtime assets are embedded at compile time: the executable runs without an `assets/` directory or the source tree, and does not extract assets to disk. This applies to local and tagged release builds. Rebuild after changing assets, or set `SABRINA_ASSETS=/absolute/path/to/assets` to use an external asset tree while developing artwork. Blender is needed only to edit artwork.
 
@@ -123,7 +133,8 @@ Pass flags after the executable name, for example `./tools/run.sh --vulkan --cap
 | `--vulkan` | Use Vulkan on Linux (default), or as a test override on Windows and macOS. |
 | `--metal` | Use Metal on macOS (the default); ignored elsewhere. |
 | `--opengl` | Use wgpu's GL/GLES backend on Windows, Linux and macOS for testing; requires a compatible driver and, on Unix-like systems, EGL. |
-| `--direct-draw` | Use regular draw calls instead of Bevy's indirect drawing for A/B performance testing. |
+| `--direct-draw` | Force regular draw calls instead of Bevy's indirect drawing (the default on DX12). |
+| `--indirect-draw` | Force Bevy's indirect drawing, overriding the DX12 direct-draw default. Indirect drawing remains the default on other backends. If both draw flags are passed, the last one wins. |
 | `--fullhd` | Use 1920×1080 instead of the default 1280×720 window resolution. |
 | `--verify-input` | Use a fixed 60 Hz time step for deterministic input verification; opens windowed. |
 | `--capture-game`, `--capture-visit`, `--capture-crystal`, `--capture-throw`, `--capture-wave`, `--capture-song`, `--capture-combat`, `--capture-finale` | Capture gameplay scenes; `finale` shows the final four-visitor round. |

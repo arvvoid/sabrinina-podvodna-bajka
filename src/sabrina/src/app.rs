@@ -51,11 +51,19 @@ pub struct Options {
 
 impl Options {
     pub fn from_args() -> Self {
-        let mut options = Self {
-            capture_fxaa: std::env::var("SABRINA_CAPTURE_AA").as_deref() == Ok("fxaa"),
-            ..Self::default()
-        };
-        for argument in std::env::args() {
+        let mut options = Self::from_arguments(std::env::args(), crate::current_platform());
+        options.capture_fxaa = std::env::var("SABRINA_CAPTURE_AA").as_deref() == Ok("fxaa");
+        options
+    }
+
+    fn from_arguments(
+        arguments: impl IntoIterator<Item = impl AsRef<str>>,
+        platform: crate::Platform,
+    ) -> Self {
+        let mut options = Self::default();
+        let mut direct_draw = None;
+        for argument in arguments {
+            let argument = argument.as_ref();
             if argument == "--fullhd" {
                 options.fullhd = true;
             }
@@ -63,9 +71,12 @@ impl Options {
                 options.verify = true;
             }
             if argument == "--direct-draw" {
-                options.direct_draw = true;
+                direct_draw = Some(true);
             }
-            if let Some(backend) = RenderBackend::from_flag(&argument) {
+            if argument == "--indirect-draw" {
+                direct_draw = Some(false);
+            }
+            if let Some(backend) = RenderBackend::from_flag(argument) {
                 options.backend = Some(backend);
             }
             if let Some(kind) = argument.strip_prefix("--capture-") {
@@ -73,6 +84,9 @@ impl Options {
                 options.school = kind == "school";
             }
         }
+        options.direct_draw = direct_draw.unwrap_or_else(|| {
+            crate::selected_backend(platform, options.backend) == RenderBackend::Dx12
+        });
         options
     }
 }
@@ -400,6 +414,85 @@ mod tests {
         gamepad::{RawGamepadButtonChangedEvent, RawGamepadEvent},
     };
     use std::time::Duration;
+
+    #[test]
+    fn draw_defaults_follow_the_selected_backend() {
+        use crate::Platform::{Apple, Other, Windows};
+
+        for platform in [Windows, Apple, Other] {
+            for flag in [
+                None,
+                Some("--dx12"),
+                Some("--vulkan"),
+                Some("--metal"),
+                Some("--opengl"),
+            ] {
+                let options = Options::from_arguments(flag, platform);
+                let backend = crate::selected_backend(platform, options.backend);
+                assert_eq!(
+                    options.direct_draw,
+                    backend == RenderBackend::Dx12,
+                    "{platform:?}, {flag:?}"
+                );
+            }
+        }
+        assert!(Options::from_arguments(["sabrina"], Windows).direct_draw);
+        assert!(!Options::from_arguments(["sabrina"], Apple).direct_draw);
+        assert!(!Options::from_arguments(["sabrina"], Other).direct_draw);
+    }
+
+    #[test]
+    fn draw_flags_override_defaults_regardless_of_backend_flag_order() {
+        use crate::Platform::{Apple, Other, Windows};
+
+        for platform in [Windows, Apple, Other] {
+            for backend in ["--dx12", "--vulkan", "--metal", "--opengl"] {
+                for (draw, expected) in [("--direct-draw", true), ("--indirect-draw", false)] {
+                    for arguments in [[backend, draw], [draw, backend]] {
+                        let options = Options::from_arguments(arguments, platform);
+                        assert_eq!(options.direct_draw, expected, "{platform:?}, {arguments:?}");
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn last_draw_flag_wins() {
+        for platform in [
+            crate::Platform::Windows,
+            crate::Platform::Apple,
+            crate::Platform::Other,
+        ] {
+            assert!(
+                Options::from_arguments(["--indirect-draw", "--direct-draw"], platform).direct_draw
+            );
+            assert!(
+                !Options::from_arguments(["--direct-draw", "--indirect-draw"], platform)
+                    .direct_draw
+            );
+        }
+    }
+
+    #[test]
+    fn draw_selection_preserves_other_runtime_options() {
+        let options = Options::from_arguments(
+            [
+                "--fullhd",
+                "--verify-input",
+                "--capture-school",
+                "--indirect-draw",
+                "--dx12",
+            ],
+            crate::Platform::Windows,
+        );
+        assert!(options.fullhd);
+        assert!(options.verify);
+        assert!(options.school);
+        assert_eq!(options.capture.as_deref(), Some("school"));
+        assert_eq!(options.backend, Some(RenderBackend::Dx12));
+        assert!(!options.direct_draw);
+    }
 
     #[test]
     fn quick_gameplay_taps_survive_frames_with_zero_or_multiple_fixed_ticks() {
