@@ -1,30 +1,34 @@
 # Sabrinina podvodna bajka
 
-*Sabrina’s Underwater Fairy Tale*
+**Sabrina’s Underwater Fairy Tale**
 
 [![Test](https://github.com/arvvoid/sabrinina-podvodna-bajka/actions/workflows/rust.yml/badge.svg)](https://github.com/arvvoid/sabrinina-podvodna-bajka/actions/workflows/rust.yml)
+
 [![CodeQL](https://github.com/arvvoid/sabrinina-podvodna-bajka/actions/workflows/github-code-scanning/codeql/badge.svg)](https://github.com/arvvoid/sabrinina-podvodna-bajka/actions/workflows/github-code-scanning/codeql)
+
 [![Rust 1.99.1](https://img.shields.io/badge/Rust-1.99.1-orange?logo=rust)](https://www.rust-lang.org/)
+
 [![Bevy 0.20.0](https://img.shields.io/badge/Bevy-0.20.0-blue)](https://bevy.org/)
+
 [![Code: Apache 2.0](https://img.shields.io/badge/Code-Apache%202.0-green.svg)](LICENSE)
 
-A small underwater game about a mermaid, tropical fish and a hungry jellyfish. Swim through the reef, keep the fish safe with song and magic, or switch to quiet aquarium mode and enjoy the sea.
+This is a little underwater game I am making with my daughter Sabrina. You swim around the reef as a mermaid, look after the fish and deal with hungry jellyfish using a magic crystal, waves and song. There is also an aquarium mode if you just want to watch the fish and relax.
 
 ![Sabrina swimming among tropical fish in the underwater reef](docs/screenshots/gameplay.png)
 
-*The current Rust and Bevy remake — an early working version, not the finished game.*
+**This is the current Rust/Bevy version. It works and is playable, but it is still a work in progress.**
 
 ### See it in motion
 
 [![Animated gameplay: Sabrina uses crystal magic, a close wave and song to protect the fish](docs/media/gameplay-preview.gif)](docs/media/gameplay.mp4)
 
-[Watch or download the 20-second gameplay video (MP4, 720p)](docs/media/gameplay.mp4). The eight-second preview above loops silently; the full clip uses the game's combat music as its soundtrack. Recorded from the current game with scripted inputs, not a pre-rendered animation.
+[Watch or download the 20-second gameplay video (MP4, 720p)](docs/media/gameplay.mp4). The short GIF loops without sound. The full video has the combat music. Both were captured from the actual game with scripted inputs, not rendered separately.
 
 ## How it started
 
-I made the [original Scratch game](https://scratch.mit.edu/projects/1203591608/) together with my daughter Sabrina, who was four at the time. Sabrina came up with the idea and design; I helped as her dad with teaching, technical help and explanations. Together, we built a little underwater world with swimming fish, a hungry jellyfish and a mermaid who protects the fish with magic.
+This started as a [Scratch game](https://scratch.mit.edu/projects/1203591608/) I made together with my daughter Sabrina when she was four. The idea and game design were hers. I was there as dad, explaining things, helping her learn and doing the technical parts with her. We ended up with an underwater world full of fish, a hungry jellyfish and Sabrina the mermaid protecting everyone with magic.
 
-That Scratch project became a 3D Godot prototype, then this Rust and Bevy remake: a full standalone game growing out of our father-and-daughter project. The side-on view, voices, crystal magic and peaceful pauses come from that original game.
+I then tried turning it into a 3D game in Godot, before deciding to remake the whole thing in Rust and Bevy. The point was not to turn it into some completely different game. I wanted to keep the things Sabrina came up with: the side view, the voices, the crystal, the magic and the peaceful parts between attacks. It is still our little project, just a lot more ambitious now.
 
 **Development:** Luka Dežulović
 
@@ -34,22 +38,25 @@ The Godot prototype is preserved on [`legacy_godot`](https://github.com/arvvoid/
 
 ## Current status and release plans
 
-This is an initial working version. It is playable, but still needs more work, refinement and playtesting before it is ready for release. Once it is ready, I plan to publish it on **Steam, Android and iOS**. These are planned releases, not currently available versions; there is no release date yet.
+The game is playable already, but I am still working on it. There are animations to improve, balance to tweak and plenty of testing left. I would like to release it on **Steam**, and later on **Android and iOS**. Those releases are planned, not available yet, and I am not setting a date until it is ready.
 
 ## Playing
 
-Fish arrive during peaceful intervals. Each visiting jellyfish has **100 health** and stays until its health reaches zero, then retreats. There is no timeout or eaten-fish limit. **Losing all fish during a round, or all Sabrina's health, ends the game.** Jellyfish still grow as they eat; Sabrina recovers health after a safe period.
+The fish swim around during the quieter parts. Every now and then jellyfish show up and try to eat them. Each jellyfish has **100 health** and only retreats after you bring that down to zero. There is no timeout or limit to the number of fish it can eat. If you lose all the fish during a round, or Sabrina loses all her health, it is game over. Jellyfish get bigger as they eat, and Sabrina slowly recovers if she stays safe for a while.
 
-**Protect the reef through 10 rounds to win.** Round 10 is always the last and always spawns **four jellyfish**, in both Gentle and Lively modes, regardless of the normal visitor limit. Defeat all four with some health and at least one fish remaining to reach the victory screen, showing total score and surviving fish. There is no round 11. Quiet aquarium remains endless.
+The goal is to protect the reef for **10 rounds**. Round 10 always sends **four jellyfish**, regardless of the visitor limit or whether you selected Gentle or Lively. Defeat all four with Sabrina still alive and at least one fish left, and you win. The end screen shows your score and surviving fish. There is no round 11. Aquarium mode keeps going indefinitely.
 
 - **Crystal:** 40 damage and a 3-second air bubble. A bubbled jellyfish cannot swim, sting or eat, but waves can still push it. The crystal returns like a boomerang after a hit or miss; it recharges in 12 seconds from launch. Once returned, it immediately resumes orbiting, without glow or particles until ready to throw again. Gentle mode auto-aims; Lively uses a straight skillshot aimed by swimming before casting (horizontal while stationary).
+
 - **Wave:** pushes fish away as before. Within 2.5 world units of the cast position it also pushes a jellyfish and deals 10 damage, once per visitor per cast. This checks the bell and tentacles, not just the centre, including at point-blank range. Recharge: 3 seconds.
+
 - **Song:** gathers nearby fish, but can also attract jellyfish. Its reach shrinks with energy; exhausting it requires a complete recharge.
+
 - **Progression:** each round slightly increases visitor speed and the probability of multiple visitors, up to the selected visitor limit. Speed growth is bounded; health and damage stay consistent.
 
-Scoring rewards actions, not waiting: **1 point per actual damage**, **100 per defeated visitor**, **50 per genuine fish rescue**, and **25 per surviving fish** after every visitor is defeated. A fish can earn only one rescue reward per round across all abilities. Crystal collection only scores for threatened fish; wave rescues require surviving and reaching clear water; song requires escorting a threatened fish to safety. Safe fish collection, missed attacks and passive waiting earn nothing. A sting still subtracts up to 100 points. Hit, rescue and survivor rewards appear immediately, and each visitor has a health bar.
+I wanted the score to mean you actually did something, not that you left the game running. You get: **1 point per actual damage**, **100 per defeated visitor**, **50 per genuine fish rescue**, and **25 per surviving fish** after every visitor is defeated. A fish can earn only one rescue reward per round across all abilities. Crystal collection only scores for threatened fish; wave rescues require surviving and reaching clear water; song requires escorting a threatened fish to safety. Safe fish collection, missed attacks and passive waiting earn nothing. A sting still subtracts up to 100 points. Hit, rescue and survivor rewards appear immediately, and each visitor has a health bar.
 
-Settings offer Gentle and Lively difficulty, encounter pacing and a peaceful, noncompetitive aquarium mode. The visitor-limit setting applies to rounds 1–9 only. Best scores from the old scoring rules are reset once; the saved best remains a local single-round record, not a normalized leaderboard across custom settings. The obsolete spoken instructions have been removed; the localized written guide describes the current rules. Character voices and song remain.
+You can choose Gentle or Lively, adjust how often jellyfish appear, or turn the whole thing into a peaceful aquarium without any competition. The visitor-limit setting applies to rounds 1–9 only. Best scores from the old scoring rules are reset once; the saved best remains a local single-round record, not a normalized leaderboard across custom settings. The obsolete spoken instructions have been removed; the localized written guide describes the current rules. Character voices and song remain.
 
 | Action | Mouse / keyboard | Xbox | PlayStation |
 |---|---|---|---|
@@ -60,7 +67,7 @@ Settings offer Gentle and Lively difficulty, encounter pacing and a peaceful, no
 | Pause | Escape | Start / Menu | Options |
 | Fullscreen | F11 or Settings | Settings | Settings |
 
-HUD and help hints follow the connected controller, including button colours. With multiple controllers, hints follow the one most recently used; disconnecting all controllers restores keyboard/mouse hints. Unrecognized controllers use neutral bottom/left/right button labels. Detection uses the device name and USB vendor ID reported by the OS; remappers such as Steam Input may expose a different controller type. Keyboard/mouse input remains available while a controller is connected.
+The game changes its button hints to match whichever controller you are using, including the button colours. With multiple controllers, hints follow the one most recently used; disconnecting all controllers restores keyboard/mouse hints. Unrecognized controllers use neutral bottom/left/right button labels. Detection uses the device name and USB vendor ID reported by the OS; remappers such as Steam Input may expose a different controller type. Keyboard/mouse input remains available while a controller is connected.
 
 **Windows controllers:** the default backend is native **XInput**, for Xbox-compatible controllers and Steam Input's Xbox gamepad emulation. With Steam Input enabled, a DualShock/DualSense or other supported controller is intentionally presented with Xbox hints. Use Steam's **Gamepad** layout, not a keyboard/mouse-only layout. Input is polled on a separate thread at a requested 4 ms interval so observed short button taps are retained between rendered frames. XInput supports up to four controller slots; it does not directly recognize unconverted Sony/generic HID devices.
 
@@ -80,7 +87,7 @@ English, Croatian and Italian are available through the main menu's **Language�
 
 ## Build and run
 
-Install [Rust](https://rustup.rs/). The toolchain and dependencies are pinned in `rust-toolchain.toml` and `Cargo.lock` (Rust 1.99.1, Bevy 0.20.0).
+Install [Rust](https://rustup.rs/) first. I pin the toolchain and dependencies in `rust-toolchain.toml` and `Cargo.lock`, currently Rust 1.99.1 and Bevy 0.20.0, so everyone builds against the same versions.
 
 On Debian/Ubuntu, install the native dependencies:
 
@@ -114,9 +121,9 @@ Additional playtesting results reported on 20 October 2026:
 |---|---|---|---|
 | Intel Core i7-11800H | Intel UHD Graphics (Tiger Lake-H GT1) | Works well; 50-60 FPS, 60+ FPS lower graphics |
 | Intel Core i7-11800H | NVIDIA GeForce RTX 3070 Laptop GPU, 8 GiB VRAM | Works well; 400+ FPS |
-| Older desktop | Intel Core i7-2600K | NVIDIA GeForce GTX 1060 | Works well; stable 60+ FPS |
+| Intel Core i7-2600K (older desktop) | NVIDIA GeForce GTX 1060 | Works well; stable 60+ FPS |
 
-These are informal playtesting observations, not directly comparable benchmarks or minimum requirements. Resolution, graphics quality, frame-limit settings and test scene were not recorded for these results. Development, fine tuning and requirement assessment still in progress.
+These are just results from machines I have tested, not proper comparable benchmarks and definitely not minimum requirements. Resolution, graphics quality, frame-limit settings and test scene were not recorded for these results. Development, fine tuning and requirement assessment still in progress.
 
 Defaults are Direct3D 12 on Windows, Vulkan on Linux and Metal on macOS. See the runtime-options table for supported overrides. An unsupported flag warns and uses the platform default; if a selected backend cannot initialize, the game does not silently switch. OpenGL requires a compatible driver and, on Unix-like systems, an available EGL implementation.
 
@@ -126,9 +133,9 @@ Windows x86_64 MSVC builds embed the modern DXC shader compiler in the executabl
 
 Windows release builds open only the game window, without an extra console; debug builds keep the console. Startup, renderer and error diagnostics are written to `game.log` beside `settings.json` (replaced each launch). On Windows this is `%APPDATA%\sabrinina-podvodna-bajka\game.log`; on Linux, `$XDG_CONFIG_HOME/sabrinina-podvodna-bajka/game.log` or `~/.config/sabrinina-podvodna-bajka/game.log`; on macOS, `~/Library/Application Support/sabrinina-podvodna-bajka/game.log`. Windows displays a dialog for fatal Rust errors or an unavailable log file.
 
-All runtime assets are embedded at compile time: the executable runs without an `assets/` directory or the source tree, and does not extract assets to disk. This applies to local and tagged release builds. Rebuild after changing assets, or set `SABRINA_ASSETS=/absolute/path/to/assets` to use an external asset tree while developing artwork. Blender is needed only to edit artwork.
+I embed all game assets directly into the executable. You do not need to distribute an `assets/` folder or extract files somewhere before playing. This applies to local and tagged release builds. Rebuild after changing assets, or set `SABRINA_ASSETS=/absolute/path/to/assets` to use an external asset tree while developing artwork. Blender is needed only to edit artwork.
 
-The picture-based loading screen tracks asset loading, character setup and graphics warm-up. Models (including render LODs), textures, UI images, fonts, audio and custom shaders are preloaded and retained. Actors and effects render behind the splash while the current graphics pipelines compile; the menu opens only after the pipeline queue settles. This reduces first-use stalls, but changing graphics settings or encountering a new rendering variant can still require additional driver work. The main-menu title artwork follows the selected English, Croatian or Italian language.
+The loading screen is not just a fake progress bar. It follows asset loading, creation of the characters and graphics warm-up. Models (including render LODs), textures, UI images, fonts, audio and custom shaders are preloaded and retained. Actors and effects render behind the splash while the current graphics pipelines compile; the menu opens only after the pipeline queue settles. This reduces first-use stalls, but changing graphics settings or encountering a new rendering variant can still require additional driver work. The main-menu title artwork follows the selected English, Croatian or Italian language.
 
 The loading progress fills the artwork's two decorative inlays around the central shell. The live phase and percentage appear above the existing “Loading…” lettering, without an opaque panel. Loading text and corner diagnostics use larger warm-gold lettering with solid black drop shadows that remain two logical window pixels wide when the UI scales. On wide windows the artwork's crop shifts to keep its progress area visible; the fill remains aligned with the original ornament. A corner overlay reports physical window resolution, OS/architecture, build, actual graphics adapter/backend/driver, draw mode, controller input backend, connected controller names, active control hints and asset/pipeline counts. EGL is a graphics-context interface, not a controller backend; the overlay reports the graphics API returned by the adapter rather than guessing an EGL/WGL implementation.
 
@@ -144,9 +151,7 @@ Linux x86_64 release build, Vulkan, NVIDIA RTX 3070 Laptop GPU / driver 595.99.0
 
 These are one measured run per scene, not requirements or allocation budgets. RAM was sampled from Linux `/proc/<pid>/status` after loading and before screenshot/teardown, with its high-water mark for the peak; GPU memory came from NVIDIA's per-process framebuffer samples. RSS includes resident mapped executable/assets and driver allocations, not just game-owned heap memory. Repeated runs varied: an earlier stress run reached about 1541 MiB peak RSS and 1105 MiB sampled GPU memory. OS, graphics driver/cache, settings and capture diagnostics affect the results; Windows and mobile memory have not been measured.
 
-`./tools/package-bevy.sh` creates a portable directory under `dist/` containing only the executable (or `Sabrina.app` on macOS), `LICENSE`, `NOTICE` and the `licenses/` notices. Asset restrictions are included unchanged as `licenses/ASSET_LICENSE.txt`; no README, architecture documents, other Markdown files or separate instructions are packaged. The game is **asset-self-contained, not fully statically linked**: Linux still needs system libraries such as glibc, ALSA and libudev, and all platforms need their graphics drivers and OS windowing/audio support. Keep the accompanying notices when redistributing.
-
-The supplied application icon is embedded in Windows executables (Explorer) and used for Windows/Linux native windows and supported taskbars. macOS packages use an icon-bearing `Sabrina.app` bundle for Finder and Dock. Linux ELF executables have no portable embedded file-icon convention: file-manager icons depend on desktop integration, while the running game's X11 window advertises the icon. No desktop launcher or system installation is added to the portable package. Source artwork and generated ICO/ICNS files are in `art/icons/`; the small embedded window PNG is in `assets/ui/app_icon.png`.
+`./tools/package-bevy.sh` creates a portable directory under `dist/` containing the executable and accompanying documentation/license notices. The game is **asset-self-contained, not fully statically linked**: Linux still needs system libraries such as glibc, ALSA and libudev, and all platforms need their graphics drivers and OS windowing/audio support. Keep the accompanying notices when redistributing.
 
 ### Runtime options
 
@@ -190,43 +195,57 @@ git tag v0.1.0
 git push origin v0.1.0
 ```
 
-The release workflow builds Linux x86_64 (Ubuntu 24.04 baseline), Windows x86_64 and macOS Apple Silicon packages. Archives include only the asset-embedded executable/app and license notices, with a separate SHA-256 checksum for each download. Assets are not duplicated beside the executable. On macOS, extract and open `Sabrina.app`; packages are unsigned and not notarized. These are portable desktop packages, not Steam uploads or Android/iOS builds.
+The release workflow builds Linux x86_64 (Ubuntu 24.04 baseline), Windows x86_64 and macOS Apple Silicon packages. Archives include the asset-embedded executable, instructions, documentation and license notices, with a separate SHA-256 checksum for each download. Assets are not duplicated beside the executable. macOS packages are unsigned and not notarized. These are portable desktop packages, not Steam uploads or Android/iOS builds.
 
 Tags must use `vMAJOR.MINOR.PATCH`, optionally followed by a prerelease suffix such as `v0.1.0-beta.1`. Tags with a suffix publish as prereleases. All platform builds and checks must succeed before publication. Release notes include installation guidance and GitHub's automatically generated changelog since the previous release. Creating a release does not replace platform playtesting or artwork-permission review.
 
 ## Music
 
-The supplied MIDI arrangements are preserved in `art/music/`. The game plays
+I keep the original MIDI arrangements in `art/music/`. The game plays
+
 stereo Ogg renders: underwater exploration at 96 BPM during calm play and menus,
+
 jellyfish combat at 144 BPM during visits, and a short reveal stinger at the
+
 start of each visit. Music crossfades between states and ducks beneath voices
+
 and Sabrina's song. The stinger uses the music volume setting and is independent
+
 of magic effects.
 
 The two loops are padded to complete musical bars, with a warm-up pass retaining
+
 notes and reverb across the seam. A 30 ms phase blend smooths the loop boundary
+
 without shortening the bar. The stinger plays once with its release tail.
+
 To regenerate the checked-in audio on Debian/Ubuntu:
 
 ```sh
 sudo apt install libfluidsynth3 fluid-soundfont-gm ffmpeg python3-venv
 python3 -m venv /tmp/sabrina-music-env
 /tmp/sabrina-music-env/bin/pip install -r tools/requirements-music.txt
-/tmp/sabrina-music-env/bin/python -m tools.render_music \
+/tmp/sabrina-music-env/bin/python -m tools.render_music \\
   --soundfont /usr/share/sounds/sf2/FluidR3_GM.sf2
 /tmp/sabrina-music-env/bin/python -m unittest discover -s tests -v
 ```
 
 Rendering dependencies are authoring-only; players need neither MIDI software
+
 nor a soundfont. See [asset licensing](ASSET_LICENSE.md) for the compositions and
+
 the included instrument-sample notice.
 
 ## Working on the game
 
 - `src/reef_sim/`: engine-independent components, game rules and fixed-step simulation.
+
 - `src/sabrina/`: Bevy input, presentation, animation, rendering, audio and UI.
+
 - `assets/`: runtime models, embedded textures, audio, fonts, UI and WESL shaders.
+
 - `art/`: maintained Blender sources and contact samples.
+
 - `tools/`: build, export, packaging and validation scripts.
 
 See [architecture](docs/ARCHITECTURE.md) and [art workflow](docs/CHARACTER_PIPELINE.md).
@@ -244,14 +263,17 @@ python3 tools/export_rust_contacts.py --check
 ## Next steps
 
 - Refine animation, underwater lighting and encounter balance through playtesting.
+
 - Broaden Windows hardware testing; test macOS and physical controllers.
+
 - Add touch input and measure mobile hardware before Android/iOS/TV releases.
+
 - Prepare store releases on Steam, Android and iOS once the game is ready.
 
 ## License
 
-Original source code, shaders, scripts, tests, configuration and technical documentation are licensed under [Apache 2.0](LICENSE). See [NOTICE](NOTICE) for authorship. The code may be reused and redistributed, including commercially, under that license.
+I release the source code, shaders, scripts, tests, configuration and technical documentation under [Apache 2.0](LICENSE). See [NOTICE](NOTICE) for authorship. The code may be reused and redistributed, including commercially, under that license.
 
-The game itself uses a hybrid licensing model: Sabrina's characters, story and world, 3D models, textures, UI artwork, music and recordings are **all rights reserved**, to the extent held by their respective rights holders. The title and logo are reserved branding; the code license grants no trademark rights. Third-party assets retain their own licenses. See [ASSET_LICENSE.md](ASSET_LICENSE.md).
+The important distinction is that the code and the game content do **not** share the same license: Sabrina's characters, story and world, 3D models, textures, UI artwork, music and recordings are **all rights reserved**, to the extent held by their respective rights holders. The title and logo are reserved branding; the code license grants no trademark rights. Third-party assets retain their own licenses. See [ASSET_LICENSE.md](ASSET_LICENSE.md).
 
 Official builds combine Apache-licensed code with separately licensed game content; selling them does not make the code proprietary or grant permission to redistribute the reserved content. Any future Steamworks or mobile-platform SDK files remain subject to their own terms and must not be published without permission.
