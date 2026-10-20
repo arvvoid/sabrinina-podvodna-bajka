@@ -40,6 +40,9 @@ struct UiRoot;
 #[derive(Component)]
 pub(crate) struct FpsCounter;
 
+#[derive(Component)]
+struct LoadingStats;
+
 #[derive(Clone, Copy)]
 struct Rect {
     x: f32,
@@ -77,7 +80,8 @@ fn loading_image_rect(viewport_width: f32, viewport_height: f32) -> Rect {
     let width = height * (1365.0 / 768.0);
     rect(
         (CANVAS_WIDTH - width) / 2.0,
-        (CANVAS_HEIGHT - height) / 2.0,
+        ((CANVAS_HEIGHT - height) / 2.0)
+            .min((CANVAS_HEIGHT + viewport_height) / 2.0 - 24.0 - height * 733.0 / 768.0),
         width,
         height,
     )
@@ -94,12 +98,22 @@ fn on_loading_image(image: Rect, area: Rect) -> Rect {
 }
 
 fn loading_overlay(image: Rect) -> (Rect, Rect) {
-    let mut status = on_loading_image(image, rect(481.5, 674.0, 402.0, 35.0));
-    let mut bar = on_loading_image(image, rect(534.5, 738.0, 296.0, 8.0));
-    let shift = (bar.y + bar.h - (CANVAS_HEIGHT - 24.0)).max(0.0);
-    status.y -= shift;
-    bar.y -= shift;
-    (status, bar)
+    (
+        on_loading_image(image, rect(422.5, 658.0, 520.0, 24.0)),
+        on_loading_image(image, rect(534.5, 708.0, 296.0, 25.0)),
+    )
+}
+
+fn loading_bar_fraction(progress: f32, right: bool) -> f32 {
+    (progress * 2.0 - if right { 1.0 } else { 0.0 }).clamp(0.0, 1.0)
+}
+
+fn input_backend(windows: bool, wgi: bool) -> &'static str {
+    match (windows, wgi) {
+        (true, false) => "XInput (Xbox / Steam Input)",
+        (true, true) => "Windows Gaming Input / GilRs",
+        (false, _) => "GilRs",
+    }
 }
 
 fn title_path(language: usize) -> &'static str {
@@ -175,6 +189,7 @@ impl Plugin for ReefUiPlugin {
             .init_resource::<Hints>()
             .add_systems(Startup, setup_fps)
             .add_systems(Update, update_fps)
+            .add_systems(Update, update_loading_stats.after(draw))
             .add_systems(
                 PreUpdate,
                 crate::controls::update
@@ -563,7 +578,7 @@ fn draw(
         let viewport_width = window.width() / zoom;
         let viewport_height = window.height() / zoom;
         let image = loading_image_rect(viewport_width, viewport_height);
-        let (status_area, bar_area) = loading_overlay(image);
+        let (status_area, _) = loading_overlay(image);
         let e = builder
             .commands
             .spawn((
@@ -575,12 +590,41 @@ fn draw(
             ))
             .id();
         builder.commands.entity(root).add_child(e);
-        let status = builder.label(status_area, 16.0 * image.w / 1365.0, "", Some("loading"));
+        let shadow = TextShadow {
+            offset: Vec2::splat(2.0 / zoom),
+            color: Color::BLACK,
+        };
+        let text_color = TextColor(Color::srgb(1.0, 0.92, 0.60));
+        let status = builder.label(status_area, 20.0 * image.w / 1365.0, "", Some("loading"));
         builder.commands.entity(status).insert((
             TextLayout::justify(Justify::Center),
-            BackgroundColor(Color::srgb(0.02, 0.13, 0.20)),
+            text_color,
+            shadow,
         ));
-        builder.meter(bar_area, Color::srgb(0.38, 1.0, 0.76), "loading");
+        // Fill only the two narrow inlays, leaving the gold frame and shell visible.
+        for (x, key) in [(548.0, "loading_left"), (710.0, "loading_right")] {
+            let inlay = on_loading_image(image, rect(x, 719.0, 107.0, 2.0));
+            builder.meter(inlay, Color::srgb(0.60, 0.98, 0.91), key);
+        }
+        let stats_scale = (0.8 / zoom).max(1.0);
+        let stats_width = (600.0 * stats_scale).min(viewport_width - 48.0 * stats_scale);
+        let stats = builder.label(
+            rect(
+                (CANVAS_WIDTH + viewport_width) / 2.0 - stats_width - 24.0 * stats_scale,
+                (CANVAS_HEIGHT - viewport_height) / 2.0 + 20.0 * stats_scale,
+                stats_width,
+                300.0 * stats_scale,
+            ),
+            18.0 * stats_scale,
+            "",
+            None,
+        );
+        builder.commands.entity(stats).insert((
+            LoadingStats,
+            text_color,
+            shadow,
+            TextLayout::justify(Justify::Right),
+        ));
         focus.count = 0;
         return;
     }
@@ -599,6 +643,81 @@ fn draw(
     }
     focus.count = builder.index;
     focus.index = focus.index.min(focus.count.saturating_sub(1));
+}
+
+fn update_loading_stats(
+    mut texts: Query<&mut Text, With<LoadingStats>>,
+    window: Single<&Window, With<PrimaryWindow>>,
+    adapter: Res<RenderAdapterInfo>,
+    options: Res<Options>,
+    hints: Res<Hints>,
+    pads: Query<Option<&Name>, With<Gamepad>>,
+    loading: Res<crate::loading::Loading>,
+    preferences: Res<Preferences>,
+) {
+    if texts.is_empty() {
+        return;
+    }
+    let lang = preferences.language;
+    let mut controllers: Vec<_> = pads
+        .iter()
+        .map(|name| {
+            name.map_or_else(
+                || tr("Unnamed controller", lang),
+                |name| name.as_str().to_owned(),
+            )
+        })
+        .collect();
+    controllers.sort();
+    let connected = if controllers.is_empty() {
+        tr("none", lang)
+    } else {
+        controllers.join(", ")
+    };
+    let active = match hints.style {
+        Style::Keyboard => "Keyboard / mouse",
+        Style::Xbox => "Xbox",
+        Style::PlayStation => "PlayStation",
+        Style::Generic => "Generic gamepad",
+    };
+    let value = format!(
+        "{} ({}) · {} × {} px\n{}: {}\n{} · {} draw\nGPU: {}\n{}: {} {}\n{}: {} + {}\n{}: {} · {} ({}): {}\n{}: {}/{} · {}: {}/{}",
+        std::env::consts::OS,
+        std::env::consts::ARCH,
+        window.physical_width(),
+        window.physical_height(),
+        tr("Build", lang),
+        crate::build_info::menu_label(),
+        renderer_label(&adapter),
+        if options.direct_draw {
+            "direct"
+        } else {
+            "indirect"
+        },
+        adapter.name,
+        tr("Driver", lang),
+        adapter.driver,
+        adapter.driver_info,
+        tr("Input", lang),
+        tr("Keyboard / mouse", lang),
+        input_backend(cfg!(target_os = "windows"), options.wgi),
+        tr("Active hints", lang),
+        tr(active, lang),
+        tr("Controllers", lang),
+        controllers.len(),
+        connected,
+        tr("Assets", lang),
+        loading.assets_loaded,
+        loading.assets_total,
+        tr("Pipelines", lang),
+        loading.pipelines_ready,
+        loading.pipelines_total,
+    );
+    for mut text in &mut texts {
+        if text.0 != value {
+            text.0.clone_from(&value);
+        }
+    }
 }
 
 fn draw_hud(builder: &mut Builder<'_, '_, '_>, screen: Screen) {
@@ -1329,7 +1448,9 @@ fn update(
             "loading" => format!(
                 "{}  {:.0}%",
                 tr(
-                    if loading.warming {
+                    if loading.progress == 1.0 {
+                        "Ready!"
+                    } else if loading.warming {
                         "Preparing graphics…"
                     } else if library.ready {
                         "Preparing the characters…"
@@ -1488,7 +1609,8 @@ fn update(
     }
     for (meter, mut node) in &mut bars {
         let amount = match meter.0 {
-            "loading" => loading.progress,
+            "loading_left" => loading_bar_fraction(loading.progress, false),
+            "loading_right" => loading_bar_fraction(loading.progress, true),
             "health" => sabrina.vitality.health / 100.0,
             "song" => sabrina.song.energy / 100.0,
             "crystal" => 1.0 - sabrina.cooldown / reef_sim::recharge_duration(&simulation.0),
@@ -1575,13 +1697,36 @@ mod tests {
             let image = loading_image_rect(width / zoom, height / zoom);
             let (status, bar) = loading_overlay(image);
             assert!((bar.x + bar.w / 2.0 - CANVAS_WIDTH / 2.0).abs() < 1.0);
-            assert!(bar.y + bar.h <= CANVAS_HEIGHT - 23.99);
+            assert!(bar.y + bar.h <= (CANVAS_HEIGHT + height / zoom) / 2.0 - 23.99);
             assert!(bar.y > status.y + status.h);
             assert!((bar.w / image.w - 296.0 / 1365.0).abs() < 0.00001);
         }
         let image = loading_image_rect(CANVAS_WIDTH, CANVAS_HEIGHT);
         let (_, bar) = loading_overlay(image);
-        assert!((bar.y - (image.y + 738.0 * image.w / 1365.0)).abs() < 0.001);
+        assert!((bar.y - (image.y + 708.0 * image.w / 1365.0)).abs() < 0.001);
+    }
+
+    #[test]
+    fn loading_inlays_fill_in_sequence_without_covering_the_shell() {
+        for (progress, left, right) in [
+            (0.0, 0.0, 0.0),
+            (0.25, 0.5, 0.0),
+            (0.5, 1.0, 0.0),
+            (0.75, 1.0, 0.5),
+            (1.0, 1.0, 1.0),
+        ] {
+            assert_eq!(loading_bar_fraction(progress, false), left);
+            assert_eq!(loading_bar_fraction(progress, true), right);
+        }
+        assert_eq!(loading_bar_fraction(-1.0, false), 0.0);
+        assert_eq!(loading_bar_fraction(2.0, true), 1.0);
+    }
+
+    #[test]
+    fn input_backend_reports_the_enabled_transport_not_the_graphics_api() {
+        assert_eq!(input_backend(true, false), "XInput (Xbox / Steam Input)");
+        assert_eq!(input_backend(true, true), "Windows Gaming Input / GilRs");
+        assert_eq!(input_backend(false, true), "GilRs");
     }
 
     fn hit(index: usize, x: f32, y: f32, slider: bool) -> Hit {

@@ -96,8 +96,11 @@ GLB sub-assets, shaders and audio continue to use the same loading APIs. No
 runtime extraction or source-tree fallback is used. `SABRINA_ASSETS` explicitly
 selects a validated external directory for development instead.
 
-Both packaging paths ship the executable plus documentation and font/soundfont
-notices, without a separate asset tree. This is single-file asset delivery, not
+Both packaging paths ship only the executable/app and license notices, including
+the asset restrictions as `licenses/ASSET_LICENSE.txt`, without a separate asset
+tree or Markdown documentation. Windows embeds an ICO resource; Windows/Linux
+windows use an embedded PNG, and macOS packages wrap the executable in
+`Sabrina.app` with an ICNS resource and `Info.plist`. This is embedded asset delivery, not
 full static linkage: OS graphics/audio/windowing libraries and drivers are
 still required.
 

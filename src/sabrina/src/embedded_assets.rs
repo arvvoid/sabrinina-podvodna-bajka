@@ -39,6 +39,7 @@ mod tests {
             "audio/music_visit.ogg",
             "audio/jelly_appears.ogg",
             "ui/loading.png",
+            "ui/app_icon.png",
             "ui/title_eng.png",
             "ui/title_hr.png",
             "ui/title_it.png",

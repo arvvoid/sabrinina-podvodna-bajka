@@ -127,6 +127,14 @@ fn embedded_assets(root: &Path) {
 
 fn main() {
     let root = PathBuf::from(env::var_os("CARGO_MANIFEST_DIR").expect("Cargo sets manifest dir"));
+    let icon = root.join("../../art/icons/app_icon.ico");
+    println!("cargo:rerun-if-changed={}", icon.display());
+    if env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows") {
+        winresource::WindowsResource::new()
+            .set_icon(icon.to_str().expect("Icon path must be UTF-8"))
+            .compile()
+            .expect("Cannot embed the Windows executable icon");
+    }
     embedded_assets(&root);
     for source in [
         "build.rs",

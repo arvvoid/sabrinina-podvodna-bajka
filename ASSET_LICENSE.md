@@ -41,7 +41,7 @@ the asset licensing terms above.
 | Derived mesh levels | Same artwork and restrictions as the corresponding model |
 | Voices and magic sounds | Recordings carried over from the original Scratch project |
 | Calm music, visitor music and arrival stinger | Owner-supplied generated MIDI compositions in `art/music/`, rendered to `assets/audio/` with FluidSynth and FluidR3 GM |
-| UI SVGs and PNGs, including loading screen and localized title logos | Project artwork under `assets/ui/`; the loading-screen image and English, Croatian and Italian title PNGs were supplied for this project |
+| UI SVGs and PNGs, including loading screen, localized title logos and application icon | Project artwork under `assets/ui/` and `art/icons/`; the loading-screen image, English, Croatian and Italian title PNGs and application icon were supplied for this project. Derived ICO/ICNS/window icons carry the same restrictions |
 
 The [original Scratch project](https://scratch.mit.edu/projects/1203591608/)
 is the design reference. Its assets are not relicensed by this repository's
@@ -58,7 +58,8 @@ DejaVu Sans has its own license, included at `assets/fonts/LICENSE-DejaVu.txt`.
 Include applicable third-party license notices with distributed releases.
 Runtime assets and their notices are embedded in the executable. Desktop
 packages also place the DejaVu and FluidR3 notices in `licenses/`; retain these
-and the root `LICENSE`, `NOTICE` and `ASSET_LICENSE.md` when distributing an
+and the root `LICENSE`, `NOTICE` and asset-license notice (packaged unchanged as
+`licenses/ASSET_LICENSE.txt` from `ASSET_LICENSE.md`) when distributing an
 authorized package. Keeping notices alone does not grant permission to
 redistribute reserved content. Embedding assets does not
 change any of the rights or restrictions described above.

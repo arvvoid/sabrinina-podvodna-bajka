@@ -124,11 +124,29 @@ On multi-GPU/eGPU systems, `WGPU_ADAPTER_NAME` requests an adapter by a case-ins
 
 Windows x86_64 MSVC builds embed the modern DXC shader compiler in the executable. No separate `dxcompiler.dll` or installed Windows SDK is needed to play. This avoids the legacy FXC rendering path, which produced dark silhouettes on the tested NVIDIA Windows machine. To build on Windows, install Rust and Visual Studio's **Desktop development with C++** workload, including a Windows SDK and the **C++ ATL for latest build tools** component, then run the Cargo command above in PowerShell.
 
+Windows release builds open only the game window, without an extra console; debug builds keep the console. Startup, renderer and error diagnostics are written to `game.log` beside `settings.json` (replaced each launch). On Windows this is `%APPDATA%\sabrinina-podvodna-bajka\game.log`; on Linux, `$XDG_CONFIG_HOME/sabrinina-podvodna-bajka/game.log` or `~/.config/sabrinina-podvodna-bajka/game.log`; on macOS, `~/Library/Application Support/sabrinina-podvodna-bajka/game.log`. Windows displays a dialog for fatal Rust errors or an unavailable log file.
+
 All runtime assets are embedded at compile time: the executable runs without an `assets/` directory or the source tree, and does not extract assets to disk. This applies to local and tagged release builds. Rebuild after changing assets, or set `SABRINA_ASSETS=/absolute/path/to/assets` to use an external asset tree while developing artwork. Blender is needed only to edit artwork.
 
 The picture-based loading screen tracks asset loading, character setup and graphics warm-up. Models (including render LODs), textures, UI images, fonts, audio and custom shaders are preloaded and retained. Actors and effects render behind the splash while the current graphics pipelines compile; the menu opens only after the pipeline queue settles. This reduces first-use stalls, but changing graphics settings or encountering a new rendering variant can still require additional driver work. The main-menu title artwork follows the selected English, Croatian or Italian language.
 
-`./tools/package-bevy.sh` creates a portable directory under `dist/` containing the executable and accompanying documentation/license notices. The game is **asset-self-contained, not fully statically linked**: Linux still needs system libraries such as glibc, ALSA and libudev, and all platforms need their graphics drivers and OS windowing/audio support. Keep the accompanying notices when redistributing.
+The loading progress fills the artwork's two decorative inlays around the central shell. The live phase and percentage appear above the existing “Loading…” lettering, without an opaque panel. Loading text and corner diagnostics use larger warm-gold lettering with solid black drop shadows that remain two logical window pixels wide when the UI scales. On wide windows the artwork's crop shifts to keep its progress area visible; the fill remains aligned with the original ornament. A corner overlay reports physical window resolution, OS/architecture, build, actual graphics adapter/backend/driver, draw mode, controller input backend, connected controller names, active control hints and asset/pipeline counts. EGL is a graphics-context interface, not a controller backend; the overlay reports the graphics API returned by the adapter rather than guessing an EGL/WGL implementation.
+
+#### Measured memory (20 October 2026 development build)
+
+Linux x86_64 release build, Vulkan, NVIDIA RTX 3070 Laptop GPU / driver 595.99.02, Balanced graphics, V-sync on, embedded assets and default preferences:
+
+| Scene | Resolution | Steady process RAM (RSS) | Peak process RAM | Sampled per-process GPU memory |
+|---|---|---|---|---|
+| Main menu | 1280×720 | 1435–1438 MiB | 1516 MiB | 837 MiB |
+| Combat | 1920×1080 | 1437–1442 MiB | 1508 MiB | 851 MiB |
+| 72-fish stress scene | 1920×1080 | 1384–1393 MiB | 1456 MiB | 851 MiB |
+
+These are one measured run per scene, not requirements or allocation budgets. RAM was sampled from Linux `/proc/<pid>/status` after loading and before screenshot/teardown, with its high-water mark for the peak; GPU memory came from NVIDIA's per-process framebuffer samples. RSS includes resident mapped executable/assets and driver allocations, not just game-owned heap memory. Repeated runs varied: an earlier stress run reached about 1541 MiB peak RSS and 1105 MiB sampled GPU memory. OS, graphics driver/cache, settings and capture diagnostics affect the results; Windows and mobile memory have not been measured.
+
+`./tools/package-bevy.sh` creates a portable directory under `dist/` containing only the executable (or `Sabrina.app` on macOS), `LICENSE`, `NOTICE` and the `licenses/` notices. Asset restrictions are included unchanged as `licenses/ASSET_LICENSE.txt`; no README, architecture documents, other Markdown files or separate instructions are packaged. The game is **asset-self-contained, not fully statically linked**: Linux still needs system libraries such as glibc, ALSA and libudev, and all platforms need their graphics drivers and OS windowing/audio support. Keep the accompanying notices when redistributing.
+
+The supplied application icon is embedded in Windows executables (Explorer) and used for Windows/Linux native windows and supported taskbars. macOS packages use an icon-bearing `Sabrina.app` bundle for Finder and Dock. Linux ELF executables have no portable embedded file-icon convention: file-manager icons depend on desktop integration, while the running game's X11 window advertises the icon. No desktop launcher or system installation is added to the portable package. Source artwork and generated ICO/ICNS files are in `art/icons/`; the small embedded window PNG is in `assets/ui/app_icon.png`.
 
 ### Runtime options
 
@@ -172,7 +190,7 @@ git tag v0.1.0
 git push origin v0.1.0
 ```
 
-The release workflow builds Linux x86_64 (Ubuntu 24.04 baseline), Windows x86_64 and macOS Apple Silicon packages. Archives include the asset-embedded executable, instructions, documentation and license notices, with a separate SHA-256 checksum for each download. Assets are not duplicated beside the executable. macOS packages are unsigned and not notarized. These are portable desktop packages, not Steam uploads or Android/iOS builds.
+The release workflow builds Linux x86_64 (Ubuntu 24.04 baseline), Windows x86_64 and macOS Apple Silicon packages. Archives include only the asset-embedded executable/app and license notices, with a separate SHA-256 checksum for each download. Assets are not duplicated beside the executable. On macOS, extract and open `Sabrina.app`; packages are unsigned and not notarized. These are portable desktop packages, not Steam uploads or Android/iOS builds.
 
 Tags must use `vMAJOR.MINOR.PATCH`, optionally followed by a prerelease suffix such as `v0.1.0-beta.1`. Tags with a suffix publish as prereleases. All platform builds and checks must succeed before publication. Release notes include installation guidance and GitHub's automatically generated changelog since the previous release. Creating a release does not replace platform playtesting or artwork-permission review.
 

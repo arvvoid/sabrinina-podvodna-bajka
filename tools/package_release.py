@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 # Copyright (c) 2026 Luka Dežulović
 # SPDX-License-Identifier: Apache-2.0
-"""Bundle the self-contained game executable with documentation and license notices."""
+"""Bundle the self-contained game executable/app with only license notices."""
 
 import argparse
 import hashlib
 from pathlib import Path
+import plistlib
 import shutil
+import sys
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -16,7 +18,11 @@ ASSET_NOTICES = (
 )
 
 
-def package(binary, name, archive_format, output):
+def package(binary, name, archive_format, output, platform=None):
+    if platform is None:
+        platform = {"linux": "linux", "win32": "windows", "darwin": "macos"}.get(sys.platform)
+    if platform not in {"linux", "windows", "macos"}:
+        raise ValueError(f"Unsupported package platform: {platform}")
     if not binary.is_file():
         raise FileNotFoundError(f"Build the game first: {binary}")
     if not name or name in {".", ".."} or any(
@@ -28,33 +34,34 @@ def package(binary, name, archive_format, output):
     with tempfile.TemporaryDirectory(prefix="sabrina-package-") as temporary:
         folder = Path(temporary) / name
         folder.mkdir()
-        shutil.copy2(binary, folder / binary.name)
+        if platform == "macos":
+            contents = folder / "Sabrina.app" / "Contents"
+            (contents / "MacOS").mkdir(parents=True)
+            (contents / "Resources").mkdir()
+            shutil.copy2(binary, contents / "MacOS" / "sabrina")
+            shutil.copy2(ROOT / "art/icons/app_icon.icns", contents / "Resources/app_icon.icns")
+            with (contents / "Info.plist").open("wb") as manifest:
+                plistlib.dump({
+                    "CFBundleExecutable": "sabrina",
+                    "CFBundleIconFile": "app_icon.icns",
+                    "CFBundleIdentifier": "dev.arvvoid.sabrina",
+                    "CFBundleName": "Sabrina",
+                    "CFBundleDisplayName": "Sabrina's Underwater Fairy Tale",
+                    "CFBundlePackageType": "APPL",
+                    "NSHighResolutionCapable": True,
+                    "LSMinimumSystemVersion": "11.0",
+                }, manifest)
+        else:
+            shutil.copy2(binary, folder / binary.name)
         (folder / "licenses").mkdir()
         for relative in ASSET_NOTICES:
             source = ROOT / "assets" / relative
             if not source.is_file():
                 raise FileNotFoundError(source)
             shutil.copy2(source, folder / "licenses" / source.name)
-        shutil.copytree(ROOT / "docs", folder / "docs")
-        for filename in ("LICENSE", "NOTICE", "ASSET_LICENSE.md", "README.md"):
+        for filename in ("LICENSE", "NOTICE"):
             shutil.copy2(ROOT / filename, folder / filename)
-        (folder / "PLAY.txt").write_text(
-            "Sabrina's Underwater Fairy Tale\n\n"
-            "All game assets are embedded in the executable; no assets folder is needed.\n"
-            "Keep the documentation and license notices when redistributing the package.\n"
-            "Code: Apache 2.0 (LICENSE and NOTICE). Game content and branding are reserved.\n"
-            "Redistributing reserved content requires permission; see ASSET_LICENSE.md.\n"
-            "Windows: open sabrina.exe.\n"
-            "Linux/macOS: open a terminal in this folder and run ./sabrina.\n\n"
-            "Linux requires Vulkan drivers, ALSA, libudev and X11 runtime libraries.\n"
-            "The executable is asset-self-contained, not fully statically linked.\n"
-            "Linux builds target Ubuntu 24.04 or newer compatible distributions.\n"
-            "macOS builds require Apple Silicon and are unsigned/not notarized.\n"
-            "Follow your system's security guidance before opening downloaded software.\n\n"
-            "This is an early working version. See README.md for controls and status,\n"
-            "and ASSET_LICENSE.md for artwork and audio restrictions.\n",
-            encoding="utf-8",
-        )
+        shutil.copy2(ROOT / "ASSET_LICENSE.md", folder / "licenses/ASSET_LICENSE.txt")
         if archive_format == "directory":
             destination = output / name
             if destination.exists():
@@ -77,5 +84,6 @@ if __name__ == "__main__":
     parser.add_argument("--name", required=True)
     parser.add_argument("--format", choices=("zip", "gztar", "directory"), required=True)
     parser.add_argument("--output", type=Path, default=ROOT / "dist")
+    parser.add_argument("--platform", choices=("linux", "windows", "macos"))
     args = parser.parse_args()
-    print(package(args.binary, args.name, args.format, args.output))
+    print(package(args.binary, args.name, args.format, args.output, args.platform))

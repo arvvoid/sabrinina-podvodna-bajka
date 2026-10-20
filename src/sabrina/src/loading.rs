@@ -29,6 +29,10 @@ pub struct Loading {
     settled: u32,
     pub progress: f32,
     pub warming: bool,
+    pub assets_loaded: usize,
+    pub assets_total: usize,
+    pub pipelines_ready: usize,
+    pub pipelines_total: usize,
 }
 
 pub struct LoadingPlugin;
@@ -139,6 +143,10 @@ pub(crate) fn ready(
     let rigs_ready =
         library.ready && rigs.iter().count() >= 1 + reef_sim::FISH_COUNT + reef_sim::JELLY_COUNT;
     let status = *feedback.0.lock().expect("Render feedback poisoned");
+    loading.assets_loaded = loaded;
+    loading.assets_total = total;
+    loading.pipelines_ready = status.ready;
+    loading.pipelines_total = status.total;
     let done = loading.observe(status, assets_ready, rigs_ready);
     let progress = if done {
         1.0
