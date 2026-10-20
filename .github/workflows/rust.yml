@@ -1,4 +1,4 @@
-name: Rust gameplay and Bevy
+name: Build & Test
 on:
   push:
     branches: [main]
