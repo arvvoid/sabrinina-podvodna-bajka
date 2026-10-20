@@ -1062,6 +1062,8 @@ fn capture(
     time: Res<Time>,
     mut elapsed: Local<f32>,
     mut taken: Local<bool>,
+    mut frame_capture_elapsed: Local<f32>,
+    mut frame_capture_index: Local<u32>,
     mut exit: MessageWriter<AppExit>,
     diagnostics: Res<bevy::diagnostic::DiagnosticsStore>,
     mut frame_times: Local<Vec<f32>>,
@@ -1072,6 +1074,19 @@ fn capture(
         return;
     }
     *elapsed += time.delta_secs();
+    if kind == "demo"
+        && let Some(directory) = &options.capture_frames
+    {
+        *frame_capture_elapsed += time.delta_secs();
+        if *frame_capture_elapsed >= 1.0 / 15.0 {
+            *frame_capture_elapsed %= 1.0 / 15.0;
+            let path = directory.join(format!("frame-{:04}.png", *frame_capture_index));
+            *frame_capture_index += 1;
+            commands
+                .spawn(Screenshot::primary_window())
+                .observe(save_to_disk(path));
+        }
+    }
     let deadline = if options.school || kind == "demo" || kind == "pose-stroke" {
         20.0
     } else {

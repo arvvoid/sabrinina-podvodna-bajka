@@ -41,6 +41,7 @@ impl RenderBackend {
 #[derive(Resource, Default)]
 pub struct Options {
     pub capture: Option<String>,
+    pub capture_frames: Option<std::path::PathBuf>,
     pub school: bool,
     pub verify: bool,
     pub fullhd: bool,
@@ -54,6 +55,17 @@ impl Options {
     pub fn from_args() -> Self {
         let mut options = Self::from_arguments(std::env::args(), crate::current_platform());
         options.capture_fxaa = std::env::var("SABRINA_CAPTURE_AA").as_deref() == Ok("fxaa");
+        if let Some(directory) = std::env::var_os("SABRINA_CAPTURE_FRAMES") {
+            assert_eq!(
+                options.capture.as_deref(),
+                Some("demo"),
+                "SABRINA_CAPTURE_FRAMES requires --capture-demo"
+            );
+            let directory = std::path::PathBuf::from(directory);
+            std::fs::create_dir_all(&directory)
+                .expect("SABRINA_CAPTURE_FRAMES must point to a writable directory");
+            options.capture_frames = Some(directory);
+        }
         options
     }
 

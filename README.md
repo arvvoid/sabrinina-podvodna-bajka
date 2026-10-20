@@ -18,7 +18,7 @@ A small underwater game about a mermaid, tropical fish and a hungry jellyfish. S
 
 [![Animated gameplay: Sabrina uses crystal magic, a close wave and song to protect the fish](docs/media/gameplay-preview.gif)](docs/media/gameplay.mp4)
 
-[Watch or download the 18-second gameplay video (MP4, 720p)](docs/media/gameplay.mp4). The eight-second preview above loops silently; the full clip uses the game's combat music as its soundtrack. Recorded from the current game with scripted inputs, not a pre-rendered animation.
+[Watch or download the 20-second gameplay video (MP4, 720p)](docs/media/gameplay.mp4). The eight-second preview above loops silently; the full clip uses the game's combat music as its soundtrack. Recorded from the current game with scripted inputs, not a pre-rendered animation.
 
 ## How it started
 
@@ -153,7 +153,8 @@ Pass flags after the executable name, for example `./tools/run.sh --vulkan --cap
 | `--capture-xbox`, `--capture-playstation`, `--capture-generic-pad` | Preview controller hints using a synthetic controller. |
 | `--capture-occlusion`, `--capture-occlusion-solid` | Compare the foreground reef reveal with the solid-reef view. |
 | `--capture-hr-<name>`, `--capture-it-<name>` | Capture any supported scene in Croatian or Italian. |
-| `--capture-demo` | Run a seeded, scripted 20-second gameplay scene for recording; it does not record video. |
+| `--capture-demo` | Run a seeded, scripted 20-second gameplay scene for recording. |
+| `SABRINA_CAPTURE_FRAMES=/path` | Save 15 fps PNG frames while running `--capture-demo`. |
 | `SABRINA_ASSETS=/path/to/assets` | Load an external asset directory instead of embedded assets. |
 | `SABRINA_CAPTURE_AA=fxaa` | Enable FXAA in captures. |
 | `SABRINA_BUILD_JOBS=4` | Limit build-script compilation parallelism. |
