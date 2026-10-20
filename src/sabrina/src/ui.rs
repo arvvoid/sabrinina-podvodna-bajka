@@ -762,9 +762,9 @@ fn draw_menu(builder: &mut Builder<'_, '_, '_>, preferences: &Preferences, rende
     let lang = builder.lang;
     builder.panel(rect(64.0, 65.0, 535.0, 775.0));
     builder.label(
-        rect(100.0, 94.0, 450.0, 30.0),
+        rect(100.0, 108.0, 450.0, 30.0),
         17.0,
-        tr("A REMAKE BY LUKA DEŽULOVIĆ", lang),
+        tr("A Game by Luka & Sabrina Dežulović", lang),
         None,
     );
     let title = builder
@@ -837,16 +837,22 @@ fn draw_menu(builder: &mut Builder<'_, '_, '_>, preferences: &Preferences, rende
         None,
     );
     builder.label(
-        rect(100.0, 798.0, 270.0, 28.0),
-        14.0,
+        rect(100.0, 794.0, 270.0, 22.0),
+        13.5,
         crate::build_info::menu_label(),
         None,
     );
-    let renderer_label = builder.label(rect(375.0, 798.0, 185.0, 28.0), 14.0, renderer, None);
+    let renderer_label = builder.label(rect(375.0, 794.0, 185.0, 22.0), 13.5, renderer, None);
     builder
         .commands
         .entity(renderer_label)
         .insert(TextLayout::justify(Justify::Right));
+    builder.label(
+        rect(100.0, 818.0, 460.0, 16.0),
+        10.0,
+        "Copyright © 2026 Luka Dežulović",
+        None,
+    );
 }
 
 fn renderer_label(adapter: &RenderAdapterInfo) -> String {
