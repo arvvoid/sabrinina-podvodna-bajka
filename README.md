@@ -7,7 +7,6 @@
 [![Rust 1.99.1](https://img.shields.io/badge/Rust-1.99.1-orange?logo=rust)](https://www.rust-lang.org/)
 [![Bevy 0.20.0](https://img.shields.io/badge/Bevy-0.20.0-blue)](https://bevy.org/)
 [![Code: Apache 2.0](https://img.shields.io/badge/Code-Apache%202.0-green.svg)](LICENSE)
-[![Build targets](https://img.shields.io/badge/Build%20targets-Linux%20%7C%20Windows%20%7C%20macOS-lightgrey)](#build-and-run)
 
 A small underwater game about a mermaid, tropical fish and a hungry jellyfish. Swim through the reef, keep the fish safe with song and magic, or switch to quiet aquarium mode and enjoy the sea.
 
