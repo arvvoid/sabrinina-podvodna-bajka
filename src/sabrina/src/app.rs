@@ -47,6 +47,7 @@ pub struct Options {
     pub capture_fxaa: bool,
     pub direct_draw: bool,
     pub backend: Option<RenderBackend>,
+    pub wgi: bool,
 }
 
 impl Options {
@@ -69,6 +70,9 @@ impl Options {
             }
             if argument == "--verify-input" {
                 options.verify = true;
+            }
+            if argument == "--wgi" {
+                options.wgi = true;
             }
             if argument == "--direct-draw" {
                 direct_draw = Some(true);
@@ -491,6 +495,15 @@ mod tests {
         assert!(options.school);
         assert_eq!(options.capture.as_deref(), Some("school"));
         assert_eq!(options.backend, Some(RenderBackend::Dx12));
+        assert!(!options.direct_draw);
+    }
+
+    #[test]
+    fn wgi_is_opt_in_and_does_not_change_renderer_selection() {
+        assert!(!Options::from_arguments(["sabrina"], crate::Platform::Windows).wgi);
+        let options = Options::from_arguments(["--wgi", "--vulkan"], crate::Platform::Windows);
+        assert!(options.wgi);
+        assert_eq!(options.backend, Some(RenderBackend::Vulkan));
         assert!(!options.direct_draw);
     }
 
