@@ -1089,6 +1089,7 @@ fn capture(
     }
     *elapsed += time.delta_secs();
     if kind == "demo"
+        && !*taken
         && let Some(directory) = &options.capture_frames
     {
         *frame_capture_elapsed += time.delta_secs();
