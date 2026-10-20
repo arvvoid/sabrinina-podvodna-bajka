@@ -517,7 +517,6 @@ fn draw(
         background_alpha: 1.0,
         controls: hints.style,
     };
-    let lang = preferences.language;
     if options
         .capture
         .as_deref()
