@@ -3,13 +3,9 @@
 **Sabrina’s Underwater Fairy Tale**
 
 [![Test](https://github.com/arvvoid/sabrinina-podvodna-bajka/actions/workflows/rust.yml/badge.svg)](https://github.com/arvvoid/sabrinina-podvodna-bajka/actions/workflows/rust.yml)
-
 [![CodeQL](https://github.com/arvvoid/sabrinina-podvodna-bajka/actions/workflows/github-code-scanning/codeql/badge.svg)](https://github.com/arvvoid/sabrinina-podvodna-bajka/actions/workflows/github-code-scanning/codeql)
-
 [![Rust 1.99.1](https://img.shields.io/badge/Rust-1.99.1-orange?logo=rust)](https://www.rust-lang.org/)
-
 [![Bevy 0.20.0](https://img.shields.io/badge/Bevy-0.20.0-blue)](https://bevy.org/)
-
 [![Code: Apache 2.0](https://img.shields.io/badge/Code-Apache%202.0-green.svg)](LICENSE)
 
 This is a little underwater game I am making with my daughter Sabrina. You swim around the reef as a mermaid, look after the fish and deal with hungry jellyfish using a magic crystal, waves and song. There is also an aquarium mode if you just want to watch the fish and relax.
@@ -225,7 +221,7 @@ To regenerate the checked-in audio on Debian/Ubuntu:
 sudo apt install libfluidsynth3 fluid-soundfont-gm ffmpeg python3-venv
 python3 -m venv /tmp/sabrina-music-env
 /tmp/sabrina-music-env/bin/pip install -r tools/requirements-music.txt
-/tmp/sabrina-music-env/bin/python -m tools.render_music \\
+/tmp/sabrina-music-env/bin/python -m tools.render_music \
   --soundfont /usr/share/sounds/sf2/FluidR3_GM.sf2
 /tmp/sabrina-music-env/bin/python -m unittest discover -s tests -v
 ```
