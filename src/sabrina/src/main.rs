@@ -4,6 +4,10 @@
 
 // Bevy systems expose their independent ECS queries and resources as parameters.
 #![allow(clippy::too_many_arguments, clippy::type_complexity)]
+#![cfg_attr(
+    all(target_os = "windows", not(debug_assertions)),
+    windows_subsystem = "windows"
+)]
 
 mod app;
 
@@ -13,10 +17,13 @@ mod audio;
 
 mod build_info;
 mod controls;
+mod diagnostics;
 mod hair;
+mod icon;
 
 mod embedded_assets;
 
+mod loading;
 mod mipmaps;
 
 mod presentation;
@@ -41,6 +48,8 @@ use bevy::{
 };
 
 fn main() {
+    let mut app = App::new();
+    diagnostics::init(&mut app);
     let options = app::Options::from_args();
     let mut prefs = settings::Preferences::load();
     if let Some(kind) = &options.capture {
@@ -59,7 +68,7 @@ fn main() {
         }
     }
     let gpu = gpu_settings(options.backend);
-    println!(
+    info!(
         "RENDER CONFIG: {:?}, DX12 compiler {:?}, indirect drawing {}",
         gpu.backends,
         gpu.dx12_shader_compiler,
@@ -104,11 +113,12 @@ fn main() {
     let diagnostics = options.capture.is_some();
     let decorations = options.capture.as_deref() != Some("demo");
     let present_mode = prefs.present_mode();
-    let mut app = App::new();
     if external_assets.is_none() {
         embedded_assets::register(&mut app);
     }
     let plugins = DefaultPlugins
+        .build()
+        .disable::<bevy::log::LogPlugin>()
         .set(AssetPlugin {
             file_path: external_assets.unwrap_or_else(|| "assets".into()),
             ..default()
@@ -128,17 +138,19 @@ fn main() {
             render_creation: RenderCreation::Automatic(Box::new(gpu)),
             ..default()
         });
+    #[cfg(not(target_os = "macos"))]
+    app.add_systems(Update, icon::set_window_icons);
     #[cfg(target_os = "windows")]
     let plugins = if options.wgi {
-        println!("CONTROLLER BACKEND: Windows Gaming Input (GilRs)");
+        info!("CONTROLLER BACKEND: Windows Gaming Input (GilRs)");
         plugins
     } else {
-        println!("CONTROLLER BACKEND: native XInput (Xbox / Steam Input)");
+        info!("CONTROLLER BACKEND: native XInput (Xbox / Steam Input)");
         plugins.disable::<bevy::gilrs::GilrsPlugin>()
     };
     #[cfg(not(target_os = "windows"))]
     if options.wgi {
-        eprintln!("Ignoring --wgi: this override is only available on Windows");
+        warn!("Ignoring --wgi: this override is only available on Windows");
     }
     #[cfg(target_os = "windows")]
     if !options.wgi {
@@ -147,7 +159,7 @@ fn main() {
     app.add_systems(
         Startup,
         |adapter: Res<bevy::render::renderer::RenderAdapterInfo>| {
-            println!(
+            info!(
                 "RENDER DEVICE: {} ({:?}), driver {} {}",
                 adapter.name, adapter.backend, adapter.driver, adapter.driver_info
             );
@@ -163,6 +175,7 @@ fn main() {
             bevy::diagnostic::FrameTimeDiagnosticsPlugin::default(),
             app::GamePlugin,
             assets::CharacterPlugin,
+            loading::LoadingPlugin,
             hair::HairPlugin,
             visuals::ReefPlugin,
             ui::ReefUiPlugin,
@@ -234,7 +247,7 @@ fn gpu_settings(requested: Option<app::RenderBackend>) -> WgpuSettings {
     let backend = selected_backend(platform, requested);
     if let Some(requested) = requested.filter(|requested| !backend_supported(platform, *requested))
     {
-        eprintln!(
+        warn!(
             "Ignoring {} on this platform; using {}",
             requested.flag(),
             backend.flag()

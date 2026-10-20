@@ -1,4 +1,15 @@
 {
+  "Ready!": ["Ready!", "Spremno!", "Pronto!"],
+  "Build": ["Build", "Verzija", "Versione"],
+  "Driver": ["Driver", "Upravljački program", "Driver"],
+  "Input": ["Input", "Ulaz", "Input"],
+  "Keyboard / mouse": ["Keyboard / mouse", "Tipkovnica / miš", "Tastiera / mouse"],
+  "Active hints": ["Active hints", "Aktivne upute", "Comandi attivi"],
+  "Controllers": ["Controllers", "Kontroleri", "Controller"],
+  "Unnamed controller": ["Unnamed controller", "Neimenovani kontroler", "Controller senza nome"],
+  "none": ["none", "nema", "nessuno"],
+  "Assets": ["Assets", "Resursi", "Risorse"],
+  "Pipelines": ["Pipelines", "Grafički cjevovodi", "Pipeline"],
   "Rumble: ": ["Rumble: ", "Vibracija: ", "Vibrazione: "],
   "Gentle": ["Gentle", "Nježna", "Delicata"],
   "Normal": ["Normal", "Normalna", "Normale"],
@@ -31,6 +42,7 @@
   ],
   "Bringing the reef to life…": ["Bringing the reef to life…", "Oživljavamo podvodni svijet…", "Diamo vita alla barriera…"],
   "Preparing the characters…": ["Preparing the characters…", "Pripremamo likove…", "Prepariamo i personaggi…"],
+  "Preparing graphics…": ["Preparing graphics…", "Pripremamo grafiku…", "Prepariamo la grafica…"],
   "Rounds 1–9 only. Round 10 always has four jellyfish.": ["Rounds 1–9 only. Round 10 always has four jellyfish.", "Samo runde 1–9. U 10. rundi uvijek su četiri meduze.", "Solo turni 1–9. Il turno 10 ha sempre quattro meduse."],
   "Victory!": ["Victory!", "Pobjeda!", "Vittoria!"],
   "You protected the reef through all 10 rounds!": ["You protected the reef through all 10 rounds!", "Zaštitila si podvodni svijet kroz svih 10 rundi!", "Hai protetto la barriera per tutti e 10 i turni!"],
@@ -73,10 +85,10 @@
     "Sabrinina\npodvodna\nbajka",
     "La fiaba\nsottomarina\ndi Sabrina"
   ],
-  "A REMAKE BY LUKA DEŽULOVIĆ": [
-    "A REMAKE BY LUKA DEŽULOVIĆ",
-    "PRERADA: LUKA DEŽULOVIĆ",
-    "UN REMAKE DI LUKA DEŽULOVIĆ"
+  "A Game by Luka & Sabrina Dežulović": [
+    "A Game by Luka & Sabrina Dežulović",
+    "Igra Luke i Sabrine Dežulović",
+    "Un gioco di Luka e Sabrina Dežulović"
   ],
   "A living sea. A mischievous jellyfish.\nAnd a little mermaid with a magic crystal.": [
     "A living sea. A mischievous jellyfish.\nAnd a little mermaid with a magic crystal.",

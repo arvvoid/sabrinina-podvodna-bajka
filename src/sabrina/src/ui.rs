@@ -40,6 +40,9 @@ struct UiRoot;
 #[derive(Component)]
 pub(crate) struct FpsCounter;
 
+#[derive(Component)]
+struct LoadingStats;
+
 #[derive(Clone, Copy)]
 struct Rect {
     x: f32,
@@ -70,6 +73,51 @@ impl Rect {
 
 fn rect(x: f32, y: f32, w: f32, h: f32) -> Rect {
     Rect { x, y, w, h }
+}
+
+fn loading_image_rect(viewport_width: f32, viewport_height: f32) -> Rect {
+    let height = viewport_height.max(viewport_width / (1365.0 / 768.0));
+    let width = height * (1365.0 / 768.0);
+    rect(
+        (CANVAS_WIDTH - width) / 2.0,
+        ((CANVAS_HEIGHT - height) / 2.0)
+            .min((CANVAS_HEIGHT + viewport_height) / 2.0 - 24.0 - height * 733.0 / 768.0),
+        width,
+        height,
+    )
+}
+
+fn on_loading_image(image: Rect, area: Rect) -> Rect {
+    let scale = image.w / 1365.0;
+    rect(
+        image.x + area.x * scale,
+        image.y + area.y * scale,
+        area.w * scale,
+        area.h * scale,
+    )
+}
+
+fn loading_overlay(image: Rect) -> (Rect, Rect) {
+    (
+        on_loading_image(image, rect(422.5, 658.0, 520.0, 24.0)),
+        on_loading_image(image, rect(534.5, 708.0, 296.0, 25.0)),
+    )
+}
+
+fn loading_bar_fraction(progress: f32, right: bool) -> f32 {
+    (progress * 2.0 - if right { 1.0 } else { 0.0 }).clamp(0.0, 1.0)
+}
+
+fn input_backend(windows: bool, wgi: bool) -> &'static str {
+    match (windows, wgi) {
+        (true, false) => "XInput (Xbox / Steam Input)",
+        (true, true) => "Windows Gaming Input / GilRs",
+        (false, _) => "GilRs",
+    }
+}
+
+fn title_path(language: usize) -> &'static str {
+    ["ui/title_eng.png", "ui/title_hr.png", "ui/title_it.png"][language % 3]
 }
 
 #[derive(Component, Clone, Copy)]
@@ -141,6 +189,7 @@ impl Plugin for ReefUiPlugin {
             .init_resource::<Hints>()
             .add_systems(Startup, setup_fps)
             .add_systems(Update, update_fps)
+            .add_systems(Update, update_loading_stats.after(draw))
             .add_systems(
                 PreUpdate,
                 crate::controls::update
@@ -528,8 +577,8 @@ fn draw(
     if ui.screen == Screen::Loading {
         let viewport_width = window.width() / zoom;
         let viewport_height = window.height() / zoom;
-        let image_height = viewport_height.max(viewport_width / (1365.0 / 768.0));
-        let image_width = image_height * (1365.0 / 768.0);
+        let image = loading_image_rect(viewport_width, viewport_height);
+        let (status_area, _) = loading_overlay(image);
         let e = builder
             .commands
             .spawn((
@@ -537,28 +586,45 @@ fn draw(
                     image: server.load("ui/loading.png"),
                     ..default()
                 },
-                Node {
-                    position_type: PositionType::Absolute,
-                    left: px((CANVAS_WIDTH - image_width) / 2.0),
-                    top: px((CANVAS_HEIGHT - image_height) / 2.0),
-                    width: px(image_width),
-                    height: px(image_height),
-                    ..default()
-                },
+                image.node(),
             ))
             .id();
         builder.commands.entity(root).add_child(e);
-        builder.background_alpha = 0.2;
-        let status = builder.label(rect(500.0, 760.0, 600.0, 34.0), 18.0, "", Some("loading"));
-        builder
-            .commands
-            .entity(status)
-            .insert(TextLayout::justify(Justify::Center));
-        builder.meter(
-            rect(650.0, 842.0, 300.0, 4.0),
-            Color::srgb(0.38, 1.0, 0.76),
-            "loading",
+        let shadow = TextShadow {
+            offset: Vec2::splat(2.0 / zoom),
+            color: Color::BLACK,
+        };
+        let text_color = TextColor(Color::srgb(1.0, 0.92, 0.60));
+        let status = builder.label(status_area, 20.0 * image.w / 1365.0, "", Some("loading"));
+        builder.commands.entity(status).insert((
+            TextLayout::justify(Justify::Center),
+            text_color,
+            shadow,
+        ));
+        // Fill only the two narrow inlays, leaving the gold frame and shell visible.
+        for (x, key) in [(548.0, "loading_left"), (710.0, "loading_right")] {
+            let inlay = on_loading_image(image, rect(x, 719.0, 107.0, 2.0));
+            builder.meter(inlay, Color::srgb(0.60, 0.98, 0.91), key);
+        }
+        let stats_scale = (0.8 / zoom).max(1.0);
+        let stats_width = (600.0 * stats_scale).min(viewport_width - 48.0 * stats_scale);
+        let stats = builder.label(
+            rect(
+                (CANVAS_WIDTH + viewport_width) / 2.0 - stats_width - 24.0 * stats_scale,
+                (CANVAS_HEIGHT - viewport_height) / 2.0 + 20.0 * stats_scale,
+                stats_width,
+                300.0 * stats_scale,
+            ),
+            18.0 * stats_scale,
+            "",
+            None,
         );
+        builder.commands.entity(stats).insert((
+            LoadingStats,
+            text_color,
+            shadow,
+            TextLayout::justify(Justify::Right),
+        ));
         focus.count = 0;
         return;
     }
@@ -577,6 +643,81 @@ fn draw(
     }
     focus.count = builder.index;
     focus.index = focus.index.min(focus.count.saturating_sub(1));
+}
+
+fn update_loading_stats(
+    mut texts: Query<&mut Text, With<LoadingStats>>,
+    window: Single<&Window, With<PrimaryWindow>>,
+    adapter: Res<RenderAdapterInfo>,
+    options: Res<Options>,
+    hints: Res<Hints>,
+    pads: Query<Option<&Name>, With<Gamepad>>,
+    loading: Res<crate::loading::Loading>,
+    preferences: Res<Preferences>,
+) {
+    if texts.is_empty() {
+        return;
+    }
+    let lang = preferences.language;
+    let mut controllers: Vec<_> = pads
+        .iter()
+        .map(|name| {
+            name.map_or_else(
+                || tr("Unnamed controller", lang),
+                |name| name.as_str().to_owned(),
+            )
+        })
+        .collect();
+    controllers.sort();
+    let connected = if controllers.is_empty() {
+        tr("none", lang)
+    } else {
+        controllers.join(", ")
+    };
+    let active = match hints.style {
+        Style::Keyboard => "Keyboard / mouse",
+        Style::Xbox => "Xbox",
+        Style::PlayStation => "PlayStation",
+        Style::Generic => "Generic gamepad",
+    };
+    let value = format!(
+        "{} ({}) · {} × {} px\n{}: {}\n{} · {} draw\nGPU: {}\n{}: {} {}\n{}: {} + {}\n{}: {} · {} ({}): {}\n{}: {}/{} · {}: {}/{}",
+        std::env::consts::OS,
+        std::env::consts::ARCH,
+        window.physical_width(),
+        window.physical_height(),
+        tr("Build", lang),
+        crate::build_info::menu_label(),
+        renderer_label(&adapter),
+        if options.direct_draw {
+            "direct"
+        } else {
+            "indirect"
+        },
+        adapter.name,
+        tr("Driver", lang),
+        adapter.driver,
+        adapter.driver_info,
+        tr("Input", lang),
+        tr("Keyboard / mouse", lang),
+        input_backend(cfg!(target_os = "windows"), options.wgi),
+        tr("Active hints", lang),
+        tr(active, lang),
+        tr("Controllers", lang),
+        controllers.len(),
+        connected,
+        tr("Assets", lang),
+        loading.assets_loaded,
+        loading.assets_total,
+        tr("Pipelines", lang),
+        loading.pipelines_ready,
+        loading.pipelines_total,
+    );
+    for mut text in &mut texts {
+        if text.0 != value {
+            text.0.clone_from(&value);
+        }
+    }
 }
 
 fn draw_hud(builder: &mut Builder<'_, '_, '_>, screen: Screen) {
@@ -621,17 +762,19 @@ fn draw_menu(builder: &mut Builder<'_, '_, '_>, preferences: &Preferences, rende
     let lang = builder.lang;
     builder.panel(rect(64.0, 65.0, 535.0, 775.0));
     builder.label(
-        rect(100.0, 94.0, 450.0, 30.0),
+        rect(100.0, 108.0, 450.0, 30.0),
         17.0,
-        tr("A REMAKE BY LUKA DEŽULOVIĆ", lang),
+        tr("A Game by Luka & Sabrina Dežulović", lang),
         None,
     );
-    builder.label(
-        rect(100.0, 137.0, 460.0, 170.0),
-        44.0,
-        tr("Sabrina's\nUnderwater\nFairy Tale", lang),
-        None,
-    );
+    let title = builder
+        .commands
+        .spawn((
+            ImageNode::new(builder.server.load(title_path(lang))),
+            rect(76.0, 145.0, 510.0, 170.0).node(),
+        ))
+        .id();
+    builder.commands.entity(builder.root).add_child(title);
     builder.label(
         rect(100.0, 340.0, 450.0, 76.0),
         21.0,
@@ -679,7 +822,7 @@ fn draw_menu(builder: &mut Builder<'_, '_, '_>, preferences: &Preferences, rende
             false,
         ),
         (
-            rect(100.0, 742.0, 220.0, 48.0),
+            rect(100.0, 732.0, 220.0, 48.0),
             "Goodbye",
             Action::Quit,
             false,
@@ -688,22 +831,28 @@ fn draw_menu(builder: &mut Builder<'_, '_, '_>, preferences: &Preferences, rende
         builder.button(r, key, action, primary);
     }
     builder.label(
-        rect(340.0, 742.0, 220.0, 48.0),
+        rect(340.0, 732.0, 220.0, 48.0),
         17.0,
         format!("{}{}", tr("Best visit: ", lang), preferences.best),
         None,
     );
     builder.label(
-        rect(100.0, 798.0, 270.0, 28.0),
-        14.0,
+        rect(100.0, 782.0, 270.0, 22.0),
+        13.5,
         crate::build_info::menu_label(),
         None,
     );
-    let renderer_label = builder.label(rect(375.0, 798.0, 185.0, 28.0), 14.0, renderer, None);
+    let renderer_label = builder.label(rect(375.0, 782.0, 185.0, 22.0), 13.5, renderer, None);
     builder
         .commands
         .entity(renderer_label)
         .insert(TextLayout::justify(Justify::Right));
+    builder.label(
+        rect(100.0, 806.0, 460.0, 16.0),
+        10.0,
+        "Copyright © 2026 Luka Dežulović",
+        None,
+    );
 }
 
 fn renderer_label(adapter: &RenderAdapterInfo) -> String {
@@ -1294,20 +1443,29 @@ fn update(
     mut bars: Query<(&Meter, &mut Node)>,
     focus: Res<Focus>,
     mut hits: Query<(&Hit, &mut ImageNode)>,
-    server: Res<AssetServer>,
     library: Res<crate::assets::Library>,
+    loading: Res<crate::loading::Loading>,
+    server: Res<AssetServer>,
 ) {
     let sabrina = &simulation.0.sabrina;
     let language = preferences.language;
     for (key, mut text) in &mut texts {
         let value = match key.0 {
-            "loading" => tr(
-                if library.ready {
-                    "Preparing the characters…"
-                } else {
-                    "Bringing the reef to life…"
-                },
-                language,
+            "loading" => format!(
+                "{}  {:.0}%",
+                tr(
+                    if loading.progress == 1.0 {
+                        "Ready!"
+                    } else if loading.warming {
+                        "Preparing graphics…"
+                    } else if library.ready {
+                        "Preparing the characters…"
+                    } else {
+                        "Bringing the reef to life…"
+                    },
+                    language,
+                ),
+                loading.progress * 100.0
             ),
             "victory" => format!(
                 "{}{}\n{}{}",
@@ -1457,22 +1615,8 @@ fn update(
     }
     for (meter, mut node) in &mut bars {
         let amount = match meter.0 {
-            "loading" => {
-                let total = library.handles.len() + library.lods.len();
-                let loaded = library
-                    .handles
-                    .iter()
-                    .chain(library.lods.values())
-                    .filter(|handle| server.is_loaded_with_dependencies(handle.id()))
-                    .count();
-                if ui.loaded {
-                    1.0
-                } else if total == 0 {
-                    0.0
-                } else {
-                    loaded as f32 / total as f32 * 0.9
-                }
-            }
+            "loading_left" => loading_bar_fraction(loading.progress, false),
+            "loading_right" => loading_bar_fraction(loading.progress, true),
             "health" => sabrina.vitality.health / 100.0,
             "song" => sabrina.song.energy / 100.0,
             "crystal" => 1.0 - sabrina.cooldown / reef_sim::recharge_duration(&simulation.0),
@@ -1544,6 +1688,52 @@ mod tests {
         InputPlugin,
         gamepad::{RawGamepadButtonChangedEvent, RawGamepadEvent},
     };
+
+    #[test]
+    fn title_artwork_matches_translation_language_order() {
+        assert_eq!(title_path(0), "ui/title_eng.png");
+        assert_eq!(title_path(1), "ui/title_hr.png");
+        assert_eq!(title_path(2), "ui/title_it.png");
+    }
+
+    #[test]
+    fn loading_bar_follows_artwork_and_stays_visible_on_wide_and_tall_windows() {
+        for (width, height) in [(1280.0_f32, 720.0_f32), (2560.0, 1080.0), (720.0, 1280.0)] {
+            let zoom = (width / CANVAS_WIDTH).min(height / CANVAS_HEIGHT);
+            let image = loading_image_rect(width / zoom, height / zoom);
+            let (status, bar) = loading_overlay(image);
+            assert!((bar.x + bar.w / 2.0 - CANVAS_WIDTH / 2.0).abs() < 1.0);
+            assert!(bar.y + bar.h <= (CANVAS_HEIGHT + height / zoom) / 2.0 - 23.99);
+            assert!(bar.y > status.y + status.h);
+            assert!((bar.w / image.w - 296.0 / 1365.0).abs() < 0.00001);
+        }
+        let image = loading_image_rect(CANVAS_WIDTH, CANVAS_HEIGHT);
+        let (_, bar) = loading_overlay(image);
+        assert!((bar.y - (image.y + 708.0 * image.w / 1365.0)).abs() < 0.001);
+    }
+
+    #[test]
+    fn loading_inlays_fill_in_sequence_without_covering_the_shell() {
+        for (progress, left, right) in [
+            (0.0, 0.0, 0.0),
+            (0.25, 0.5, 0.0),
+            (0.5, 1.0, 0.0),
+            (0.75, 1.0, 0.5),
+            (1.0, 1.0, 1.0),
+        ] {
+            assert_eq!(loading_bar_fraction(progress, false), left);
+            assert_eq!(loading_bar_fraction(progress, true), right);
+        }
+        assert_eq!(loading_bar_fraction(-1.0, false), 0.0);
+        assert_eq!(loading_bar_fraction(2.0, true), 1.0);
+    }
+
+    #[test]
+    fn input_backend_reports_the_enabled_transport_not_the_graphics_api() {
+        assert_eq!(input_backend(true, false), "XInput (Xbox / Steam Input)");
+        assert_eq!(input_backend(true, true), "Windows Gaming Input / GilRs");
+        assert_eq!(input_backend(false, true), "GilRs");
+    }
 
     fn hit(index: usize, x: f32, y: f32, slider: bool) -> Hit {
         Hit {

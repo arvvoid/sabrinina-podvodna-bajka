@@ -631,6 +631,11 @@ fn actors(
             }
             Actor::Reef => {}
         }
+        if !ui.loaded && matches!(actor, Actor::Fish(_) | Actor::Jelly(_)) {
+            show = true;
+            next.translation = Vec3::new(0.0, 7.0, 0.0);
+            next.scale = Vec3::ONE;
+        }
         visibility.set_if_neq(if show {
             Visibility::Visible
         } else {
@@ -920,6 +925,15 @@ fn effects(
                 amount = 0.5;
             }
         }
+        if !ui.loaded && !show {
+            show = true;
+            if !matches!(effect, Effect::Shaft(_)) {
+                next.translation = Vec3::new(0.0, 7.0, 1.0);
+            }
+            if matches!(effect, Effect::Note(_) | Effect::Pop(..)) {
+                next.scale = Vec3::ONE;
+            }
+        }
         visibility.set_if_neq(if show {
             Visibility::Visible
         } else {
@@ -1062,6 +1076,8 @@ fn capture(
     time: Res<Time>,
     mut elapsed: Local<f32>,
     mut taken: Local<bool>,
+    mut frame_capture_elapsed: Local<f32>,
+    mut frame_capture_index: Local<u32>,
     mut exit: MessageWriter<AppExit>,
     diagnostics: Res<bevy::diagnostic::DiagnosticsStore>,
     mut frame_times: Local<Vec<f32>>,
@@ -1072,6 +1088,20 @@ fn capture(
         return;
     }
     *elapsed += time.delta_secs();
+    if kind == "demo"
+        && !*taken
+        && let Some(directory) = &options.capture_frames
+    {
+        *frame_capture_elapsed += time.delta_secs();
+        if *frame_capture_elapsed >= 1.0 / 15.0 {
+            *frame_capture_elapsed %= 1.0 / 15.0;
+            let path = directory.join(format!("frame-{:04}.png", *frame_capture_index));
+            *frame_capture_index += 1;
+            commands
+                .spawn(Screenshot::primary_window())
+                .observe(save_to_disk(path));
+        }
+    }
     let deadline = if options.school || kind == "demo" || kind == "pose-stroke" {
         20.0
     } else {
@@ -1166,6 +1196,72 @@ fn crystal_light(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn warmup_preserves_effect_layout_after_loading_and_quality_changes() {
+        fn scene(loaded: bool) -> (App, Vec<Entity>) {
+            let mut app = App::new();
+            app.init_resource::<Presentation>()
+                .init_resource::<Preferences>()
+                .init_resource::<Time>()
+                .init_resource::<Assets<WaterMaterial>>()
+                .insert_resource(SessionUi {
+                    loaded,
+                    ..default()
+                })
+                .insert_resource(Trail {
+                    points: [Vec3::ZERO; 24],
+                    previous: Vec3::ZERO,
+                    time: 0.0,
+                    flying: false,
+                })
+                .add_systems(Update, effects);
+            let entities = [
+                Effect::Backdrop,
+                Effect::Water,
+                Effect::Shaft(0),
+                Effect::Shaft(5),
+                Effect::Plankton(0),
+                Effect::Plankton(70),
+                Effect::Distant(0),
+                Effect::Glow,
+                Effect::Spark(0),
+                Effect::Trail(0),
+            ]
+            .into_iter()
+            .map(|effect| {
+                app.world_mut()
+                    .spawn((
+                        effect,
+                        Transform::from_xyz(1.0, 2.0, 3.0).with_scale(Vec3::splat(0.05)),
+                        Visibility::default(),
+                    ))
+                    .id()
+            })
+            .collect();
+            (app, entities)
+        }
+        let (mut baseline, original) = scene(true);
+        let (mut warmed, entities) = scene(false);
+        warmed.update();
+        warmed.world_mut().resource_mut::<SessionUi>().loaded = true;
+        baseline.update();
+        warmed.update();
+        baseline.world_mut().resource_mut::<Preferences>().quality = 2;
+        warmed.world_mut().resource_mut::<Preferences>().quality = 2;
+        baseline.update();
+        warmed.update();
+        for (expected, actual) in original.into_iter().zip(entities) {
+            assert_eq!(
+                baseline.world().get::<Transform>(expected),
+                warmed.world().get::<Transform>(actual),
+            );
+            assert_eq!(
+                baseline.world().get::<Visibility>(expected),
+                warmed.world().get::<Visibility>(actual),
+            );
+        }
+    }
 
     #[test]
     fn balanced_has_low_cost_aa_and_conservative_shadows() {

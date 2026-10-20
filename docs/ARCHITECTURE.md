@@ -1,125 +1,66 @@
 # Architecture
 
-The game has two crates. `reef_sim` owns rules and state without depending on an engine. `sabrina` maps that state to Bevy entities, input, audio, UI and rendering.
+The game is split into two Rust crates:
 
-## Simulation and presentation
+- `reef_sim` owns gameplay state, rules, collision and scoring. It has no engine dependency.
+- `sabrina` handles Bevy integration: input, rendering, animation, audio, UI and settings.
 
-`reef_sim::World` contains plain components for Sabrina, 72 fish slots, four jellyfish slots, encounters, spells and scoring. Reused slots have generation IDs so a stale target cannot refer to a newly spawned fish. The simulation runs at 60 Hz and uses a seeded MT19937 generator.
+## Simulation
 
-Update order matters: timers, song, player movement, population and visits, crystal, wave, fish movement, contacts, jellyfish damage, then recovery and scoring. Keep dependent rules in this order. Independent presentation work can use Bevy's scheduler.
+The simulation runs at 60 Hz with a seeded MT19937 generator. `World` holds Sabrina, 72 fish slots, four jellyfish slots, spells and session state. Reused slots have generation IDs to prevent stale references.
 
-Rendering interpolates previous and current simulation snapshots. Input runs before fixed updates; presentation never feeds positions back into collision or scoring. Generations and spell transitions prevent interpolation across unrelated states. Pausing freezes the displayed snapshot, skeletal motion and effects.
+Update order is explicit: timers, song, player movement, population, crystal, wave, fish movement, contacts, damage, then recovery and scoring. Keep this order and random draws stable when refactoring.
 
-## Combat and scoring
+Input is buffered before fixed updates. Rendering interpolates simulation snapshots but never feeds positions back into gameplay. Pause freezes the displayed state and animation.
 
-Competitive play ends after `FINAL_ROUND` (10). Rounds 1–9 respect the normal 1–3 visitor limit; round 10 always spawns all four slots from both sides at separated heights, in either difficulty. Defeating the last visitor with fish and health remaining pays the normal survivor award exactly once, then sets `Session::victory` and emits `Events::victory`. Health loss or a fish wipeout takes priority. `Session::finished()` freezes both defeat and victory, and no round 11 can start. Retry resets the session. Quiet aquarium stays endless. The victory screen shows the sum of completed-round scores and final survivors; the saved best remains a single-round record.
-
-`reef_sim/src/balance.rs` owns combat constants, bounded difficulty curves and score awards. Jellyfish start with 100 health; a crystal removes 40, a close wave 10. Only health actually removed scores, so repeated attacks cannot farm a defeated visitor. Zero health initiates a harmless retreat; elapsed time and eaten fish never do. Crystal hits apply a three-second harmless bubble, followed by return flight; misses also return. Gentle stores a generation-safe homing target, while Lively stores a fixed direction at cast time. Recharge starts at launch.
-
-Waves affect fish across their original cone. Visitors are tested against their existing bell/tentacle capsules using a swept wave, once per cast ID. Reach is 2.5 world units from the cast's chest position to the body surface, not the visitor centre or Sabrina's later position. Starting the sweep at the chest avoids a point-blank dead zone; visitors centred behind the cast remain unaffected. Knockback decays independently of visitor steering and works during bubbles. Bubbles prevent movement, feeding and stings; visual drift does not feed back into gameplay. Health bars and bubble rings use pooled water-material quads.
-
-The returned crystal remains visible in its resting orbit throughout recharge. Resting glow, trails, sparks and the magic light remain off until cooldown ends; casting still requires a fully recharged crystal.
-
-Rescue awards share a fish's `rescued_cycle` across all abilities. Crystal rewards only collection within four units of an active, unbubbled threat. Wave rescue candidates must survive one second and reach six-unit clearance; song requires at least one second of escort from four-unit danger to six-unit clearance. Per-fish rescue flags prevent repeated ability switching from farming points. Recovery/scoring checks a fish wipeout before awarding round completion, even when the last visitor was defeated in the same tick. Births occur only in calm water without visitors.
-
-Score feedback lives in the simulation snapshot, not the audio event queue; audio can drain events without losing visible rewards. Each award kind has its own brief feedback line, so a final hit, retreat and survivor bonus remain visible together. Consecutive awards of the same kind briefly accumulate. Round results show the earned total, not an extra award of that amount. Settings carry a scoring version to invalidate incompatible old records without discarding other preferences. Local bests are not leaderboard-comparable across custom settings.
+Combat constants and difficulty curves live in `balance.rs`. Competitive play ends after round 10; quiet aquarium mode is endless. Damage, rescue rewards and round completion are resolved in the simulation. Visible score feedback is stored separately from events consumed by audio.
 
 ## Rendering and animation
 
-Backend defaults are platform-native: Windows uses Direct3D 12, Linux uses Vulkan, and Apple targets use Metal. `--dx12`, `--vulkan`, `--metal` and `--opengl` select available testing overrides; unsupported flags for the current platform fall back to its default with a warning. OpenGL uses wgpu's GL/GLES backend and requires a compatible driver and, on Unix-like systems, EGL. Renderer environment variables cannot select a different backend. Windows x86_64 MSVC builds statically link DXC so rendering does not depend on a compiler DLL found on the player's machine or working directory. Keep DX12 indirect-call validation enabled when DX12 is selected; the Vulkan/Metal/GL paths do not need it.
+Actors use persistent entity roots and pooled visuals. Animated instances have separate skeletons but share meshes, textures and animation resources. Hidden fish and jellyfish stop animating; screen-size LODs use hysteresis.
 
-Loading uses a plain full-viewport background with localized UI rather than text baked into splash artwork. Model dependency progress fills 90% of the bar; the menu opens only once the 77 animated character instances (Sabrina, 72 fish and four jellyfish) are ready. The language chooser lists all three native language names explicitly and supports the shared mouse/keyboard/controller navigation.
+Sabrina combines authored clips with runtime pose corrections, facial morphs and spring-driven hair. Collision samples are exported from the same Blender poses, keeping gameplay independent of render frame rate.
 
-`Actor` identifies a persistent entity root; `ActorVisual` holds its model and orientation. Each animated model has its own skeleton but shares meshes, textures, animation graphs and clip maps. Fish swap shared normal/damage material handles. Hidden pooled fish and jellyfish keep their last pose: their animations get zero weight, so Bevy skips their bones and their transforms are not rewritten. Screen-size LODs retain the same skin and materials, with hysteresis to avoid flickering between levels.
+Textures receive mipmaps during loading. Water, reef and crystal effects use embedded WESL shaders. Quality settings control shadows, antialiasing and effect detail. Pooled effects avoid unnecessary transform and material updates.
 
-Embedded textures receive mipmaps once during loading. Color filtering happens in linear light; normal maps are renormalized. Trilinear sampling and anisotropy reduce distant shimmer. A depth prepass reduces hidden-surface shading.
+Default graphics backends are DX12 on Windows, Vulkan on Linux and Metal on macOS. Command-line overrides are available for testing.
 
-Sabrina's nine authored clips blend over 0.22 seconds, with a 0.06-second entry for the responsive wave push. Idle hands scull slowly; level/upward swimming holds relaxed arms beside the body, while downward diving reaches both hands forward. Dive requires downward velocity and a smoothed downward pitch, and does not override ability/hurt poses. Wave uses a quick two-handed push and recovery; Throw gathers, winds up and extends at the existing 1.1-second crystal release. Runtime neck, tail and casting-arm corrections are restored before evaluating the next frame, so they cannot accumulate into unwanted spins. Casting arms follow the spell direction independently of body pitch/yaw; the same model-local axis/angle rotates simulation contacts about the sampled shoulders. Facial morphs handle blinking, smiling and singing. The crystal follows the blended right palm during a throw. Collision samples come from the same Blender poses, independently of rendered frame rate.
+## Input, UI and audio
 
-Sabrina uses the owner's textured 60,014-triangle mermaid geometry with an 88-joint anatomy-specific rig: six continuous tail joints, independent terminal and smaller fins, articulated fingers, two half-angle elbow support joints, and 25 hair joints. Elbow supports retain thickness under linear skinning without changing the forearm/hand hierarchy or contact trajectories. The tail and fin skeleton/rest geometry are extended 12%, with matching generated simulation contact lengths. Subtle head/eye proportion edits give a less childlike silhouette; torso proportions are unchanged. A 30-degree three-quarter presentation yaw is shared by rendering, casting correction and contacts, with continuous mirrored turns. The original UVs and 33 packed PBR maps are retained, including JPEG maps. Runtime material setup preserves the authored body materials instead of overriding their metallic/roughness values.
+One active controller supplies gameplay input and button hints. Windows uses native XInput by default, with `--wgi` available for other devices; other platforms use Bevy/GilRs.
 
-Hair uses one opaque, 20,123-triangle sculpted surface. `hair.rs` drives five five-joint chains after skeletal animation and pose corrections, before transform propagation. Roots remain weighted to Head; bounded, phase-delayed targets produce soft sway and inertial follow-through on acceleration and turning, not world-up buoyancy. Critically damped springs use capped substeps; paused simulation time leaves the complete state untouched, and clock resets/large discontinuities reset the springs. Reduced motion scales dynamic targets to 25%. Rotations are rebuilt from saved rest transforms, not accumulated. This is stylized secondary animation without strand/body collision simulation. The standard skinning vertex shader deforms positions and normals; `hair.wesl` only adds hurt tint to PBR shading. Exported tangents, the original normal map and anisotropic lighting supply directional highlights. Hair skips shadows and depth prepasses; its extra draw and the complete character still need platform-specific profiling.
+Gameplay actions remain buffered until a fixed tick consumes them. Menu navigation has separate repeat and dead-zone handling. Rumble follows confirmed gameplay events and stops on focus loss, menu entry or controller changes.
 
-Jellyfish skin uses alpha blending; the separate face remains opaque. Crystal and jellyfish neither cast nor receive shadows; small fish receive reef lighting but do not cast shadows. Balanced uses one 512-pixel filtered shadow map, 18% shadowed sunlight and 2× MSAA. High uses 1024 pixels, 22% shadowed sunlight and 2× MSAA. Unshadowed fill keeps the reef soft, without additional cascades or contact shadows. Light disables shadows and MSAA. Water effects do not cast shadows.
+Music is rendered offline from MIDI through FluidSynth and shipped as Ogg audio. Runtime playback crossfades calm and combat loops, plays an arrival stinger and ducks music under voices and song.
 
-Water, reef caustics and crystal materials use WESL files authored in `assets/shaders/` and embedded in the executable. Quality settings select 3, 6 or 12 water-light samples. Shader constants are calculated once per frame. Pooled effects only write transforms, visibility and material parameters when they are shown and the values actually change, because every changed material is re-uploaded and rebound; particles of one colour share a material.
+## Assets and packaging
 
-Only primitives under the `Reef_Near_Left` glTF node use alpha blending. The reef shader receives Sabrina's interpolated position and softens opacity from 100% to a minimum of 75% inside a small ellipse around her, only on geometry in front of her. The main reef remains opaque, and the reveal is disabled in the menu. Collision geometry is unchanged.
+Assets are compiled into the executable and loaded through Bevy's in-memory asset reader. No extraction or source checkout is required. `SABRINA_ASSETS` selects an external asset directory for development.
 
-`controls.rs` selects one active controller for both input and hints. Fresh button presses take precedence; a new stick deflection can switch devices, but a continuously held inactive stick cannot steal input back. Selection runs after Bevy's `InputSystems` and before gameplay input. A recognized Sony controller uses PlayStation symbols; Xbox/XInput devices use Xbox letters; unknown devices use neutral positional labels. Disconnecting all pads restores keyboard/mouse hints. Gameplay bindings and swimming dead zones are unchanged.
-
-Windows defaults to `xinput.rs`, using the OS's XInput 1.4 API (Windows 8+, including Windows 10). A dedicated worker polls connected slots at a requested 4 ms interval and queues state changes, including both edges of a tap occurring between rendered frames. Empty slots are probed once per second rather than at input rate, following Microsoft's performance guidance. Before `InputSystems`, the adapter emits normal connection and raw button/axis messages, including the individual streams Bevy/GilRs also emits. Bevy still owns filtering, digital edges and `Gamepad` components; hints, menu navigation and fixed-step buffering remain shared. Shoulder buttons map to `LeftTrigger`/`RightTrigger`, analog triggers to `LeftTrigger2`/`RightTrigger2`. Stick ranges account for signed 16-bit asymmetry without adding another dead zone. Connection entities are reused by slot. Focus transitions clear buffered digital edges to prevent replaying background presses.
-
-`--wgi` retains the previous Bevy/GilRs Windows Gaming Input path for direct Sony/generic devices and comparison tests. The two plugins never run concurrently, preventing duplicate devices and rumble consumers. Other platforms retain GilRs. Steam Input gamepad emulation is consumed as XInput, so Xbox hints are intentional; recovering the underlying device's glyphs would require Steam Input API integration, which is not included. Native XInput does not support unconverted Sony/generic HID devices. The transport and worker have automated tests, and the Windows path is cross-target type-checked; neither substitutes for physical Windows/Steam Input testing or proves the cause of the previously reported missed buttons.
-
-Menu navigation is separate from swimming: spatial neighbors follow button rectangles, while Tab/Shift+Tab retains ordered traversal. D-pad directions and the dominant stick axis repeat after 400 ms, then every 140 ms, at most once per rendered frame. Stick engagement is 0.55 with release at 0.30 and a latched direction; D-pad input takes priority. Screen changes require stick neutral before navigation, and stale hit targets cannot activate during transitions. Confirm is edge-triggered and takes priority over navigation; the right face button backs out of menus but remains Wave during play. Gameplay one-shots remain buffered until one fixed tick consumes them. Tests inject raw Bevy gamepad events, including press/release in the same frame, at 20–240 rendered FPS.
-
-`rumble.rs` observes confirmed simulation events before audio drains `FrameEvents`. It coalesces each rendered frame to one priority-ranked pulse, replaces rather than adds overlapping effects, and suppresses lower/equal priority pulses until the current one finishes. Normal strength is bounded to 0.40 strong / 0.30 weak for 80–180 ms; Gentle halves strength and Off disables it. Rumble targets the active pad and stops on menu entry, focus loss, controller change or exit. Capture/verification modes do not drive physical motors. On native XInput, `PostUpdate` forwards Bevy requests to the polling worker for the same slot; the worker implements additive/clamped effects and Stop in order, expires effects independently of rendering and zeros motors on shutdown. WGI and other platforms use Bevy/GilRs; raw WGI devices without a mapped Gamepad do not support that backend's vibration. Actual support and perceived strength still require controller playtesting.
-
-V-sync uses Bevy 0.20's `AutoVsync` capability fallback (`FifoRelaxed`, then `Fifo`) both at startup and when toggled. Late relaxed-FIFO frames may tear. Unit checks cover the requested mode, not the GPU's resolved surface configuration.
+Release packages contain the executable or app bundle and required license notices. Graphics, audio and windowing still depend on system libraries and drivers. The menu displays the build version, date and commit hash.
 
 ## Code map
 
-| File in `src/sabrina/src/` | Responsibility |
+Paths below are relative to `src/sabrina/src/`.
+
+| Module | Responsibility |
 |---|---|
-| `app.rs` | Fixed update, input, actions and session transitions |
-| `controls.rs` | Active controller, menu repeat/hysteresis, bindings and button colours |
-| `xinput.rs` | Windows native XInput polling, Bevy event adapter and motor transport |
-| `rumble.rs` | Bounded, prioritized controller feedback from gameplay events |
-| `presentation.rs` | Interpolated render snapshot |
-| `assets.rs` | Loading, shared resources, LODs, animation and attachments |
-| `embedded_assets.rs` | Default in-memory asset source backed by compiled-in bytes |
-| `mipmaps.rs` | Texture mip generation during loading |
-| `visuals.rs` | Camera, lighting, entities and pooled effects |
-| `ui.rs` | Menus, HUD, focus navigation and translations |
-| `audio.rs` | MIDI-rendered music, arrival stinger, recordings and captions |
-| `settings.rs` | Saved preferences and first-run import of old Godot settings |
+| `app.rs` | Input, fixed updates and session transitions |
+| `presentation.rs` | Interpolated simulation snapshots |
+| `assets.rs`, `mipmaps.rs` | Models, animation, shared resources and texture setup |
+| `visuals.rs`, `hair.rs` | Scene rendering, effects and secondary animation |
+| `controls.rs`, `xinput.rs`, `rumble.rs` | Controllers, navigation and feedback |
+| `ui.rs` | Menus, HUD and translations |
+| `audio.rs` | Music, effects, voices and captions |
+| `settings.rs` | Saved preferences and legacy settings import |
+| `embedded_assets.rs` | In-memory asset loading |
 | `verification.rs` | Live input and pause checks |
 
-Use simulation tests for rule changes, model validators for asset changes, and live input/capture checks for presentation. Benchmark release builds and record the actual GPU, resolution and quality setting. Frame-time percentiles are more useful than a single FPS reading.
+## Working on changes
 
-Music sources live in `art/music/`; `tools/render_music.py` renders them through
-FluidSynth into the three Ogg assets. Exported loops cover complete bars and
-retain the previous pass's release/reverb tail, with a 30 ms phase blend at the
-boundary that preserves bar length. Runtime playback does not
-synthesize MIDI. Calm and visitor loops crossfade; each visit restarts the combat
-track and triggers a dedicated one-shot arrival channel. Voices and song duck
-music, and the music slider controls both loops and the stinger. Magic effects
-cannot replace the stinger. Audio and the FluidR3 notice are embedded; release
-packages also include the notice in `licenses/`.
-
-`build.rs` recursively inventories `assets/`, sorts paths and generates a static
-`include_bytes!` table. Cargo watches the asset tree, including additions and
-deletions. Before `DefaultPlugins` creates the asset server, `embedded_assets`
-registers Bevy's `MemoryAssetReader` as the default source. Original asset paths,
-GLB sub-assets, shaders and audio continue to use the same loading APIs. No
-runtime extraction or source-tree fallback is used. `SABRINA_ASSETS` explicitly
-selects a validated external directory for development instead.
-
-Both packaging paths ship the executable plus documentation and font/soundfont
-notices, without a separate asset tree. This is single-file asset delivery, not
-full static linkage: OS graphics/audio/windowing libraries and drivers are
-still required.
-
-`src/sabrina/build.rs` embeds the UTC build date and 12-character commit hash.
-Local builds identify as `DEV`; tagged GitHub Actions builds display their
-release tag. The menu shows all three fields so test builds and packages are
-easy to identify. Git HEAD and the active ref are build-script inputs, keeping
-the hash current after commits without a clean rebuild, including packed refs
-and worktrees. Source and dependency-manifest changes refresh the build date;
-an unchanged cached binary keeps its original build date. The hash comes from
-the checked-out commit (with GitHub's SHA as a fallback when Git is unavailable).
-Source archives without Git metadata display `unknown` with a build warning,
-never a fabricated hash. Build-script rule/date tests can be run with
-`rustc --edition=2024 --test src/sabrina/build.rs -o target/sabrina-build-tests`
-followed by `target/sabrina-build-tests`.
-
-## Maintenance notes
-
-- In-game HUD panel/button backgrounds use 28% opacity and meter fills use 65%. Text and icons remain opaque; HUD text has a dark shadow for contrast. Menu/dialog backgrounds and the loading meter keep their original opacity.
-- The contact exporter reads and writes UTF-8 explicitly, including rustfmt's pipes, and emits LF line endings. This avoids Windows locale-dependent encoding failures in the copyright notice. Both CI workflows run regression tests with CP1252 defaults and real rustfmt.
-
-- UI layout is built by named screen helpers in `ui.rs`; `draw` handles rebuilding, while `actions` and `update` handle interaction and live HUD values. Pointer hit tests and the input verifier share the logical canvas dimensions.
-- Keep simulation slot iteration, random draws, expression order and fixed-system order stable during readability refactors. Interpolated presentation must never become input to gameplay.
-- `generated_contacts.rs` is generated data, not handwritten source. Edit Blender poses or `tools/export_rust_contacts.py` and regenerate it; the generator also owns its copyright header.
-- Original source files carry the project's copyright notice and Apache-2.0 SPDX identifier. Desktop packages include `LICENSE` and `NOTICE`. These notices do not change the reserved game-content and branding terms or third-party licenses in `ASSET_LICENSE.md`.
+- Test gameplay rules in `reef_sim`.
+- Validate asset changes with the model tools.
+- Regenerate `generated_contacts.rs` from Blender poses or the exporter; do not edit it manually.
+- Check presentation with live input and captures.
+- Profile release builds and record GPU, resolution, quality and frame-time percentiles.
+- Keep source, asset and third-party license notices intact.

@@ -23,16 +23,19 @@ jobs:
             platform: linux-x86_64
             executable: sabrina
             format: gztar
+            package_platform: linux
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             platform: windows-x86_64
             executable: sabrina.exe
             format: zip
+            package_platform: windows
           - os: macos-15
             target: aarch64-apple-darwin
             platform: macos-arm64
             executable: sabrina
             format: gztar
+            package_platform: macos
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -82,6 +85,7 @@ jobs:
           python tools/package_release.py \
             --binary "target/${{ matrix.target }}/release/${{ matrix.executable }}" \
             --name "sabrina-${TAG}-${{ matrix.platform }}" \
+            --platform "${{ matrix.package_platform }}" \
             --format "${{ matrix.format }}"
       - uses: actions/upload-artifact@v4
         with:
@@ -118,14 +122,16 @@ jobs:
           - **Linux x86_64:** `.tar.gz` for Ubuntu 24.04 or compatible newer systems.
             Requires Vulkan drivers, ALSA, libudev and X11 runtime libraries.
           - **Windows x86_64:** `.zip`; extract and open `sabrina.exe`.
-          - **macOS Apple Silicon:** `.tar.gz`; unsigned and not notarized.
+          - **macOS Apple Silicon:** `.tar.gz`; extract and open `Sabrina.app`.
+            Unsigned and not notarized; follow your system's security guidance.
 
           All game assets are embedded in the executable; no `assets` folder is needed.
           The game still uses operating-system libraries and graphics drivers.
-          Keep the included documentation and license notices when redistributing.
-          On Linux/macOS, run `./sabrina` from the extracted folder.
-          Each archive has a SHA-256 checksum file. Packages include controls,
-          documentation and license notices. Windows/macOS runtime validation is
+          Keep the included license notices when redistributing.
+          On Linux, run `./sabrina` from the extracted folder.
+          Each archive has a SHA-256 checksum file. Packages contain only the
+          executable/app and license notices, without README or architecture files.
+          Windows/macOS runtime validation is
           still ongoing; a successful build is not a playtest.
 
           Android and iOS releases are planned, but are not included here.
