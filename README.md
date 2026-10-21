@@ -149,6 +149,32 @@ These are one measured run per scene, not requirements or allocation budgets. RA
 
 `./tools/package-bevy.sh` creates a portable directory under `dist/` containing the executable and accompanying documentation/license notices. The game is **asset-self-contained, not fully statically linked**: Linux still needs system libraries such as glibc, ALSA and libudev, and all platforms need their graphics drivers and OS windowing/audio support. Keep the accompanying notices when redistributing.
 
+### Windows installer (Inno Setup 6)
+
+Place the Windows release contents in `tools/windows-setup/setup-source/`,
+with `sabrina.exe`, `LICENSE`, `NOTICE`, and the `licenses/` directory directly
+inside it. Open `tools/windows-setup/buildSetup.iss` in Inno Setup 6 and compile,
+or run from the repository root in PowerShell:
+
+```powershell
+& "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" ".\tools\windows-setup\buildSetup.iss"
+```
+
+The installer is written to `dist/windows-setup/`. Its version comes from the
+staged executable's Windows version resource; override it with `/DAppVersion=0.2.6`
+before the script argument when needed. The installer uses `art/icons/app_icon.ico`,
+installs for the current user without administrator privileges, creates a Start
+menu shortcut, and offers an optional desktop shortcut. It targets 64-bit Windows
+10 or later.
+
+Installation requires separate acceptance of `LICENSE`,
+`licenses/ASSET_LICENSE.txt`, `licenses/LICENSE-DejaVu.txt`, and
+`licenses/LICENSE-FluidR3.txt`; `NOTICE` is also displayed before installation.
+All staged files, including the licences, are installed unchanged. Silent
+installation is intentionally rejected so these acceptance pages cannot be
+skipped. Uninstalling removes installed files but preserves the game's settings
+and logs in `%APPDATA%\sabrinina-podvodna-bajka`.
+
 ### Runtime options
 
 Pass flags after the executable name, for example `./tools/run.sh --vulkan --capture-school --fullhd`.

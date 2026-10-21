@@ -25,3 +25,6 @@ __pycache__/
 /game/
 /tools/godot
 /tools/*.zip
+
+# Ignore setup source that is Temporaty
+/tools/windows-setup/setup-source
