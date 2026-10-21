@@ -5,6 +5,7 @@
 /dist/
 /exports/
 /captures/
+/tools/windows-setup/Sabrina-*-Setup.exe
 
 # Local settings
 .env

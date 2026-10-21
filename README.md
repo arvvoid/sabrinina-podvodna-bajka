@@ -160,7 +160,11 @@ or run from the repository root in PowerShell:
 & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" ".\tools\windows-setup\buildSetup.iss"
 ```
 
-The installer is written to `dist/windows-setup/`. Its version comes from the
+The installer is written beside the script in `tools/windows-setup/`.
+Setup and its uninstaller are signed using the `LDTSign` signing tool configured
+in Inno Setup (Tools > Configure Sign Tools). This tool must also be configured
+on any other build machine; signing failures fail the build.
+The version comes from the
 staged executable's Windows version resource; override it with `/DAppVersion=0.2.6`
 before the script argument when needed. The installer uses `art/icons/app_icon.ico`,
 installs for the current user without administrator privileges, creates a Start
