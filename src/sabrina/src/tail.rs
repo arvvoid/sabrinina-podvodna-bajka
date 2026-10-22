@@ -4,7 +4,7 @@
 use crate::{
     assets::{Actor, CharacterSurface},
     presentation::Presentation,
-    settings::Preferences,
+    settings::{Preferences, TailColor},
 };
 use bevy::{
     pbr::{ExtendedMaterial, MaterialExtension},
@@ -47,10 +47,22 @@ fn is_tail(name: &str) -> bool {
 }
 
 fn tint(preferences: &Preferences) -> Vec4 {
-    preferences.tail_color.map_or(Vec4::ZERO, |[r, g, b]| {
-        let color = Color::srgb_u8(r, g, b).to_linear();
-        Vec4::new(color.red, color.green, color.blue, 1.0)
-    })
+    if preferences.tail_color == TailColor::Magic {
+        // Mode 3 freezes the rainbow for reduced motion; time comes from Bevy's globals.
+        return Vec4::new(
+            0.0,
+            0.0,
+            0.0,
+            if preferences.reduced_motion { 3.0 } else { 2.0 },
+        );
+    }
+    preferences
+        .tail_color
+        .rgb()
+        .map_or(Vec4::ZERO, |[r, g, b]| {
+            let color = Color::srgb_u8(r, g, b).to_linear();
+            Vec4::new(color.red, color.green, color.blue, 1.0)
+        })
 }
 
 pub struct TailPlugin;
@@ -135,10 +147,31 @@ mod tests {
     fn original_disables_tint_and_custom_color_is_linear() {
         let mut preferences = Preferences::default();
         assert_eq!(tint(&preferences), Vec4::ZERO);
-        preferences.tail_color = Some([128, 0, 255]);
+        preferences.tail_color = TailColor::Custom([128, 0, 255]);
         let color = tint(&preferences);
         assert!((color.x - 0.21586).abs() < 0.0001);
         assert_eq!((color.y, color.z, color.w), (0.0, 1.0, 1.0));
+    }
+
+    #[test]
+    fn presets_use_linear_tints_and_magic_respects_reduced_motion() {
+        let mut preferences = Preferences::default();
+        for preset in TailColor::PRESETS {
+            preferences.tail_color = preset;
+            let color = tint(&preferences);
+            match preset {
+                TailColor::None => assert_eq!(color, Vec4::ZERO),
+                TailColor::Magic => assert_eq!(color, Vec4::new(0.0, 0.0, 0.0, 2.0)),
+                _ => {
+                    let [r, g, b] = preset.rgb().unwrap();
+                    let linear = Color::srgb_u8(r, g, b).to_linear();
+                    assert_eq!(color, Vec4::new(linear.red, linear.green, linear.blue, 1.0));
+                }
+            }
+        }
+        preferences.tail_color = TailColor::Magic;
+        preferences.reduced_motion = true;
+        assert_eq!(tint(&preferences), Vec4::new(0.0, 0.0, 0.0, 3.0));
     }
 
     #[test]
@@ -238,7 +271,7 @@ mod tests {
             assert_eq!(material.base.metallic, 0.21);
             assert_eq!(material.extension.color, Vec4::ZERO);
         }
-        app.world_mut().resource_mut::<Preferences>().tail_color = Some([255, 0, 128]);
+        app.world_mut().resource_mut::<Preferences>().tail_color = TailColor::Custom([255, 0, 128]);
         app.update();
         for entity in &tails {
             let surface = app.world().get::<TailSurface>(*entity).unwrap();
@@ -284,7 +317,7 @@ mod tests {
             .sabrina
             .vitality
             .hurt_flash = 0.0;
-        app.world_mut().resource_mut::<Preferences>().tail_color = None;
+        app.world_mut().resource_mut::<Preferences>().tail_color = TailColor::None;
         app.update();
         for entity in &tails {
             let surface = app.world().get::<TailSurface>(*entity).unwrap();
@@ -305,17 +338,23 @@ mod tests {
                 Vec4::ZERO
             );
         }
-        app.update();
-        app.world_mut()
-            .resource_mut::<Messages<AssetEvent<TailMaterial>>>()
-            .clear();
-        app.update();
-        assert!(
-            !app.world_mut()
+        for color in [TailColor::None, TailColor::Magic] {
+            app.world_mut().resource_mut::<Preferences>().tail_color = color;
+            app.update();
+            app.update();
+            app.world_mut()
                 .resource_mut::<Messages<AssetEvent<TailMaterial>>>()
-                .drain()
-                .any(|event| matches!(event, AssetEvent::Modified { .. }))
-        );
+                .clear();
+            for _ in 0..4 {
+                app.update();
+                assert!(
+                    !app.world_mut()
+                        .resource_mut::<Messages<AssetEvent<TailMaterial>>>()
+                        .drain()
+                        .any(|event| matches!(event, AssetEvent::Modified { .. }))
+                );
+            }
+        }
         assert_eq!(app.world().resource::<Assets<TailMaterial>>().len(), 12);
     }
 }

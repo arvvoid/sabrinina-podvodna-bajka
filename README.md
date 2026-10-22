@@ -38,11 +38,18 @@ The game is playable already, but I am still working on it. There are animations
 
 ## Playing
 
-**Tail color:** open Settings → Tail color to choose any RGB color, with a swatch
-and hexadecimal preview. Drag the sliders with the mouse, or use left/right
-with the keyboard or controller for fine adjustment. **Original** restores the
-authored tail colors. The choice is saved locally and applies only to the tail
-and fins; hair and bikini retain their original colors.
+**Tail color:** open Settings → Tail color and choose **None**, **Natural green**,
+**Violet**, **Pink**, **Lagoon blue**, **Coral**, **Gold**, or **Magic** using the
+mouse, keyboard or controller. **None** keeps the original texture colors and
+standard PBR lighting without an added effect. **Magic** creates a continuously
+swirling rainbow with traveling pearly highlights and a gentle luminous sheen.
+One shared model-space pattern flows across the tail and fins without restarting
+at texture seams. It runs entirely in the shader: no extra textures, texture
+uploads or per-frame material changes. Reduced motion keeps the colors and
+highlights still. The choice is saved
+locally and applies only to the tail and fins; hair and bikini retain their
+original colors. Previously saved custom RGB colors remain intact until you
+choose a preset.
 
 The fish swim around during the quieter parts. Every now and then jellyfish show up and try to eat them. Each jellyfish has **100 health** and only retreats after you bring that down to zero. There is no timeout or limit to the number of fish it can eat. If you lose all the fish during a round, or Sabrina loses all her health, it is game over. Jellyfish get bigger as they eat, and Sabrina slowly recovers if she stays safe for a while.
 

@@ -5,7 +5,7 @@ use crate::{
     app::{self, Options, PendingInput, Screen, SessionUi, Simulation},
     audio::AudioRequests,
     controls::{Control, Direction, Hints, MenuNavigation, Style},
-    settings::Preferences,
+    settings::{Preferences, TailColor},
 };
 use bevy::{
     prelude::*,
@@ -172,8 +172,7 @@ enum Action {
     Motion,
     Rumble,
     TailColor,
-    TailChannel(usize),
-    TailOriginal,
+    SelectTail(TailColor),
     Gentle,
     Visitors,
     Done,
@@ -1244,19 +1243,8 @@ fn draw_settings(builder: &mut Builder<'_, '_, '_>, preferences: &Preferences) {
     );
 }
 
-fn set_tail_channel(preferences: &mut Preferences, channel: usize, fraction: f32) {
-    let mut color = tail_picker_color(preferences);
-    color[channel] = (fraction.clamp(0.0, 1.0) * 255.0).round() as u8;
-    preferences.tail_color = Some(color);
-}
-
-fn tail_picker_color(preferences: &Preferences) -> [u8; 3] {
-    preferences.tail_color.unwrap_or([60, 200, 160])
-}
-
 fn draw_tail_color(builder: &mut Builder<'_, '_, '_>, preferences: &Preferences) {
     let lang = builder.lang;
-    let color = tail_picker_color(preferences);
     builder.panel(rect(370.0, 110.0, 860.0, 680.0));
     builder.label(
         rect(420.0, 145.0, 760.0, 55.0),
@@ -1267,47 +1255,49 @@ fn draw_tail_color(builder: &mut Builder<'_, '_, '_>, preferences: &Preferences)
     builder.label(
         rect(420.0, 215.0, 760.0, 60.0),
         20.0,
-        tr("Choose any color. Scales and shine stay natural.", lang),
+        tr(
+            "None keeps the original. Magic flows with rainbow colors.",
+            lang,
+        ),
         None,
     );
-    let swatch = builder
-        .commands
-        .spawn((
-            rect(1000.0, 315.0, 175.0, 220.0).node(),
-            BackgroundColor(Color::srgb_u8(color[0], color[1], color[2])),
-        ))
-        .id();
-    builder.commands.entity(builder.root).add_child(swatch);
-    builder.label(
-        rect(990.0, 555.0, 205.0, 40.0),
-        22.0,
-        if preferences.tail_color.is_some() {
-            format!("#{:02X}{:02X}{:02X}", color[0], color[1], color[2])
-        } else {
-            tr("Original", lang)
-        },
-        None,
-    );
-    for (channel, name) in ["Red", "Green", "Blue"].into_iter().enumerate() {
-        let y = 300.0 + channel as f32 * 110.0;
-        builder.label(
-            rect(420.0, y, 500.0, 36.0),
-            22.0,
-            format!("{}: {}", tr(name, lang), color[channel]),
-            None,
+    for (index, color) in TailColor::PRESETS.into_iter().enumerate() {
+        let x = 420.0 + (index % 2) as f32 * 400.0;
+        let y = 300.0 + (index / 2) as f32 * 82.0;
+        builder.button(
+            rect(x, y, 360.0, 62.0),
+            &format!(
+                "{} {}",
+                if preferences.tail_color == color {
+                    "●"
+                } else {
+                    "○"
+                },
+                tr(color.label(), lang),
+            ),
+            Action::SelectTail(color),
+            false,
         );
-        let r = rect(420.0, y + 48.0, 500.0, 30.0);
-        builder.slider(
-            r,
-            f32::from(color[channel]) / 255.0,
-            Action::TailChannel(channel),
-        );
+        if let Some([r, g, b]) = color.rgb() {
+            let swatch = builder
+                .commands
+                .spawn((
+                    rect(x + 14.0, y + 22.0, 18.0, 18.0).node(),
+                    BackgroundColor(Color::srgb_u8(r, g, b)),
+                ))
+                .id();
+            builder.commands.entity(builder.root).add_child(swatch);
+        }
     }
-    builder.button(
-        rect(420.0, 675.0, 340.0, 58.0),
-        "Original",
-        Action::TailOriginal,
-        false,
+    builder.label(
+        rect(420.0, 640.0, 760.0, 32.0),
+        20.0,
+        format!(
+            "{} {}",
+            tr("Selected:", lang),
+            tr(preferences.tail_color.label(), lang)
+        ),
+        None,
     );
     builder.button(rect(840.0, 675.0, 340.0, 58.0), "Done", Action::Done, true);
 }
@@ -1592,15 +1582,10 @@ fn actions(
                 action = Some(hit.action)
             }
             if hit.slider && adjusting {
-                let step = if matches!(hit.action, Action::TailChannel(_)) {
-                    1.0 / 255.0
-                } else {
-                    0.05
-                };
                 let delta = if direction == Some(Direction::Right) {
-                    step
+                    0.05
                 } else {
-                    -step
+                    -0.05
                 };
                 fraction = Some(
                     (match hit.action {
@@ -1608,9 +1593,6 @@ fn actions(
                         Action::Effects => preferences.effects,
                         Action::Voice => preferences.voice,
                         Action::Rest => (preferences.rest - 25.0) / 125.0,
-                        Action::TailChannel(channel) => {
-                            f32::from(tail_picker_color(&preferences)[channel]) / 255.0
-                        }
                         _ => 0.0,
                     } + delta)
                         .clamp(0.0, 1.0),
@@ -1682,12 +1664,7 @@ fn actions(
         Action::Motion => preferences.reduced_motion = !preferences.reduced_motion,
         Action::Rumble => preferences.rumble = (preferences.rumble + 1) % 3,
         Action::TailColor => ui.screen = Screen::TailColor,
-        Action::TailOriginal => preferences.tail_color = None,
-        Action::TailChannel(channel) => {
-            if let Some(f) = fraction {
-                set_tail_channel(&mut preferences, channel, f);
-            }
-        }
+        Action::SelectTail(color) => preferences.tail_color = color,
         Action::Gentle => {
             preferences.gentle = !preferences.gentle;
             simulation.0.settings.gentle = preferences.gentle
@@ -1990,30 +1967,14 @@ mod tests {
     };
 
     #[test]
-    fn tail_picker_covers_every_rgb_value_and_preserves_other_channels() {
-        let mut preferences = Preferences::default();
-        for channel in 0..3 {
-            for value in 0..=255_u8 {
-                let before = tail_picker_color(&preferences);
-                set_tail_channel(&mut preferences, channel, f32::from(value) / 255.0);
-                let after = preferences.tail_color.unwrap();
-                assert_eq!(after[channel], value);
-                for other in 0..3 {
-                    if channel != other {
-                        assert_eq!(after[other], before[other]);
-                    }
-                }
-            }
-        }
+    fn tail_presets_and_instructions_are_localized() {
         for language in 0..3 {
-            for key in [
+            for key in TailColor::PRESETS.into_iter().map(TailColor::label).chain([
                 "Tail color",
-                "Choose any color. Scales and shine stay natural.",
-                "Original",
-                "Red",
-                "Green",
-                "Blue",
-            ] {
+                "None keeps the original. Magic flows with rainbow colors.",
+                "Selected:",
+                "Custom",
+            ]) {
                 assert!(table().contains_key(key), "{key}");
                 assert!(!tr(key, language).is_empty());
             }
@@ -2199,7 +2160,7 @@ mod tests {
     }
 
     #[test]
-    fn tail_picker_controller_adjusts_resets_and_returns_to_settings() {
+    fn tail_picker_controller_selects_magic_resets_and_returns_to_settings() {
         let (mut app, pad) = input_app();
         let hits: Vec<_> = app
             .world_mut()
@@ -2209,13 +2170,17 @@ mod tests {
         for entity in hits {
             app.world_mut().despawn(entity);
         }
-        for (index, action) in [Action::TailChannel(0), Action::TailOriginal, Action::Done]
-            .into_iter()
-            .enumerate()
+        for (index, action) in [
+            Action::SelectTail(TailColor::Magic),
+            Action::SelectTail(TailColor::None),
+            Action::Done,
+        ]
+        .into_iter()
+        .enumerate()
         {
             app.world_mut().spawn(Hit {
                 action,
-                ..hit(index, 0.0, index as f32 * 100.0, index == 0)
+                ..hit(index, 0.0, index as f32 * 100.0, false)
             });
         }
         {
@@ -2228,14 +2193,12 @@ mod tests {
             focus.last_screen = Some(Screen::TailColor);
             focus.count = 3;
         }
-        button(&mut app, pad, GamepadButton::DPadRight, 1.0);
-        button(&mut app, pad, GamepadButton::DPadRight, 0.0);
+        button(&mut app, pad, GamepadButton::South, 1.0);
+        button(&mut app, pad, GamepadButton::South, 0.0);
         app.update();
-        let mut expected = tail_picker_color(&Preferences::default());
-        expected[0] += 1;
         assert_eq!(
             app.world().resource::<Preferences>().tail_color,
-            Some(expected)
+            TailColor::Magic
         );
         button(&mut app, pad, GamepadButton::DPadDown, 1.0);
         button(&mut app, pad, GamepadButton::DPadDown, 0.0);
@@ -2243,7 +2206,10 @@ mod tests {
         button(&mut app, pad, GamepadButton::South, 1.0);
         button(&mut app, pad, GamepadButton::South, 0.0);
         app.update();
-        assert_eq!(app.world().resource::<Preferences>().tail_color, None);
+        assert_eq!(
+            app.world().resource::<Preferences>().tail_color,
+            TailColor::None
+        );
         button(&mut app, pad, GamepadButton::DPadDown, 1.0);
         button(&mut app, pad, GamepadButton::DPadDown, 0.0);
         app.update();
