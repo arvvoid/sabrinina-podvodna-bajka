@@ -927,6 +927,7 @@ fn lighting(
     mut shadow_map: ResMut<DirectionalLightShadowMap>,
     mut cameras: Query<(&mut Fxaa, &mut Msaa), With<Camera3d>>,
     mut reef: ResMut<Assets<ReefMaterial>>,
+    mut updates: Local<Vec<(AssetId<ReefMaterial>, Vec4, Vec4)>>,
 ) {
     let motion = if preferences.reduced_motion {
         0.15
@@ -966,34 +967,34 @@ fn lighting(
             fxaa.enabled = enabled;
         }
     }
-    let updates: Vec<_> = reef
-        .iter()
-        .filter_map(|(id, m)| {
-            let position = rendered.0.sabrina.motion.pos;
-            let sabrina = Vec4::new(
-                position.x,
-                position.y,
-                0.0,
-                if ui.started
-                    && m.base.alpha_mode == AlphaMode::Blend
-                    && options.capture.as_deref() != Some("occlusion-solid")
-                {
-                    1.0
-                } else {
-                    0.0
-                },
-            );
-            let caustics = Vec4::new(
-                if preferences.reduced_motion { 0.0 } else { 1.0 },
-                if preferences.quality == 0 { 2.4 } else { 3.2 },
-                0.0,
-                0.0,
-            );
-            (sabrina != m.extension.sabrina || caustics != m.extension.caustics)
-                .then_some((id, sabrina, caustics))
-        })
-        .collect();
-    for (id, sabrina, caustics) in updates {
+    updates.clear();
+    updates.extend(reef.iter().filter_map(|(id, m)| {
+        let reveal = m.base.alpha_mode == AlphaMode::Blend;
+        let position = if reveal {
+            rendered.0.sabrina.motion.pos
+        } else {
+            sim::v(0.0, 0.0)
+        };
+        let sabrina = Vec4::new(
+            position.x,
+            position.y,
+            0.0,
+            if ui.started && reveal && options.capture.as_deref() != Some("occlusion-solid") {
+                1.0
+            } else {
+                0.0
+            },
+        );
+        let caustics = Vec4::new(
+            if preferences.reduced_motion { 0.0 } else { 1.0 },
+            if preferences.quality == 0 { 2.4 } else { 3.2 },
+            0.0,
+            0.0,
+        );
+        (sabrina != m.extension.sabrina || caustics != m.extension.caustics)
+            .then_some((id, sabrina, caustics))
+    }));
+    for (id, sabrina, caustics) in updates.drain(..) {
         let mut material = reef.get_mut(id).unwrap();
         material.extension.sabrina = sabrina;
         material.extension.caustics = caustics;
@@ -1211,6 +1212,67 @@ mod tests {
                 warmed.world().get::<Visibility>(actual),
             );
         }
+    }
+
+    #[test]
+    fn swimming_updates_only_the_foreground_reveal_material() {
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, AssetPlugin::default()))
+            .init_asset::<ReefMaterial>()
+            .init_resource::<Preferences>()
+            .init_resource::<SessionUi>()
+            .init_resource::<Presentation>()
+            .init_resource::<Options>()
+            .init_resource::<DirectionalLightShadowMap>()
+            .add_systems(Update, lighting);
+        let material = |alpha_mode| ExtendedMaterial {
+            base: StandardMaterial {
+                alpha_mode,
+                ..default()
+            },
+            extension: ReefExtension {
+                caustics: Vec4::new(1.0, 3.2, 0.0, 0.0),
+                sabrina: Vec4::ZERO,
+                light_map: default(),
+            },
+        };
+        let opaque = app
+            .world_mut()
+            .resource_mut::<Assets<ReefMaterial>>()
+            .add(material(AlphaMode::Opaque));
+        let foreground = app
+            .world_mut()
+            .resource_mut::<Assets<ReefMaterial>>()
+            .add(material(AlphaMode::Blend));
+        app.world_mut().resource_mut::<SessionUi>().started = true;
+        app.update();
+        app.update();
+        app.world_mut()
+            .resource_mut::<Messages<AssetEvent<ReefMaterial>>>()
+            .clear();
+        app.world_mut()
+            .resource_mut::<Presentation>()
+            .0
+            .sabrina
+            .motion
+            .pos = sim::v(4.0, 8.0);
+        app.update();
+        app.update();
+        let materials = app.world().resource::<Assets<ReefMaterial>>();
+        assert_eq!(
+            materials.get(&opaque).unwrap().extension.sabrina,
+            Vec4::ZERO
+        );
+        assert_eq!(
+            materials.get(&foreground).unwrap().extension.sabrina,
+            Vec4::new(4.0, 8.0, 0.0, 1.0)
+        );
+        let events = app.world().resource::<Messages<AssetEvent<ReefMaterial>>>();
+        assert!(
+            !events
+                .iter_current_update_messages()
+                .any(|event| matches!(event, AssetEvent::Modified { id } if *id == opaque.id()))
+        );
     }
 
     #[test]

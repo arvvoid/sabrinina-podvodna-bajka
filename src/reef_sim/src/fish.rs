@@ -73,9 +73,9 @@ pub fn fish_swimming(world: &mut World, dt: f32) {
             if k == i || !other.life.active {
                 continue;
             }
-            let d = (fish.motion.pos - other.motion.pos).length();
-            if other.rescue.teleport <= 0.0 && d < 4.0 {
-                let offset = fish.motion.pos - other.motion.pos;
+            let offset = fish.motion.pos - other.motion.pos;
+            let distance_squared = offset.dot(offset);
+            if other.rescue.teleport <= 0.0 && distance_squared < 16.0 {
                 let relative = fish.motion.velocity - other.motion.velocity;
                 let speed_squared = relative.dot(relative);
                 let ahead = if speed_squared > 0.001 {
@@ -97,7 +97,7 @@ pub fn fish_swimming(world: &mut World, dt: f32) {
                     separation.y += side * (clearance - predicted) * 3.0;
                 }
             }
-            if other.appearance.species == fish.appearance.species && d < 3.0 {
+            if other.appearance.species == fish.appearance.species && distance_squared < 9.0 {
                 school = school + other.motion.velocity;
                 neighbours += 1;
             }

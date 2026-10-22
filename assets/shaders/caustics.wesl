@@ -24,6 +24,10 @@ fn fragment(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
     let world = homogeneous.xyz / homogeneous.w;
     let dx = dpdx(world);
     let dy = dpdy(world);
+    // Derivatives must run before divergent exits; distant reef has material caustics.
+    if raw_depth <= 0.0 || world.z <= -3.0 {
+        return lit;
+    }
     let cross_normal = cross(dx, dy);
     let derivative_normal = cross_normal / max(length(cross_normal), 0.00001);
     let normal = select(-derivative_normal, derivative_normal,
