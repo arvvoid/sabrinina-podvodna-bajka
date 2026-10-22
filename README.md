@@ -42,7 +42,7 @@ The game is playable already, but I am still working on it. There are animations
 **Violet**, **Pink**, **Lagoon blue**, **Coral**, **Gold**, or **Magic** using the
 mouse, keyboard or controller. **None** keeps the original texture colors and
 standard PBR lighting without an added effect. **Magic** creates a continuously
-swirling rainbow with traveling pearly highlights and a gentle luminous sheen.
+deep, dark jewel-toned rainbow swirl with restrained traveling highlights.
 One shared model-space pattern flows across the tail and fins without restarting
 at texture seams. It runs entirely in the shader: no extra textures, texture
 uploads or per-frame material changes. Reduced motion keeps the colors and

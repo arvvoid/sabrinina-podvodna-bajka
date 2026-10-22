@@ -727,7 +727,7 @@ fn check_pose(
         for (effect, visibility) in &effects {
             if matches!(
                 effect,
-                crate::visuals::Effect::Spark(_)
+                crate::visuals::Effect::Spark
                     | crate::visuals::Effect::Trail(_)
                     | crate::visuals::Effect::Glow
             ) {
@@ -742,7 +742,7 @@ fn check_pose(
         assert_eq!(simulation.0.crystal.magic.state, reef_sim::Spell::Resting);
         assert_eq!(simulation.0.sabrina.cooldown, 0.0);
         assert!(effects.iter().any(|(effect, visibility)| {
-            matches!(effect, crate::visuals::Effect::Spark(_)) && *visibility == Visibility::Visible
+            matches!(effect, crate::visuals::Effect::Spark) && *visibility == Visibility::Visible
         }));
         println!("BEVY CHECK OK: ready orbiting crystal has particles");
     }

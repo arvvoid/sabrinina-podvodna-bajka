@@ -27,11 +27,22 @@ use bevy::{
 };
 use reef_sim as sim;
 
+fn background_fog() -> DistanceFog {
+    DistanceFog {
+        color: Color::srgb(0.025, 0.38, 0.48),
+        // Camera z is 36; keep the full playable width clear, including its corners.
+        falloff: FogFalloff::Linear {
+            start: 46.0,
+            end: 76.0,
+        },
+        ..default()
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, ShaderType)]
 pub struct WaterParams {
     clock: Vec4,
     color: Vec4,
-    depth_samples: [Vec4; 6],
 }
 
 #[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]
@@ -69,9 +80,12 @@ impl Material for WaterMaterial {
 #[derive(Asset, AsBindGroup, Reflect, Debug, Clone)]
 pub struct ReefExtension {
     #[uniform(100)]
-    pub settings: Vec4,
+    pub caustics: Vec4,
     #[uniform(101)]
     pub sabrina: Vec4,
+    #[texture(102)]
+    #[sampler(103)]
+    pub light_map: Handle<Image>,
 }
 
 impl MaterialExtension for ReefExtension {
@@ -99,11 +113,10 @@ struct MagicLight;
 
 pub(crate) type ReefMaterial = ExtendedMaterial<StandardMaterial, ReefExtension>;
 
-#[derive(Component, Clone, Copy)]
+#[derive(Component, Clone, Copy, Debug)]
 pub(crate) enum Effect {
     Backdrop,
     Shaft(usize),
-    Water,
     Distant(usize),
     Wave,
     Song(usize),
@@ -113,9 +126,9 @@ pub(crate) enum Effect {
     JellyBubble(usize),
     JellyHealth(usize),
     Trail(usize),
-    Spark(usize),
-    Pop(usize, usize),
-    Plankton(usize),
+    Spark,
+    Pop(usize),
+    Plankton,
     Note(usize),
     Burst,
 }
@@ -138,6 +151,8 @@ pub struct ReefPlugin;
 impl Plugin for ReefPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins((
+            crate::caustics::CausticsPlugin,
+            crate::particles::ParticlePlugin,
             MaterialPlugin::<WaterMaterial>::default(),
             MaterialPlugin::<ReefMaterial>::default(),
             MaterialPlugin::<CrystalMaterial>::default(),
@@ -158,11 +173,6 @@ impl Plugin for ReefPlugin {
     }
 }
 
-fn visual_random(s: f32) -> f32 {
-    // Visual-only variation must not consume the gameplay random-number stream.
-    0.5 + 0.5 * (s * 17.137 + s * s * 0.71).sin()
-}
-
 fn setup(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -181,12 +191,18 @@ fn setup(
         size: if preferences.quality == 2 { 1024 } else { 512 },
     });
     commands.insert_resource(GlobalAmbientLight {
-        color: Color::srgb(0.65, 0.88, 0.91),
-        brightness: 350.0,
+        color: Color::WHITE,
+        brightness: 180.0,
         ..default()
     });
     let mut camera = commands.spawn((
-        Camera3d::default(),
+        Camera3d {
+            depth_texture_usages: (bevy::render::render_resource::TextureUsages::RENDER_ATTACHMENT
+                | bevy::render::render_resource::TextureUsages::TEXTURE_BINDING)
+                .into(),
+            ..default()
+        },
+        crate::caustics::CausticsSettings::default(),
         Hdr,
         bevy::core_pipeline::prepass::DepthPrepass,
         Tonemapping::Reinhard,
@@ -210,11 +226,7 @@ fn setup(
             ..OrthographicProjection::default_3d()
         }),
         Transform::from_xyz(0.0, if close || casting { 8.5 } else { 9.2 }, 36.0),
-        DistanceFog {
-            color: Color::srgb(0.025, 0.38, 0.48),
-            falloff: FogFalloff::Exponential { density: 0.0035 },
-            ..default()
-        },
+        background_fog(),
     ));
     if options.direct_draw {
         // Direct draws (the DX12 default) avoid wgpu's per-frame DX12
@@ -227,8 +239,8 @@ fn setup(
         commands.spawn((
             Sun { shadow_layer },
             DirectionalLight {
-                color: Color::srgb(1.0, 0.96, 0.78),
-                illuminance: 9000.0 * sunlight_weight(shadow_layer, preferences.quality),
+                color: Color::WHITE,
+                illuminance: 4800.0 * sunlight_weight(shadow_layer, preferences.quality),
                 shadow_maps_enabled: shadow_layer && preferences.quality > 0,
                 contact_shadows_enabled: false,
                 ..default()
@@ -249,8 +261,8 @@ fn setup(
     }
     commands.spawn((
         DirectionalLight {
-            color: Color::srgb(0.22, 0.72, 1.0),
-            illuminance: 1900.0,
+            color: Color::WHITE,
+            illuminance: 850.0,
             ..default()
         },
         Transform::from_rotation(Quat::from_euler(
@@ -263,7 +275,7 @@ fn setup(
     commands.spawn((
         MagicLight,
         PointLight {
-            color: Color::srgb(0.32, 0.82, 1.0),
+            color: Color::WHITE,
             intensity: 0.0,
             range: 5.0,
             shadow_maps_enabled: false,
@@ -277,7 +289,6 @@ fn setup(
             params: WaterParams {
                 clock: Vec4::new(0.0, kind, seed, 1.0),
                 color: Vec4::ONE,
-                depth_samples: [Vec4::ZERO; 6],
             },
             alpha,
         });
@@ -308,14 +319,6 @@ fn setup(
             AlphaMode::Add,
         );
     }
-    plane(
-        Effect::Water,
-        2.0,
-        0.0,
-        Vec3::new(0.0, 9.2, -3.0),
-        Vec3::new(38.0, 21.0, 1.0),
-        AlphaMode::Add,
-    );
     for i in 0..18 {
         plane(
             Effect::Distant(i),
@@ -373,41 +376,6 @@ fn setup(
         );
     }
     let sphere = meshes.add(Sphere::new(1.0).mesh().uv(12, 8));
-    // Particles of one colour share a material so they can be batched.
-    let mut particle = |color: Color| {
-        solid.add(StandardMaterial {
-            base_color: color,
-            emissive: color.to_linear() * 0.6,
-            perceptual_roughness: 0.68,
-            ..default()
-        })
-    };
-    let trail_material = particle(Color::srgb(0.25, 0.8, 1.0));
-    let spark_material = particle(Color::srgb(0.4, 0.95, 1.0));
-    let pop_material = particle(Color::srgb(1.0, 0.34, 0.36));
-    let plankton_material = particle(Color::srgb(0.45, 0.82, 0.91));
-    let mut ball = |effect, material: &Handle<StandardMaterial>, size: f32| {
-        commands.spawn((
-            effect,
-            NotShadowCaster,
-            NotShadowReceiver,
-            Mesh3d(sphere.clone()),
-            MeshMaterial3d(material.clone()),
-            Transform::from_scale(Vec3::splat(size)),
-        ));
-    };
-    for i in 0..24 {
-        ball(Effect::Trail(i), &trail_material, 0.03);
-        ball(Effect::Spark(i), &spark_material, 0.02);
-    }
-    for i in 0..72 {
-        for k in 0..6 {
-            ball(Effect::Pop(i, k), &pop_material, 0.1);
-        }
-    }
-    for i in 0..80 {
-        ball(Effect::Plankton(i), &plankton_material, 0.018);
-    }
     // The original song uses small eighth notes, not particle dots.
     let stem = meshes.add(Cylinder::new(1.0, 1.0));
     let note_materials =
@@ -476,6 +444,8 @@ fn bind_reef(
     standard: Res<Assets<StandardMaterial>>,
     mut reef: ResMut<Assets<ReefMaterial>>,
     mut crystal: ResMut<Assets<CrystalMaterial>>,
+    light_map: Res<crate::caustics::CausticsTexture>,
+    preferences: Res<Preferences>,
     names: Query<&Name>,
 ) {
     for (e, surface, handle, parent) in &query {
@@ -512,8 +482,14 @@ fn bind_reef(
                 .insert(MeshMaterial3d(reef.add(ExtendedMaterial {
                     base,
                     extension: ReefExtension {
-                        settings: Vec4::new(0.0, 1.0, 1.0, 0.0),
+                        caustics: Vec4::new(
+                            if preferences.reduced_motion { 0.0 } else { 1.0 },
+                            if preferences.quality == 0 { 2.4 } else { 3.2 },
+                            0.0,
+                            0.0,
+                        ),
                         sabrina: Vec4::ZERO,
+                        light_map: light_map.0.clone(),
                     },
                 })));
         }
@@ -669,12 +645,15 @@ fn effects(
     preferences: Res<Preferences>,
     time: Res<Time>,
     mut trail: ResMut<Trail>,
-    mut query: Query<(
-        &Effect,
-        &mut Transform,
-        &mut Visibility,
-        Option<&MeshMaterial3d<WaterMaterial>>,
-    )>,
+    mut query: Query<
+        (
+            &Effect,
+            &mut Transform,
+            &mut Visibility,
+            Option<&MeshMaterial3d<WaterMaterial>>,
+        ),
+        Without<crate::particles::ParticleEmitter>,
+    >,
     mut water: ResMut<Assets<WaterMaterial>>,
 ) {
     let t = rendered.0.session.time;
@@ -735,13 +714,6 @@ fn effects(
                     (-17.0 + 4.0 * (ui.elapsed * 0.15 + i as f32 * 0.5).sin() * motion)
                         .to_radians(),
                 );
-            }
-            Effect::Water => {
-                amount = match preferences.quality {
-                    0 => 3.0,
-                    1 => 6.0,
-                    _ => 12.0,
-                }
             }
             Effect::Distant(i) => {
                 let speed = if i < 4 {
@@ -854,52 +826,7 @@ fn effects(
                 next.scale =
                     Vec3::splat(if flying { 0.075 } else { 0.028 } * (1.0 - i as f32 / 24.0));
             }
-            Effect::Spark(i) => {
-                show = !resting || ready;
-                let a = i as f32 * 2.39996 + t * 2.0 * motion;
-                let r = if burst {
-                    crystal.magic.time * 4.0
-                } else {
-                    0.5 + 0.25 * (a * 1.7).sin()
-                };
-                next.translation = cp + Vec3::new(a.cos() * r, a.sin() * r, (a * 2.0).sin() * 0.3);
-                next.scale = Vec3::splat(
-                    0.035
-                        * if burst {
-                            (1.0 - crystal.magic.time / 0.7).max(0.0)
-                        } else {
-                            0.65 + 0.35 * a.sin()
-                        },
-                );
-            }
-            Effect::Pop(i, k) => {
-                let f = &rendered.0.fish[i];
-                show = f.life.pop_time > 0.0 && f.life.pop_time < 0.30;
-                let a = k as f32 * std::f32::consts::PI / 3.0;
-                let progress = ((0.30 - f.life.pop_time) / 0.30).clamp(0.0, 1.0);
-                next.translation = Vec3::new(
-                    f.motion.pos.x + a.cos() * progress * 0.8,
-                    f.motion.pos.y + a.sin() * progress * 0.8,
-                    f.appearance.depth,
-                );
-                next.scale = Vec3::splat(0.1 * (1.0 - progress));
-            }
-            Effect::Plankton(i) => {
-                show = !preferences.reduced_motion
-                    && i < match preferences.quality {
-                        0 => 18,
-                        1 => 45,
-                        _ => 80,
-                    };
-                next.translation = Vec3::new(
-                    -18.0 + 36.0 * visual_random(i as f32 + 900.0),
-                    ((18.0 * visual_random(i as f32 + 950.0)
-                        + t * (0.12 + 0.06 * visual_random(i as f32)))
-                        % 19.0)
-                        .max(0.3),
-                    -5.0 + 8.0 * visual_random(i as f32 + 999.0),
-                );
-            }
+            Effect::Spark | Effect::Pop(_) | Effect::Plankton => continue,
             Effect::Note(i) => {
                 show = s.song.active && s.song.strength > 0.05;
                 let progress = (t * 0.28 + i as f32 / 7.0) % 1.0;
@@ -930,7 +857,7 @@ fn effects(
             if !matches!(effect, Effect::Shaft(_)) {
                 next.translation = Vec3::new(0.0, 7.0, 1.0);
             }
-            if matches!(effect, Effect::Note(_) | Effect::Pop(..)) {
+            if matches!(effect, Effect::Note(_)) {
                 next.scale = Vec3::ONE;
             }
         }
@@ -958,17 +885,6 @@ fn effects(
             };
         }
         params.clock.w = amount;
-        if matches!(*effect, Effect::Water) {
-            // Sample depths do not depend on the pixel. Calculate their
-            // phase/attenuation once instead of millions of times in WGSL.
-            let clock = params.clock.x * 0.23;
-            for i in 0..amount as usize {
-                let z = (i as f32 + 0.5) / amount;
-                let pair = i % 2 * 2;
-                params.depth_samples[i / 2][pair] = z * 4.08 + (z * 4.0 + clock).sin() * 0.35;
-                params.depth_samples[i / 2][pair + 1] = (-z * 2.0).exp() / amount;
-            }
-        }
         if params != current.params
             && let Some(mut m) = water.get_mut(&handle.0)
         {
@@ -979,7 +895,7 @@ fn effects(
 
 /// Effect kinds whose `water.wesl` branch reads `clock.x`; the rest stay static.
 fn uses_clock(kind: f32) -> bool {
-    matches!(kind as i32, 0 | 1 | 2 | 3 | 7)
+    matches!(kind as i32, 0 | 1 | 3 | 7)
 }
 // Preserve total sunlight when changing shadow strength. Balanced contributes
 // only 18% shadowed light; broad fill keeps faces readable in the reef's shade.
@@ -1017,10 +933,10 @@ fn lighting(
         shadow_map.size = size;
     }
     for (layer, mut light, mut transform) in &mut sun {
-        light.illuminance = 7800.0
+        light.illuminance = 4800.0
             * sunlight_weight(layer.shadow_layer, preferences.quality)
-            * (1.15
-                + (0.10 * (ui.elapsed * 0.27).sin() + 0.05 * (ui.elapsed * 0.61).sin()) * motion);
+            * (1.0
+                + (0.06 * (ui.elapsed * 0.27).sin() + 0.03 * (ui.elapsed * 0.61).sin()) * motion);
         light.shadow_maps_enabled = layer.shadow_layer && preferences.quality > 0;
         transform.rotation = Quat::from_euler(
             EulerRot::YXZ,
@@ -1045,27 +961,37 @@ fn lighting(
             fxaa.enabled = enabled;
         }
     }
-    for (_, m) in reef.iter_mut() {
-        let position = rendered.0.sabrina.motion.pos;
-        m.extension.sabrina = Vec4::new(
-            position.x,
-            position.y,
-            0.0,
-            if ui.started
-                && m.base.alpha_mode == AlphaMode::Blend
-                && options.capture.as_deref() != Some("occlusion-solid")
-            {
-                1.0
-            } else {
-                0.0
-            },
-        );
-        m.extension.settings = Vec4::new(
-            ui.elapsed,
-            if preferences.reduced_motion { 0.0 } else { 1.0 },
-            if preferences.quality == 0 { 0.45 } else { 1.0 },
-            0.0,
-        );
+    let updates: Vec<_> = reef
+        .iter()
+        .filter_map(|(id, m)| {
+            let position = rendered.0.sabrina.motion.pos;
+            let sabrina = Vec4::new(
+                position.x,
+                position.y,
+                0.0,
+                if ui.started
+                    && m.base.alpha_mode == AlphaMode::Blend
+                    && options.capture.as_deref() != Some("occlusion-solid")
+                {
+                    1.0
+                } else {
+                    0.0
+                },
+            );
+            let caustics = Vec4::new(
+                if preferences.reduced_motion { 0.0 } else { 1.0 },
+                if preferences.quality == 0 { 2.4 } else { 3.2 },
+                0.0,
+                0.0,
+            );
+            (sabrina != m.extension.sabrina || caustics != m.extension.caustics)
+                .then_some((id, sabrina, caustics))
+        })
+        .collect();
+    for (id, sabrina, caustics) in updates {
+        let mut material = reef.get_mut(id).unwrap();
+        material.extension.sabrina = sabrina;
+        material.extension.caustics = caustics;
     }
 }
 
@@ -1198,6 +1124,29 @@ mod tests {
     use super::*;
 
     #[test]
+    fn fog_leaves_gameplay_clear_and_builds_only_in_the_background() {
+        let fog = background_fog();
+        let FogFalloff::Linear { start, end } = fog.falloff else {
+            panic!("Background haze must have a clear foreground cutoff");
+        };
+        let camera = Vec3::new(0.0, 9.2, 36.0);
+        let amount =
+            |position: Vec3| ((position.distance(camera) - start) / (end - start)).clamp(0.0, 1.0);
+        for x in [-20.0, 0.0, 20.0] {
+            for y in [0.0, 9.2, 19.5] {
+                for z in [-3.0, 0.0, 3.0] {
+                    assert_eq!(amount(Vec3::new(x, y, z)), 0.0);
+                }
+            }
+        }
+        let middle = amount(Vec3::new(0.0, 9.2, -20.0));
+        let distant = amount(Vec3::new(0.0, 9.2, -30.0));
+        assert!((0.3..0.4).contains(&middle));
+        assert!(distant > middle && distant < 1.0);
+        assert_eq!(amount(Vec3::new(0.0, 9.2, -40.0)), 1.0);
+    }
+
+    #[test]
     fn warmup_preserves_effect_layout_after_loading_and_quality_changes() {
         fn scene(loaded: bool) -> (App, Vec<Entity>) {
             let mut app = App::new();
@@ -1218,14 +1167,10 @@ mod tests {
                 .add_systems(Update, effects);
             let entities = [
                 Effect::Backdrop,
-                Effect::Water,
                 Effect::Shaft(0),
                 Effect::Shaft(5),
-                Effect::Plankton(0),
-                Effect::Plankton(70),
                 Effect::Distant(0),
                 Effect::Glow,
-                Effect::Spark(0),
                 Effect::Trail(0),
             ]
             .into_iter()
@@ -1275,5 +1220,37 @@ mod tests {
                 1.0
             );
         }
+    }
+
+    #[test]
+    fn stage_lights_are_neutral_and_there_is_no_colored_water_overlay() {
+        let mut app = App::new();
+        app.init_resource::<Assets<Mesh>>()
+            .init_resource::<Assets<WaterMaterial>>()
+            .init_resource::<Assets<StandardMaterial>>()
+            .init_resource::<Preferences>()
+            .init_resource::<Options>()
+            .add_systems(Startup, setup);
+        app.update();
+        assert_eq!(
+            app.world().resource::<GlobalAmbientLight>().color,
+            Color::WHITE
+        );
+        for light in app
+            .world_mut()
+            .query::<&DirectionalLight>()
+            .iter(app.world())
+        {
+            assert_eq!(light.color, Color::WHITE);
+        }
+        for light in app.world_mut().query::<&PointLight>().iter(app.world()) {
+            assert_eq!(light.color, Color::WHITE);
+        }
+        assert!(
+            app.world()
+                .resource::<Assets<WaterMaterial>>()
+                .iter()
+                .all(|(_, material)| material.params.clock.y != 2.0)
+        );
     }
 }

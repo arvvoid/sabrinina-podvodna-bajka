@@ -16,6 +16,7 @@ mod assets;
 mod audio;
 
 mod build_info;
+mod caustics;
 mod controls;
 mod diagnostics;
 mod hair;
@@ -25,6 +26,7 @@ mod embedded_assets;
 
 mod loading;
 mod mipmaps;
+mod particles;
 
 mod presentation;
 

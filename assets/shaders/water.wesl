@@ -5,8 +5,6 @@ struct Parameters {
     // clock = (time, effect kind, variation seed, effect amount).
     clock: vec4<f32>,
     color: vec4<f32>,
-    // Two (phase, attenuation) pairs per vector, prepared by visuals.rs.
-    depth_samples: array<vec4<f32>, 6>
 }
 @group(constants::MATERIAL_BIND_GROUP) @binding(0) var<uniform> parameters: Parameters;
 
@@ -41,31 +39,10 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
         let width = 0.14 + uv.y * 0.23;
         let beam = exp(-pow((uv.x - centre) / width, 2.0) * 3.0);
         let fade = smoothstep(0.0, 0.12, uv.y) * (1.0 - smoothstep(0.65, 1.0, uv.y));
-        color = vec3<f32>(0.28, 0.65, 0.72);
-        alpha = beam * fade * (0.17 + 0.07 * sin(time * 0.45 + seed));
+        color = vec3<f32>(1.0);
+        alpha = beam * fade * (0.025 + 0.01 * sin(time * 0.45 + seed));
     }
 
-    // Water caustics integrated through precomputed depth samples.
-    if (kind == 2) {
-        var density = 0.0;
-        let clock = time * 0.23;
-        let base = (uv.x + uv.y * (0.18 + 0.035 * sin(clock))) * 34.0 + clock + sin(uv.y * 3.0 + clock) * 0.18;
-        for (var i = 0u; i < 12u; i++) {
-            if (f32(i) >= amount) {
-                break;
-            }
-            let pair = parameters.depth_samples[i / 2u];
-            let depth_sample = select(pair.xy, pair.zw, i % 2u == 1u);
-            let wave = max(0.0, sin(base + depth_sample.x));
-            let squared = wave * wave;
-            let fourth = squared * squared;
-            density += fourth * fourth * fourth * depth_sample.y;
-        }
-        density *= 1.0 - uv.y * 0.82;
-        let surface = pow(max(0.0, sin(uv.x * 95.0 + sin(uv.x * 18.0 + time * 0.4))), 9.0) * exp(-uv.y * 32.0);
-        color = vec3<f32>(0.30, 0.85, 0.72);
-        alpha = density * 0.58 + surface * 0.17;
-    }
 
     // Distant silhouettes built from signed-distance shapes.
     if (kind == 3) {

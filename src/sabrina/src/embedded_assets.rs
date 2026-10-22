@@ -46,6 +46,9 @@ mod tests {
             "shaders/water.wesl",
             "shaders/crystal.wesl",
             "shaders/tail.wesl",
+            "shaders/caustics.wesl",
+            "shaders/surface_caustics.wesl",
+            "shaders/particles.wesl",
             "fonts/LICENSE-DejaVu.txt",
             "audio/LICENSE-FluidR3.txt",
         ] {

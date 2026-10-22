@@ -33,7 +33,7 @@ fn fragment(input: VertexOutput, @builtin(front_facing) front: bool) -> Fragment
                 dot(center, rotation.yx));
             let phase = swirl.x * 0.85 + swirl.y * 0.35 + local.z * 0.12 - time * 0.16;
             let rainbow = 0.5 + 0.5 * cos(6.283185 * (phase + vec3<f32>(0.0, 0.666667, 0.333333)));
-            hue = mix(vec3<f32>(0.09), vec3<f32>(1.0), rainbow * rainbow);
+            hue = mix(vec3<f32>(0.004), vec3<f32>(0.18), rainbow * rainbow);
             let gleam_wave = sin(phase * 6.283185 + swirl.y * 4.0 - time * 1.2);
             let gleam_width = max(fwidth(gleam_wave), 0.025);
             let gleam = smoothstep(0.4 - gleam_width, 1.0 + gleam_width, gleam_wave);
@@ -41,8 +41,8 @@ fn fragment(input: VertexOutput, @builtin(front_facing) front: bool) -> Fragment
             let detail = mix(0.65, 1.0, sqrt(max(source.r, max(source.g, source.b))));
             // Restrained emission keeps the moving shine visible without washing out scales.
             pbr.material.emissive += vec4<f32>(
-                mix(hue, vec3<f32>(1.0), gleam * 0.6)
-                    * detail * (0.12 + gleam * 0.65 + rim * rim * 0.28),
+                mix(hue, vec3<f32>(0.18), gleam * 0.15)
+                    * detail * (0.04 + gleam * 0.18 + rim * rim * 0.10),
                 0.0);
         }
         // Lift baked dark paint in perceptual space so it cannot bury the chosen hue.
@@ -58,7 +58,7 @@ fn fragment(input: VertexOutput, @builtin(front_facing) front: bool) -> Fragment
         let roughness_squared = roughness * roughness;
         let filtered = sqrt(sqrt(min(roughness_squared * roughness_squared + variance, 1.0)));
         pbr.material.perceptual_roughness = filtered;
-        pbr.material.reflectance *= select(0.6, 0.85, magic);
+        pbr.material.reflectance *= select(0.6, 0.55, magic);
     }
     var output: FragmentOutput;
     output.color = apply_pbr_lighting(pbr);
