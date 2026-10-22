@@ -280,6 +280,7 @@ fn currents(
     rendered: Res<Presentation>,
     preferences: Res<Preferences>,
     mut materials: ResMut<Assets<HairMaterial>>,
+    surfaces: Query<&MeshMaterial3d<HairMaterial>>,
 ) {
     let next = settings(
         rendered.0.session.time,
@@ -287,8 +288,12 @@ fn currents(
         preferences.reduced_motion,
         rendered.0.sabrina.vitality.hurt_flash,
     );
-    for (_, material) in materials.iter_mut() {
-        if material.extension.settings != next {
+    for handle in &surfaces {
+        if materials
+            .get(&handle.0)
+            .is_some_and(|material| material.extension.settings != next)
+        {
+            let mut material = materials.get_mut(&handle.0).unwrap();
             material.extension.settings = next;
         }
     }
@@ -297,6 +302,73 @@ fn currents(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn hair_preserves_textures_motion_damage_and_unchanged_assets() {
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, AssetPlugin::default()))
+            .init_asset::<StandardMaterial>()
+            .init_asset::<HairMaterial>()
+            .init_resource::<Preferences>()
+            .init_resource::<Presentation>()
+            .add_systems(Update, (bind, currents).chain());
+        let texture = Handle::<Image>::default();
+        let normal = app
+            .world_mut()
+            .resource_mut::<Assets<StandardMaterial>>()
+            .add(StandardMaterial {
+                base_color_texture: Some(texture.clone()),
+                normal_map_texture: Some(texture.clone()),
+                ..default()
+            });
+        let entity = app
+            .world_mut()
+            .spawn((
+                CharacterSurface {
+                    actor: Actor::Sabrina,
+                    normal: normal.clone(),
+                    hurt: normal.clone(),
+                },
+                bevy::gltf::GltfMaterialName("Sabrina_Hair".into()),
+                MeshMaterial3d(normal),
+            ))
+            .id();
+        app.update();
+        let handle = app
+            .world()
+            .get::<MeshMaterial3d<HairMaterial>>(entity)
+            .unwrap()
+            .0
+            .clone();
+        app.world_mut()
+            .resource_mut::<Presentation>()
+            .0
+            .sabrina
+            .vitality
+            .hurt_flash = 1.0;
+        app.update();
+        let material = app
+            .world()
+            .resource::<Assets<HairMaterial>>()
+            .get(&handle)
+            .unwrap();
+        assert_eq!(material.extension.settings.w, 1.0);
+        assert_eq!(material.base.base_color_texture, Some(texture.clone()));
+        assert_eq!(material.base.normal_map_texture, Some(texture));
+        assert_eq!(material.base.anisotropy_strength, 0.35);
+        assert_eq!(material.base.alpha_mode, AlphaMode::Opaque);
+        app.update();
+        app.world_mut()
+            .resource_mut::<Messages<AssetEvent<HairMaterial>>>()
+            .clear();
+        app.update();
+        assert!(
+            !app.world_mut()
+                .resource_mut::<Messages<AssetEvent<HairMaterial>>>()
+                .drain()
+                .any(|event| matches!(event, AssetEvent::Modified { .. }))
+        );
+    }
 
     #[test]
     fn currents_use_simulation_time_and_bound_motion_and_damage() {

@@ -1,4 +1,10 @@
 {
+  "Tail color": ["Tail color", "Boja repa", "Colore della coda"],
+  "Choose any color. Scales and shine stay natural.": ["Choose any color. Scales and shine stay natural.", "Odaberi bilo koju boju. Ljuske i sjaj ostaju prirodni.", "Scegli qualsiasi colore. Squame e lucentezza restano naturali."],
+  "Original": ["Original", "Izvorna", "Originale"],
+  "Red": ["Red", "Crvena", "Rosso"],
+  "Green": ["Green", "Zelena", "Verde"],
+  "Blue": ["Blue", "Plava", "Blu"],
   "Press any key to continue": [
     "Press any key to continue",
     "Pritisni bilo koju tipku za nastavak",

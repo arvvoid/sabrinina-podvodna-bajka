@@ -215,6 +215,7 @@ pub enum Screen {
     Playing,
     Pause,
     Settings,
+    TailColor,
     Help,
     Credits,
     GameOver,
@@ -322,6 +323,7 @@ pub fn pause(ui: &mut SessionUi) {
     match ui.screen {
         Screen::Playing => ui.screen = Screen::Pause,
         Screen::Pause => ui.screen = Screen::Playing,
+        Screen::TailColor => ui.screen = Screen::Settings,
         Screen::Settings | Screen::Help | Screen::Credits | Screen::Language => {
             ui.screen = ui.return_to
         }

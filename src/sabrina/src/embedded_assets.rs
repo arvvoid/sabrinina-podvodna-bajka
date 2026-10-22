@@ -45,6 +45,7 @@ mod tests {
             "ui/title_it.png",
             "shaders/water.wesl",
             "shaders/crystal.wesl",
+            "shaders/tail.wesl",
             "fonts/LICENSE-DejaVu.txt",
             "audio/LICENSE-FluidR3.txt",
         ] {

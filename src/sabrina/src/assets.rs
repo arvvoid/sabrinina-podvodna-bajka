@@ -276,6 +276,7 @@ pub(crate) fn finish_load(
             "boot" => ui.screen = Screen::Loading,
             "menu" => {}
             "settings" => ui.screen = Screen::Settings,
+            "tail-color" => ui.screen = Screen::TailColor,
             "language" => ui.screen = Screen::Language,
             "victory" => {
                 ui.screen = Screen::Victory;

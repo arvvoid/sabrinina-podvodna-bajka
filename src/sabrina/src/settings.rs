@@ -24,6 +24,7 @@ pub struct Preferences {
     pub music: f32,
     pub effects: f32,
     pub voice: f32,
+    pub tail_color: Option<[u8; 3]>,
 }
 
 impl Default for Preferences {
@@ -44,6 +45,7 @@ impl Default for Preferences {
             music: 0.30,
             effects: 0.55,
             voice: 0.90,
+            tail_color: None,
         }
     }
 }
@@ -184,6 +186,36 @@ impl Preferences {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn tail_color_defaults_to_original_and_round_trips() {
+        let mut preferences: Preferences = serde_json::from_str("{}").unwrap();
+        assert_eq!(preferences.tail_color, None);
+        for color in [
+            Some([0, 0, 0]),
+            Some([255, 255, 255]),
+            Some([123, 45, 210]),
+            None,
+        ] {
+            preferences.tail_color = color;
+            let restored: Preferences =
+                serde_json::from_str(&serde_json::to_string(&preferences).unwrap()).unwrap();
+            assert_eq!(restored.tail_color, color);
+        }
+        assert!(serde_json::from_str::<Preferences>(r#"{"tail_color":[256,0,0]}"#).is_err());
+    }
+
+    #[test]
+    fn removed_color_preferences_are_ignored_without_losing_tail_color() {
+        let preferences: Preferences = serde_json::from_str(
+            r#"{"tail_color":[123,45,210],"hair_color":[255,0,0],"bikini_color":[0,255,0]}"#,
+        )
+        .unwrap();
+        assert_eq!(preferences.tail_color, Some([123, 45, 210]));
+        let saved = serde_json::to_value(&preferences).unwrap();
+        assert!(saved.get("hair_color").is_none());
+        assert!(saved.get("bikini_color").is_none());
+    }
 
     #[test]
     fn rumble_defaults_to_normal_and_all_levels_survive_serialization() {

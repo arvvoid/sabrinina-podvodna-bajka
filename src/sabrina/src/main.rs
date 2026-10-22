@@ -30,6 +30,7 @@ mod presentation;
 
 mod rumble;
 mod settings;
+mod tail;
 
 mod ui;
 
@@ -185,6 +186,7 @@ fn main() {
             assets::CharacterPlugin,
             loading::LoadingPlugin,
             hair::HairPlugin,
+            tail::TailPlugin,
             visuals::ReefPlugin,
             ui::ReefUiPlugin,
             audio::ReefAudioPlugin,

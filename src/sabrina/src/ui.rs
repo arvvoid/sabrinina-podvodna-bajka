@@ -149,6 +149,9 @@ enum Action {
     Quality,
     Motion,
     Rumble,
+    TailColor,
+    TailChannel(usize),
+    TailOriginal,
     Gentle,
     Visitors,
     Done,
@@ -528,7 +531,7 @@ fn draw(
     scale.0 = zoom;
     // Rebuild only when layout or settings change; HUD values update separately.
     let key = format!(
-        "{:?}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{:?}:{}:{}:{}",
+        "{:?}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{:?}:{}:{}:{}:{:?}",
         ui.screen,
         preferences.language,
         preferences.quality,
@@ -547,7 +550,8 @@ fn draw(
         hints.style,
         preferences.show_fps,
         preferences.rumble,
-        ui.loaded && options.capture.is_none()
+        ui.loaded && options.capture.is_none(),
+        preferences.tail_color
     );
     if key == focus.key {
         return;
@@ -672,6 +676,7 @@ fn draw(
         Screen::Menu => draw_menu(&mut builder, &preferences, renderer_label(&adapter)),
         Screen::Pause => draw_pause(&mut builder),
         Screen::Settings => draw_settings(&mut builder, &preferences),
+        Screen::TailColor => draw_tail_color(&mut builder, &preferences),
         Screen::Credits | Screen::Help => draw_help_or_credits(&mut builder, ui.screen),
         Screen::GameOver => draw_game_over(&mut builder),
         Screen::Victory => draw_victory(&mut builder),
@@ -1012,7 +1017,7 @@ fn draw_settings(builder: &mut Builder<'_, '_, '_>, preferences: &Preferences) {
     let lang = builder.lang;
     builder.panel(rect(270.0, 70.0, 1060.0, 760.0));
     builder.label(
-        rect(315.0, 103.0, 970.0, 60.0),
+        rect(315.0, 103.0, 650.0, 60.0),
         36.0,
         tr("Make yourself at home", lang),
         None,
@@ -1135,6 +1140,80 @@ fn draw_settings(builder: &mut Builder<'_, '_, '_>, preferences: &Preferences) {
         false,
     );
     builder.button(rect(815.0, 725.0, 465.0, 58.0), "Done", Action::Done, true);
+    builder.button(
+        rect(1015.0, 110.0, 265.0, 52.0),
+        "Tail color",
+        Action::TailColor,
+        false,
+    );
+}
+
+fn set_tail_channel(preferences: &mut Preferences, channel: usize, fraction: f32) {
+    let mut color = tail_picker_color(preferences);
+    color[channel] = (fraction.clamp(0.0, 1.0) * 255.0).round() as u8;
+    preferences.tail_color = Some(color);
+}
+
+fn tail_picker_color(preferences: &Preferences) -> [u8; 3] {
+    preferences.tail_color.unwrap_or([60, 200, 160])
+}
+
+fn draw_tail_color(builder: &mut Builder<'_, '_, '_>, preferences: &Preferences) {
+    let lang = builder.lang;
+    let color = tail_picker_color(preferences);
+    builder.panel(rect(370.0, 110.0, 860.0, 680.0));
+    builder.label(
+        rect(420.0, 145.0, 760.0, 55.0),
+        36.0,
+        tr("Tail color", lang),
+        None,
+    );
+    builder.label(
+        rect(420.0, 215.0, 760.0, 60.0),
+        20.0,
+        tr("Choose any color. Scales and shine stay natural.", lang),
+        None,
+    );
+    let swatch = builder
+        .commands
+        .spawn((
+            rect(1000.0, 315.0, 175.0, 220.0).node(),
+            BackgroundColor(Color::srgb_u8(color[0], color[1], color[2])),
+        ))
+        .id();
+    builder.commands.entity(builder.root).add_child(swatch);
+    builder.label(
+        rect(990.0, 555.0, 205.0, 40.0),
+        22.0,
+        if preferences.tail_color.is_some() {
+            format!("#{:02X}{:02X}{:02X}", color[0], color[1], color[2])
+        } else {
+            tr("Original", lang)
+        },
+        None,
+    );
+    for (channel, name) in ["Red", "Green", "Blue"].into_iter().enumerate() {
+        let y = 300.0 + channel as f32 * 110.0;
+        builder.label(
+            rect(420.0, y, 500.0, 36.0),
+            22.0,
+            format!("{}: {}", tr(name, lang), color[channel]),
+            None,
+        );
+        let r = rect(420.0, y + 48.0, 500.0, 30.0);
+        builder.slider(
+            r,
+            f32::from(color[channel]) / 255.0,
+            Action::TailChannel(channel),
+        );
+    }
+    builder.button(
+        rect(420.0, 675.0, 340.0, 58.0),
+        "Original",
+        Action::TailOriginal,
+        false,
+    );
+    builder.button(rect(840.0, 675.0, 340.0, 58.0), "Done", Action::Done, true);
 }
 
 fn draw_help_or_credits(builder: &mut Builder<'_, '_, '_>, screen: Screen) {
@@ -1417,10 +1496,15 @@ fn actions(
                 action = Some(hit.action)
             }
             if hit.slider && adjusting {
-                let delta = if direction == Some(Direction::Right) {
-                    0.05
+                let step = if matches!(hit.action, Action::TailChannel(_)) {
+                    1.0 / 255.0
                 } else {
-                    -0.05
+                    0.05
+                };
+                let delta = if direction == Some(Direction::Right) {
+                    step
+                } else {
+                    -step
                 };
                 fraction = Some(
                     (match hit.action {
@@ -1428,6 +1512,9 @@ fn actions(
                         Action::Effects => preferences.effects,
                         Action::Voice => preferences.voice,
                         Action::Rest => (preferences.rest - 25.0) / 125.0,
+                        Action::TailChannel(channel) => {
+                            f32::from(tail_picker_color(&preferences)[channel]) / 255.0
+                        }
                         _ => 0.0,
                     } + delta)
                         .clamp(0.0, 1.0),
@@ -1465,7 +1552,11 @@ fn actions(
             audio.stop_voice = true;
         }
         Action::Done => {
-            ui.screen = ui.return_to;
+            ui.screen = if ui.screen == Screen::TailColor {
+                Screen::Settings
+            } else {
+                ui.return_to
+            };
             audio.stop_voice = true;
             preferences.save();
         }
@@ -1494,6 +1585,13 @@ fn actions(
         Action::Fps => preferences.show_fps = !preferences.show_fps,
         Action::Motion => preferences.reduced_motion = !preferences.reduced_motion,
         Action::Rumble => preferences.rumble = (preferences.rumble + 1) % 3,
+        Action::TailColor => ui.screen = Screen::TailColor,
+        Action::TailOriginal => preferences.tail_color = None,
+        Action::TailChannel(channel) => {
+            if let Some(f) = fraction {
+                set_tail_channel(&mut preferences, channel, f);
+            }
+        }
         Action::Gentle => {
             preferences.gentle = !preferences.gentle;
             simulation.0.settings.gentle = preferences.gentle
@@ -1797,6 +1895,51 @@ mod tests {
     };
 
     #[test]
+    fn tail_picker_covers_every_rgb_value_and_preserves_other_channels() {
+        let mut preferences = Preferences::default();
+        for channel in 0..3 {
+            for value in 0..=255_u8 {
+                let before = tail_picker_color(&preferences);
+                set_tail_channel(&mut preferences, channel, f32::from(value) / 255.0);
+                let after = preferences.tail_color.unwrap();
+                assert_eq!(after[channel], value);
+                for other in 0..3 {
+                    if channel != other {
+                        assert_eq!(after[other], before[other]);
+                    }
+                }
+            }
+        }
+        for language in 0..3 {
+            for key in [
+                "Tail color",
+                "Choose any color. Scales and shine stay natural.",
+                "Original",
+                "Red",
+                "Green",
+                "Blue",
+            ] {
+                assert!(table().contains_key(key), "{key}");
+                assert!(!tr(key, language).is_empty());
+            }
+        }
+    }
+
+    #[test]
+    fn tail_picker_back_preserves_settings_return_destination() {
+        let mut ui = SessionUi {
+            screen: Screen::TailColor,
+            return_to: Screen::Pause,
+            started: true,
+            ..default()
+        };
+        app::pause(&mut ui);
+        assert_eq!(ui.screen, Screen::Settings);
+        app::pause(&mut ui);
+        assert_eq!(ui.screen, Screen::Pause);
+    }
+
+    #[test]
     fn title_artwork_matches_translation_language_order() {
         assert_eq!(title_path(0), "ui/title_eng.png");
         assert_eq!(title_path(1), "ui/title_hr.png");
@@ -1946,6 +2089,63 @@ mod tests {
             .write_message(RawGamepadEvent::Button(RawGamepadButtonChangedEvent::new(
                 pad, button, value,
             )));
+    }
+
+    #[test]
+    fn tail_picker_controller_adjusts_resets_and_returns_to_settings() {
+        let (mut app, pad) = input_app();
+        let hits: Vec<_> = app
+            .world_mut()
+            .query_filtered::<Entity, With<Hit>>()
+            .iter(app.world())
+            .collect();
+        for entity in hits {
+            app.world_mut().despawn(entity);
+        }
+        for (index, action) in [Action::TailChannel(0), Action::TailOriginal, Action::Done]
+            .into_iter()
+            .enumerate()
+        {
+            app.world_mut().spawn(Hit {
+                action,
+                ..hit(index, 0.0, index as f32 * 100.0, index == 0)
+            });
+        }
+        {
+            let mut ui = app.world_mut().resource_mut::<SessionUi>();
+            ui.screen = Screen::TailColor;
+            ui.return_to = Screen::Pause;
+        }
+        {
+            let mut focus = app.world_mut().resource_mut::<Focus>();
+            focus.last_screen = Some(Screen::TailColor);
+            focus.count = 3;
+        }
+        button(&mut app, pad, GamepadButton::DPadRight, 1.0);
+        button(&mut app, pad, GamepadButton::DPadRight, 0.0);
+        app.update();
+        let mut expected = tail_picker_color(&Preferences::default());
+        expected[0] += 1;
+        assert_eq!(
+            app.world().resource::<Preferences>().tail_color,
+            Some(expected)
+        );
+        button(&mut app, pad, GamepadButton::DPadDown, 1.0);
+        button(&mut app, pad, GamepadButton::DPadDown, 0.0);
+        app.update();
+        button(&mut app, pad, GamepadButton::South, 1.0);
+        button(&mut app, pad, GamepadButton::South, 0.0);
+        app.update();
+        assert_eq!(app.world().resource::<Preferences>().tail_color, None);
+        button(&mut app, pad, GamepadButton::DPadDown, 1.0);
+        button(&mut app, pad, GamepadButton::DPadDown, 0.0);
+        app.update();
+        button(&mut app, pad, GamepadButton::South, 1.0);
+        button(&mut app, pad, GamepadButton::South, 0.0);
+        app.update();
+        let ui = app.world().resource::<SessionUi>();
+        assert_eq!(ui.screen, Screen::Settings);
+        assert_eq!(ui.return_to, Screen::Pause);
     }
 
     #[test]

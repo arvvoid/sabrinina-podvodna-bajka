@@ -38,6 +38,12 @@ The game is playable already, but I am still working on it. There are animations
 
 ## Playing
 
+**Tail color:** open Settings → Tail color to choose any RGB color, with a swatch
+and hexadecimal preview. Drag the sliders with the mouse, or use left/right
+with the keyboard or controller for fine adjustment. **Original** restores the
+authored tail colors. The choice is saved locally and applies only to the tail
+and fins; hair and bikini retain their original colors.
+
 The fish swim around during the quieter parts. Every now and then jellyfish show up and try to eat them. Each jellyfish has **100 health** and only retreats after you bring that down to zero. There is no timeout or limit to the number of fish it can eat. If you lose all the fish during a round, or Sabrina loses all her health, it is game over. Jellyfish get bigger as they eat, and Sabrina slowly recovers if she stays safe for a while.
 
 The goal is to protect the reef for **10 rounds**. Round 10 always sends **four jellyfish**, regardless of the visitor limit or whether you selected Gentle or Lively. Defeat all four with Sabrina still alive and at least one fish left, and you win. The end screen shows your score and surviving fish. There is no round 11. Aquarium mode keeps going indefinitely.
@@ -169,7 +175,7 @@ Pass flags after the executable name, for example `./tools/run.sh --vulkan --cap
 | `--verify-input` | Use a fixed 60 Hz time step for deterministic input verification; opens windowed. |
 | `--capture-game`, `--capture-visit`, `--capture-crystal`, `--capture-throw`, `--capture-wave`, `--capture-song`, `--capture-combat`, `--capture-finale` | Capture gameplay scenes; `finale` shows the final four-visitor round. |
 | `--capture-school` | Run the 72-fish stress scene and report frame times and per-pass CPU/GPU timings. Add `--fullhd` for 1080p. |
-| `--capture-boot`, `--capture-menu`, `--capture-settings`, `--capture-language`, `--capture-help`, `--capture-credits`, `--capture-victory` | Capture the named screen. |
+| `--capture-boot`, `--capture-menu`, `--capture-settings`, `--capture-tail-color`, `--capture-language`, `--capture-help`, `--capture-credits`, `--capture-victory` | Capture the named screen. |
 | `--capture-graphics-low`, `--capture-graphics-balanced`, `--capture-graphics-high` | Capture graphics-quality settings. |
 | `--capture-pose-idle`, `--capture-pose-<name>`, `--capture-rig` | Capture Sabrina's idle pose, a named animation pose, or the character rig. |
 | `--capture-pose-wave`, `--capture-pose-throw`, `--capture-pose-throw-gather` | Close-up push, crystal release, or wind-up. Append `-left`, `-climb`, `-dive` or `-upright` to check casting alignment. |
