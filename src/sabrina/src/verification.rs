@@ -126,6 +126,16 @@ fn drive(
             println!("BEVY CHECK OK: decoded MIDI-rendered exploration music");
             keys.press(KeyCode::KeyF);
         }
+        51 => {
+            let pointer_position = pixel(&window, Vec2::new(1350.0, 300.0));
+            window.set_cursor_position(Some(pointer_position));
+            mouse.press(MouseButton::Left);
+            keys.press(KeyCode::KeyE);
+        }
+        54 => {
+            assert_eq!(simulation.0.crystal.magic.state, reef_sim::Spell::Resting);
+            println!("BEVY CHECK OK: scene click and E do not cast crystal");
+        }
         55 => {
             assert!(simulation.0.sabrina.wave.active);
             println!("BEVY CHECK OK: keyboard wave");
@@ -150,7 +160,7 @@ fn drive(
             assert!(simulation.0.sabrina.motion.pos.x > check.initial.x + 0.5);
             println!("BEVY CHECK OK: controller swimming");
             if let Ok(mut gamepad) = gamepads.single_mut() {
-                gamepad.digital_mut().press(GamepadButton::West);
+                gamepad.digital_mut().press(GamepadButton::East);
             }
         }
         196 => {
@@ -158,7 +168,7 @@ fn drive(
             println!("BEVY CHECK OK: controller song");
             simulation.0.sabrina.wave.cooldown = 0.0;
             if let Ok(mut gamepad) = gamepads.single_mut() {
-                gamepad.digital_mut().press(GamepadButton::East);
+                gamepad.digital_mut().press(GamepadButton::South);
             }
         }
         201 => {
@@ -190,7 +200,7 @@ fn drive(
             simulation.0.sabrina.throw_time = -1.0;
             simulation.0.sabrina.cooldown = 0.0;
             simulation.0.crystal.magic.state = reef_sim::Spell::Resting;
-            let pointer_position = pixel(&window, Vec2::new(944.0, 800.0));
+            let pointer_position = pixel(&window, Vec2::new(656.0, 800.0));
             window.set_cursor_position(Some(pointer_position));
             mouse.press(MouseButton::Left);
         }
@@ -408,7 +418,7 @@ fn drive(
                 span.0 == "A"
                     && color.0
                         == crate::controls::Style::Xbox
-                            .binding(crate::controls::Control::Crystal)
+                            .binding(crate::controls::Control::Wave)
                             .color
             }));
             commands

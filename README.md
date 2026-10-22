@@ -39,8 +39,7 @@ The game is playable already, but I am still working on it. There are animations
 ## Playing
 
 **Ability HUD:** three clickable square icons at the bottom center activate
-Crystal, Song and Wave. The supplied crystal, musical shell and wave artwork
-is packaged as small transparent icons. Keyboard/mouse bindings appear below
+Wave, Song and Crystal, from left to right. Keyboard/mouse bindings appear below
 each icon, switching to the active controller's labels and colors. Unavailable
 abilities are muted; cooldowns reveal the icon's color clockwise, with remaining
 time shown over it. Song uses the same sweep for its remaining/recharging energy.
@@ -84,9 +83,9 @@ You can choose Gentle or Lively, adjust how often jellyfish appear, or turn the 
 | Action | Mouse / keyboard | Xbox | PlayStation |
 |---|---|---|---|
 | Swim | Pointer, WASD / arrows | Left stick | Left stick |
-| Crystal | Left click, Space / E | A (green), or right shoulder | × (blue), or right shoulder |
-| Song | Q or HUD button | X (blue) | □ (pink) |
-| Wave | Right click, F or HUD button | B (red) | ○ (red) |
+| Wave | Right click, F or HUD button | A (green) | × (blue) |
+| Song | Q or HUD button | B (red) | ○ (red) |
+| Crystal | Space or HUD button | X (blue), or right shoulder | □ (pink), or right shoulder |
 | Pause | Escape | Start / Menu | Options |
 | Fullscreen | F11 or Settings | Settings | Settings |
 

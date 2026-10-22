@@ -363,9 +363,7 @@ pub fn input(
     let mut pausing = keys.just_pressed(KeyCode::Escape);
     let mut toggle = keys.just_pressed(KeyCode::KeyQ);
     let mut wave = keys.just_pressed(KeyCode::KeyF) || mouse.just_pressed(MouseButton::Right);
-    let mut cast = keys.just_pressed(KeyCode::Space)
-        || keys.just_pressed(KeyCode::KeyE)
-        || mouse.just_pressed(MouseButton::Left);
+    let mut cast = keys.just_pressed(KeyCode::Space);
     let mut movement = Vec2::new(
         (keys.pressed(KeyCode::KeyD) || keys.pressed(KeyCode::ArrowRight)) as u8 as f32
             - (keys.pressed(KeyCode::KeyA) || keys.pressed(KeyCode::ArrowLeft)) as u8 as f32,
@@ -378,10 +376,10 @@ pub fn input(
             movement += stick * ((stick.length() - 0.2) / 0.8 / stick.length());
         }
         pausing |= pad.just_pressed(GamepadButton::Start);
-        toggle |= pad.just_pressed(GamepadButton::West);
-        wave |= pad.just_pressed(GamepadButton::East);
+        toggle |= pad.just_pressed(GamepadButton::East);
+        wave |= pad.just_pressed(GamepadButton::South);
         cast |=
-            pad.just_pressed(GamepadButton::South) || pad.just_pressed(GamepadButton::RightTrigger);
+            pad.just_pressed(GamepadButton::West) || pad.just_pressed(GamepadButton::RightTrigger);
     }
     if pausing {
         let screen = ui.screen;
@@ -696,7 +694,7 @@ mod tests {
             for expected in [true, false, true, false, true, false] {
                 for value in [1.0, 0.0] {
                     app.world_mut().write_message(RawGamepadEvent::Button(
-                        RawGamepadButtonChangedEvent::new(pad, GamepadButton::West, value),
+                        RawGamepadButtonChangedEvent::new(pad, GamepadButton::East, value),
                     ));
                 }
                 for _ in 0..12 {

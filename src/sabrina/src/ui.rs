@@ -1101,9 +1101,9 @@ fn draw_hud(
         "health",
     );
     for (x, ability) in [
-        (610.0, Ability::Crystal),
+        (610.0, Ability::Wave),
         (754.0, Ability::Song),
-        (898.0, Ability::Wave),
+        (898.0, Ability::Crystal),
     ] {
         builder.ability(x, ability, materials, screen == Screen::Playing);
     }
@@ -2150,6 +2150,15 @@ mod tests {
         app.update();
         let world = app.world_mut();
         assert_eq!(world.query::<&Ability>().iter(world).count(), 3);
+        for hit in world.query::<&Hit>().iter(world) {
+            let x = match hit.action {
+                Action::Wave => 610.0,
+                Action::Song => 754.0,
+                Action::Crystal => 898.0,
+                _ => continue,
+            };
+            assert_eq!(hit.rect.x, x);
+        }
         for predicate in [
             |action: Action| matches!(action, Action::Crystal),
             |action: Action| matches!(action, Action::Song),
@@ -2594,9 +2603,26 @@ mod tests {
     fn newly_started_gameplay_input_is_not_discarded_with_old_menu_hits() {
         let (mut app, pad) = input_app();
         app.world_mut().resource_mut::<SessionUi>().screen = Screen::Playing;
-        button(&mut app, pad, GamepadButton::West, 1.0);
+        button(&mut app, pad, GamepadButton::East, 1.0);
         app.update();
         assert!(app.world().resource::<PendingInput>().0.toggle_song);
+    }
+
+    #[test]
+    fn gameplay_controller_buttons_trigger_only_the_selected_ability() {
+        for (control, expected) in [
+            (GamepadButton::South, (true, false, false)),
+            (GamepadButton::East, (false, true, false)),
+            (GamepadButton::West, (false, false, true)),
+            (GamepadButton::RightTrigger, (false, false, true)),
+        ] {
+            let (mut app, pad) = input_app();
+            app.world_mut().resource_mut::<SessionUi>().screen = Screen::Playing;
+            button(&mut app, pad, control, 1.0);
+            app.update();
+            let input = &app.world().resource::<PendingInput>().0;
+            assert_eq!((input.wave, input.toggle_song, input.cast), expected);
+        }
     }
 
     #[test]

@@ -49,30 +49,30 @@ impl Style {
     pub fn binding(self, control: Control) -> Binding {
         let label = match (self, control) {
             (Self::Keyboard, Control::Swim) => "Mouse / WASD",
-            (Self::Keyboard, Control::Crystal) => "Click / Space",
+            (Self::Keyboard, Control::Crystal) => "Space",
             (Self::Keyboard, Control::Song) => "Q",
             (Self::Keyboard, Control::Wave) => "RMB / F",
             (Self::Keyboard, Control::Pause) => "Esc",
             (_, Control::Swim) => "Left stick",
-            (Self::Xbox, Control::Crystal) => "A",
-            (Self::Xbox, Control::Song) => "X",
-            (Self::Xbox, Control::Wave) => "B",
-            (Self::PlayStation, Control::Crystal) => "×",
-            (Self::PlayStation, Control::Song) => "□",
-            (Self::PlayStation, Control::Wave) => "○",
+            (Self::Xbox, Control::Crystal) => "X",
+            (Self::Xbox, Control::Song) => "B",
+            (Self::Xbox, Control::Wave) => "A",
+            (Self::PlayStation, Control::Crystal) => "□",
+            (Self::PlayStation, Control::Song) => "○",
+            (Self::PlayStation, Control::Wave) => "×",
             (Self::PlayStation, Control::Pause) => "Options",
-            (Self::Generic, Control::Crystal) => "South",
-            (Self::Generic, Control::Song) => "West",
-            (Self::Generic, Control::Wave) => "East",
+            (Self::Generic, Control::Crystal) => "West",
+            (Self::Generic, Control::Song) => "East",
+            (Self::Generic, Control::Wave) => "South",
             (_, Control::Pause) => "Start",
         };
         let color = match (self, control) {
-            (Self::Xbox, Control::Crystal) => Color::srgb(0.45, 1.0, 0.4),
-            (Self::Xbox | Self::PlayStation, Control::Wave) => Color::srgb(1.0, 0.4, 0.4),
-            (Self::Xbox, Control::Song) | (Self::PlayStation, Control::Crystal) => {
+            (Self::Xbox, Control::Wave) => Color::srgb(0.45, 1.0, 0.4),
+            (Self::Xbox | Self::PlayStation, Control::Song) => Color::srgb(1.0, 0.4, 0.4),
+            (Self::Xbox, Control::Crystal) | (Self::PlayStation, Control::Wave) => {
                 Color::srgb(0.4, 0.75, 1.0)
             }
-            (Self::PlayStation, Control::Song) => Color::srgb(1.0, 0.55, 0.85),
+            (Self::PlayStation, Control::Crystal) => Color::srgb(1.0, 0.55, 0.85),
             _ => Color::srgb(0.87, 0.97, 1.0),
         };
         Binding { label, color }
@@ -339,10 +339,10 @@ mod tests {
             Style::Generic
         );
         for (style, labels) in [
-            (Style::Keyboard, ["Click / Space", "Q", "RMB / F"]),
-            (Style::Xbox, ["A", "X", "B"]),
-            (Style::PlayStation, ["×", "□", "○"]),
-            (Style::Generic, ["South", "West", "East"]),
+            (Style::Keyboard, ["Space", "Q", "RMB / F"]),
+            (Style::Xbox, ["X", "B", "A"]),
+            (Style::PlayStation, ["□", "○", "×"]),
+            (Style::Generic, ["West", "East", "South"]),
         ] {
             for (control, label) in [Control::Crystal, Control::Song, Control::Wave]
                 .into_iter()
