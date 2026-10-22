@@ -88,7 +88,7 @@ Install [Rust](https://rustup.rs/) first. I pin the toolchain and dependencies i
 On Debian/Ubuntu, install the native dependencies:
 
 ```sh
-sudo apt install build-essential pkg-config libasound2-dev libudev-dev libx11-dev libxrandr-dev libxi-dev libgl1-mesa-dev
+sudo apt install build-essential pkg-config libasound2-dev libudev-dev libx11-dev libxrandr-dev libxi-dev libgl1-mesa-dev libwayland-dev libxkbcommon-dev
 ./tools/build.sh
 ./tools/run.sh
 ```
@@ -122,6 +122,8 @@ Additional playtesting results reported on 20 October 2026:
 These are just results from machines I have tested, not proper comparable benchmarks and definitely not minimum requirements. Resolution, graphics quality, frame-limit settings and test scene were not recorded for these results. Development, fine tuning and requirement assessment still in progress.
 
 Defaults are Direct3D 12 on Windows, Vulkan on Linux and Metal on macOS. See the runtime-options table for supported overrides. An unsupported flag warns and uses the platform default; if a selected backend cannot initialize, the game does not silently switch. OpenGL requires a compatible driver and, on Unix-like systems, an available EGL implementation.
+
+Linux builds support both native Wayland and X11. The window library automatically prefers Wayland when `WAYLAND_DISPLAY` or `WAYLAND_SOCKET` is nonempty, including when Xwayland also provides `DISPLAY`; otherwise it uses X11 when `DISPLAY` is available. No launch flag is needed. This selects the window system independently of the Vulkan/OpenGL renderer and GPU. To test X11 explicitly, launch with `env -u WAYLAND_DISPLAY -u WAYLAND_SOCKET ./tools/run.sh`. An advertised but unreachable Wayland compositor produces a startup error rather than silently switching to X11.
 
 On multi-GPU/eGPU systems, `WGPU_ADAPTER_NAME` requests an adapter by a case-insensitive part of its name, without changing the backend. For example, on Linux: `WGPU_ADAPTER_NAME="RTX 3070 Laptop" cargo run --locked --release -p sabrina`. Check the startup `RENDER DEVICE` line: Bevy falls back to automatic selection if no compatible adapter matches. Selecting the internal GPU can work around an eGPU presentation/driver failure without disconnecting the eGPU.
 
