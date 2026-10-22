@@ -525,7 +525,7 @@ fn crystal_chain_window_expires_and_never_queues_early_presses() {
 }
 
 #[test]
-fn crystal_followups_ignore_previous_hidden_defeated_and_distant_targets() {
+fn crystal_followups_ignore_previous_hidden_and_defeated_but_accept_distant_targets() {
     let mut world = four_visitors();
     world.crystal.magic.state = Spell::Burst;
     world.crystal.magic.hit_count = 1;
@@ -533,9 +533,10 @@ fn crystal_followups_ignore_previous_hidden_defeated_and_distant_targets() {
     world.crystal.motion.pos = world.jelly[0].motion.pos;
     world.jelly[1].behaviour.state = JellyState::Hidden;
     world.jelly[2].behaviour.health = 0.0;
-    world.jelly[3].motion.pos.x = 13.0;
+    world.jelly[3].behaviour.state = JellyState::Hidden;
     assert!(crystal_chain_target(&world).is_none());
-    world.jelly[3].motion.pos.x = 12.0;
+    world.jelly[3].behaviour.state = JellyState::Hungry;
+    world.jelly[3].motion.pos.x = 30.0;
     assert_eq!(crystal_chain_target(&world), Some(world.jelly[3].id));
     world.sabrina.vitality.stunned = 1.0;
     crystal(
@@ -548,6 +549,50 @@ fn crystal_followups_ignore_previous_hidden_defeated_and_distant_targets() {
         &mut Events::default(),
     );
     assert_eq!(world.crystal.magic.state, Spell::Burst);
+}
+
+#[test]
+fn crystal_followup_homes_across_the_scene_and_tracks_moving_targets() {
+    for side in [-1.0, 1.0] {
+        for gentle in [false, true] {
+            let mut world = four_visitors();
+            world.settings.gentle = gentle;
+            for jelly in &mut world.jelly[2..] {
+                jelly.behaviour.state = JellyState::Hidden;
+            }
+            world.jelly[0].motion.pos = v(-14.0 * side, 4.0);
+            world.jelly[1].motion.pos = v(14.0 * side, 13.0);
+            world.crystal.motion.pos = world.jelly[0].motion.pos;
+            world.crystal.motion.direction = v(-side, 0.0);
+            world.crystal.magic.state = Spell::Burst;
+            world.crystal.magic.hit_count = 1;
+            world.crystal.magic.hits[0] = world.jelly[0].id;
+            let mut events = Events::default();
+            crystal(
+                &mut world,
+                0.01,
+                Input {
+                    cast: true,
+                    ..Input::default()
+                },
+                &mut events,
+            );
+            assert_eq!(world.crystal.magic.target, world.jelly[1].id);
+            assert!(world.crystal.motion.direction.x * side > 0.0);
+            for tick in 0..400 {
+                world.jelly[1].motion.pos.y = 13.0 + (tick as f32 * 0.03).sin();
+                crystal(&mut world, 0.01, Input::default(), &mut events);
+                if world.crystal.magic.hit_count == 2 {
+                    break;
+                }
+                assert_eq!(world.crystal.magic.state, Spell::Flying);
+            }
+            assert_eq!(world.crystal.magic.hit_count, 2);
+            assert_eq!(world.jelly[0].behaviour.health, 100.0);
+            assert_eq!(world.jelly[1].behaviour.health, 80.0);
+            assert_eq!(world.jelly[1].behaviour.bubble, 3.0);
+        }
+    }
 }
 
 #[test]

@@ -51,7 +51,6 @@ pub fn crystal_chain_target(world: &World) -> Option<Entity> {
             matches!(j.behaviour.state, JellyState::Hungry | JellyState::Arriving)
                 && j.behaviour.health > 0.0
                 && !magic.hits[..magic.hit_count].contains(&j.id)
-                && (j.motion.pos - world.crystal.motion.pos).length() <= CRYSTAL_CHAIN_REACH
         })
         .min_by(|a, b| {
             (a.motion.pos - world.crystal.motion.pos)
@@ -146,18 +145,22 @@ pub fn crystal(world: &mut World, dt: f32, input: Input, events: &mut Events) {
         }
         Spell::Flying => {
             world.crystal.magic.depth += (1.0 - world.crystal.magic.depth) * (dt * 8.0).min(1.0);
+            let mut travel = dt * 12.0;
+            let mut homing = false;
             if let Some(jellyfish) = find_jelly(world, world.crystal.magic.target)
                 && matches!(
                     jellyfish.behaviour.state,
                     JellyState::Hungry | JellyState::Arriving
                 )
             {
+                homing = true;
+                travel = travel.min((jellyfish.motion.pos - world.crystal.motion.pos).length());
                 world.crystal.motion.direction =
                     (jellyfish.motion.pos - world.crystal.motion.pos).unit()
             }
             let from = world.crystal.motion.pos;
             world.crystal.motion.pos =
-                world.crystal.motion.pos + world.crystal.motion.direction * dt * 12.0;
+                world.crystal.motion.pos + world.crystal.motion.direction * travel;
             for i in 0..FISH_COUNT {
                 if world.fish[i].life.active
                     && (world.fish[i].motion.pos - world.crystal.motion.pos).length() < 1.2
@@ -205,10 +208,12 @@ pub fn crystal(world: &mut World, dt: f32, input: Input, events: &mut Events) {
                 }
             }
             if world.crystal.magic.state == Spell::Flying
-                && (world.crystal.motion.pos.x.abs() > 17.0
-                    || world.crystal.motion.pos.y < 0.5
-                    || world.crystal.motion.pos.y > 18.0
-                    || world.crystal.magic.time > 1.5)
+                && ((!homing
+                    && (world.crystal.motion.pos.x.abs() > 17.0
+                        || world.crystal.motion.pos.y < 0.5
+                        || world.crystal.motion.pos.y > 18.0
+                        || world.crystal.magic.time > 1.5))
+                    || world.crystal.magic.time > 5.0)
             {
                 world.crystal.magic.state = Spell::Returning;
                 world.crystal.magic.time = 0.0;
@@ -220,6 +225,10 @@ pub fn crystal(world: &mut World, dt: f32, input: Input, events: &mut Events) {
                 && let Some(target) = crystal_chain_target(world)
             {
                 world.crystal.magic.target = target;
+                if let Some(jellyfish) = find_jelly(world, target) {
+                    world.crystal.motion.direction =
+                        (jellyfish.motion.pos - world.crystal.motion.pos).unit();
+                }
                 world.crystal.magic.state = Spell::Flying;
                 world.crystal.magic.time = 0.0;
                 events.launch = true;

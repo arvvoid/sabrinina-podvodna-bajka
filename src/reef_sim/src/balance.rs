@@ -13,7 +13,6 @@ pub const CHARGED_WAVE_COOLDOWN: f32 = 9.0;
 pub const CRYSTAL_COOLDOWN: f32 = 12.0;
 pub const CRYSTAL_CHAIN_COOLDOWN: f32 = 2.0;
 pub const CRYSTAL_CHAIN_SECONDS: f32 = 1.5;
-pub const CRYSTAL_CHAIN_REACH: f32 = 12.0;
 pub const RESCUE_POINTS: i32 = 50;
 pub const SURVIVOR_POINTS: i32 = 25;
 pub const RETREAT_POINTS: i32 = 100;

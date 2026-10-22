@@ -180,6 +180,7 @@ pub fn sabrina_body(sabrina: &SabrinaEntity) -> [Capsule; 16] {
     let swimming = sabrina.motion.velocity.length() > 0.864
         && !sabrina.song.active
         && !sabrina.wave.active
+        && !sabrina.wave.charging
         && sabrina.throw_time < 0.0
         && sabrina.vitality.stunned <= 0.0
         && sabrina.vitality.hurt_flash <= 0.0;

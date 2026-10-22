@@ -185,6 +185,35 @@ fn idle_sculls_moving_arms_glide_and_cast_release_is_not_mid_charge() {
 }
 
 #[test]
+fn charging_wave_holds_hands_forward_and_releases_without_pose_jump() {
+    for facing in [-1.0, 1.0] {
+        let mut s = SabrinaEntity::default();
+        s.swimming.pitch = 0.0;
+        s.swimming.yaw = if facing < 0.0 {
+            std::f32::consts::PI
+        } else {
+            0.0
+        };
+        s.wave.charging = true;
+        s.wave.direction = v(facing, 0.0);
+        s.wave.charge_time = 2.5;
+        assert_eq!(sabrina_pose(&s), SabrinaPose::Wave);
+        let held = sabrina_palm(&s);
+        assert!((held.offset.x - s.motion.pos.x) * facing > 1.0, "{held:?}");
+        let phase = sabrina_pose_phase(&s);
+        let rotation = sabrina_cast_rotation(&s);
+        s.wave.charging = false;
+        s.wave.active = true;
+        s.wave.time = 0.0;
+        near(sabrina_pose_phase(&s), phase);
+        let released = sabrina_palm(&s);
+        near(released.offset.x, held.offset.x);
+        near(released.offset.y, held.offset.y);
+        assert_eq!(sabrina_cast_rotation(&s), rotation);
+    }
+}
+
+#[test]
 fn three_quarter_view_faces_camera_on_both_sides_without_flipping_turns() {
     let mut s = SabrinaEntity::default();
     for yaw in [0.0, std::f32::consts::PI] {

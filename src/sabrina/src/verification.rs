@@ -635,7 +635,7 @@ fn drive(
                             simulation.0.jelly[index] = reef_sim::JellyEntity {
                                 id,
                                 motion: reef_sim::Motion {
-                                    pos: reef_sim::v(index as f32 * 4.0, 8.0),
+                                    pos: reef_sim::v(-14.0 + index as f32 * 28.0, 8.0),
                                     ..default()
                                 },
                                 behaviour: reef_sim::JellyBehaviour {
@@ -653,7 +653,7 @@ fn drive(
                         simulation.0.crystal.magic.time = 0.0;
                         simulation.0.crystal.magic.hit_count = 1;
                         simulation.0.crystal.magic.hits[0] = simulation.0.jelly[0].id;
-                        simulation.0.crystal.motion.pos = reef_sim::v(0.0, 8.0);
+                        simulation.0.crystal.motion.pos = reef_sim::v(-14.0, 8.0);
                         simulation.0.sabrina.cooldown = 12.0;
                         check.ability_stage = 2;
                         check.ability_time = simulation.0.session.time;
@@ -665,9 +665,9 @@ fn drive(
                     } else {
                         assert_eq!(simulation.0.jelly[1].behaviour.health, 80.0);
                         assert!(simulation.0.jelly[1].behaviour.bubble > 2.8);
-                        assert!(simulation.0.sabrina.cooldown > 12.0);
+                        assert!(simulation.0.sabrina.cooldown > 10.0);
                         println!(
-                            "BEVY CHECK OK: Crystal follow-up input hits a different target for half damage"
+                            "BEVY CHECK OK: Crystal homes across opposite sides of the scene for half damage"
                         );
                         println!("BEVY INPUT INTEGRATION COMPLETE");
                         exit.write(AppExit::Success);

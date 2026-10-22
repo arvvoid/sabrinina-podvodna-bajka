@@ -81,6 +81,19 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
         let fade = smoothstep(0.0, 0.10, amount) * (1.0 - smoothstep(0.65, 1.0, amount));
         color = mix(vec3<f32>(0.10, 0.85, 1.0), vec3<f32>(0.85, 1.0, 0.92), main);
         alpha = (main + trail) * edge * fade * 0.85;
+        if (amount < 0.0) {
+            let progress = clamp(-amount - 1.0, 0.0, 1.0);
+            let offset = (uv - vec2<f32>(0.5)) * 2.0;
+            let radius2 = dot(offset, offset);
+            let radius = sqrt(radius2);
+            let sphere = sqrt(max(0.0, 1.0 - radius2));
+            let edge_fade = 1.0 - smoothstep(0.78, 1.0, radius);
+            let core = exp(-radius2 * 5.0);
+            let rim = exp(-pow((radius - 0.70) / 0.12, 2.0));
+            color = mix(vec3<f32>(0.015, 0.10, 0.85), vec3<f32>(0.06, 0.60, 1.0), sphere);
+            color += vec3<f32>(0.18, 0.32, 0.45) * core;
+            alpha = (0.50 * sphere + 0.45 * core + 0.20 * rim) * edge_fade * (0.7 + 0.3 * progress);
+        }
     }
 
     // Song and crystal-burst rings.

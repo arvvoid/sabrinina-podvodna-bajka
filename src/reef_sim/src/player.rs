@@ -212,8 +212,17 @@ pub fn sabrina_pose(sabrina: &SabrinaEntity) -> SabrinaPose {
 pub fn sabrina_pose_phase(sabrina: &SabrinaEntity) -> f32 {
     match sabrina_pose(sabrina) {
         SabrinaPose::Throw => (sabrina.throw_time / 1.6).clamp(0.0, 1.0),
-        SabrinaPose::Wave if sabrina.wave.charging => 0.0,
-        SabrinaPose::Wave => (sabrina.wave.time / 0.75).clamp(0.0, 1.0),
+        SabrinaPose::Wave if sabrina.wave.charging => {
+            (sabrina.wave.charge_time / 0.25).min(1.0) * 0.35
+        }
+        SabrinaPose::Wave => {
+            let phase = (sabrina.wave.time / 0.75).clamp(0.0, 1.0);
+            if sabrina.wave.charge_time > 0.0 {
+                0.35 + phase * 0.65
+            } else {
+                phase
+            }
+        }
         _ => (sabrina.swimming.phase % 6.28318530718) / 6.28318530718,
     }
 }
@@ -228,10 +237,17 @@ pub fn sabrina_visual_yaw(sabrina: &SabrinaEntity) -> f32 {
 /// Model-local axis/angle shared by the rendered arms and sampled contacts.
 pub fn sabrina_cast_rotation(sabrina: &SabrinaEntity) -> ([f32; 3], f32) {
     let (direction, blend_weight) = match sabrina_pose(sabrina) {
+        SabrinaPose::Wave if sabrina.wave.charging => (
+            sabrina.wave.direction,
+            (sabrina.wave.charge_time / 0.25).clamp(0.0, 1.0),
+        ),
         SabrinaPose::Wave => (
             sabrina.wave.direction,
-            (sabrina.wave.time / 0.08).clamp(0.0, 1.0)
-                * ((0.75 - sabrina.wave.time) / 0.25).clamp(0.0, 1.0),
+            (if sabrina.wave.charge_time > 0.0 {
+                1.0
+            } else {
+                (sabrina.wave.time / 0.08).clamp(0.0, 1.0)
+            }) * ((0.75 - sabrina.wave.time) / 0.25).clamp(0.0, 1.0),
         ),
         SabrinaPose::Throw => (
             sabrina.throw_direction,

@@ -473,6 +473,7 @@ fn tick(
         let due = match kind.as_str() {
             "throw" => 3.25,
             "wave" => 3.5,
+            "wave-charge" => 2.0,
             "combat" => 1.5,
             _ => 1.0,
         };
@@ -480,8 +481,9 @@ fn tick(
             *capture_action = true;
             input.cast = kind == "throw" || kind == "crystal" || kind == "combat";
             input.toggle_song = kind == "song";
-            input.wave = kind == "wave";
+            input.wave = kind == "wave" || kind == "wave-charge";
         }
+        input.wave_held = kind == "wave-charge";
     }
     if ui.pointer_mode {
         input.movement = (input.movement - simulation.0.sabrina.motion.pos) * 0.5;

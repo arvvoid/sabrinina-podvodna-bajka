@@ -752,9 +752,11 @@ fn effects(
                 if wave.charging {
                     let progress = (wave.charge_time / sim::WAVE_CHARGE_SECONDS).clamp(0.0, 1.0);
                     let palm = sim::sabrina_palm(s);
-                    next.translation = Vec3::new(palm.offset.x, palm.offset.y, 1.6);
-                    next.scale = Vec3::new(0.5 + progress * 0.7, 0.8 + progress * 1.6, 1.0);
-                    amount = 0.15 + progress * 0.35;
+                    let position = palm.offset + wave.direction * (0.25 + progress * 0.35);
+                    next.translation = Vec3::new(position.x, position.y, palm.depth + 0.1);
+                    next.scale = Vec3::new(0.65 + progress * 2.0, 0.65 + progress * 2.0, 1.0);
+                    next.rotation = Quat::IDENTITY;
+                    amount = -1.0 - progress;
                 }
             }
             Effect::Song(i) => {
