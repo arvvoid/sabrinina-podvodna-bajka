@@ -190,7 +190,7 @@ fn drive(
             simulation.0.sabrina.throw_time = -1.0;
             simulation.0.sabrina.cooldown = 0.0;
             simulation.0.crystal.magic.state = reef_sim::Spell::Resting;
-            let pointer_position = pixel(&window, Vec2::new(1080.0, 48.0));
+            let pointer_position = pixel(&window, Vec2::new(944.0, 800.0));
             window.set_cursor_position(Some(pointer_position));
             mouse.press(MouseButton::Left);
         }
@@ -405,7 +405,7 @@ fn drive(
         545 => {
             assert_eq!(hints.style, crate::controls::Style::Xbox);
             assert!(spans.iter().any(|(span, color)| {
-                span.0 == " · A"
+                span.0 == "A"
                     && color.0
                         == crate::controls::Style::Xbox
                             .binding(crate::controls::Control::Crystal)
@@ -417,7 +417,7 @@ fn drive(
         }
         550 => {
             assert_eq!(hints.style, crate::controls::Style::PlayStation);
-            for symbol in [" · ×", " · □", " · ○"] {
+            for symbol in ["×", "□", "○"] {
                 assert!(spans.iter().any(|(span, _)| span.0 == symbol));
             }
             commands
@@ -429,7 +429,7 @@ fn drive(
             assert!(
                 !spans
                     .iter()
-                    .any(|(span, _)| [" · A", " · ×", " · □", " · ○"].contains(&span.0.as_str()))
+                    .any(|(span, _)| ["A", "×", "□", "○"].contains(&span.0.as_str()))
             );
             assert!(spans.iter().any(|(span, _)| span.0.contains("WASD")));
             println!(
@@ -676,7 +676,7 @@ fn check_pose(
                     (image.color.alpha() - crate::ui::HUD_BACKGROUND_ALPHA).abs() < 0.001
                 })
                 .count()
-                >= 8
+                >= 3
         );
         assert!(
             ui_texts
@@ -689,9 +689,11 @@ fn check_pose(
                 .iter()
                 .filter(|color| { (color.0.alpha() - crate::ui::HUD_METER_ALPHA).abs() < 0.001 })
                 .count()
-                >= 4
+                >= 1
         );
-        println!("BEVY CHECK OK: health and ability progress fills are semi-transparent");
+        println!(
+            "BEVY CHECK OK: health progress fill remains semi-transparent; abilities use icon sweeps"
+        );
         assert_eq!(
             reef.iter()
                 .filter(|(_, material)| material.base.alpha_mode == AlphaMode::Blend)

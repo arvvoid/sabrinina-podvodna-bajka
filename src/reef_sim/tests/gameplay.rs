@@ -160,6 +160,34 @@ fn head_on_fish_steer_into_complementary_lanes_before_contact() {
 }
 
 #[test]
+fn avoidance_blends_in_and_decays_instead_of_snapping() {
+    let mut world = world();
+    world.sabrina.motion.pos = v(-12.0, 5.0);
+    for fish in &mut world.fish {
+        fish.life.active = false;
+    }
+    for i in 0..2 {
+        let fish = &mut world.fish[i];
+        fish.life.active = true;
+        fish.appearance.size = 1.0;
+        fish.appearance.birth = 1.0;
+        fish.motion.pos = v(i as f32 * 2.0 - 1.0, 9.0);
+        fish.motion.direction = v(if i == 0 { 1.0 } else { -1.0 }, 0.0);
+        fish.motion.velocity = fish.motion.direction * 2.0;
+        fish.swimming.turn_in = 10.0;
+        fish.swimming.cruise_heading = if i == 0 { 0.0 } else { std::f32::consts::PI };
+    }
+    fish::fish_swimming(&mut world, 1.0 / 60.0);
+    let initial = world.fish[0].swimming.avoidance.y;
+    assert!(initial > 0.0 && initial < 0.5);
+    world.fish[1].life.active = false;
+    fish::fish_swimming(&mut world, 1.0 / 60.0);
+    let next = world.fish[0].swimming.avoidance.y;
+    assert!(next > 0.0 && next < initial);
+    assert!((next / initial - (-5.0_f32 / 60.0).exp()).abs() < 0.0001);
+}
+
+#[test]
 fn overtaking_and_crossing_fish_keep_clear_at_different_step_sizes() {
     for dt in [1.0 / 30.0, 1.0 / 60.0, 1.0 / 120.0] {
         for crossing in [false, true] {

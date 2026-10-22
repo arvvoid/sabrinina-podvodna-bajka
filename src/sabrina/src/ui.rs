@@ -9,7 +9,9 @@ use crate::{
 };
 use bevy::{
     prelude::*,
+    render::render_resource::AsBindGroup,
     render::renderer::RenderAdapterInfo,
+    shader::ShaderRef,
     sprite::{BorderRect, TextureSlicer},
     ui::widget::NodeImageMode,
     window::{MonitorSelection, PrimaryWindow, WindowMode},
@@ -176,6 +178,7 @@ enum Action {
     Gentle,
     Visitors,
     Done,
+    Crystal,
     Song,
     Wave,
     Original,
@@ -206,6 +209,58 @@ struct Dynamic(&'static str);
 #[derive(Component)]
 struct Meter(&'static str, f32);
 
+#[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
+enum Ability {
+    Crystal,
+    Song,
+    Wave,
+}
+
+impl Ability {
+    fn state(self, world: &reef_sim::World) -> Vec4 {
+        let sabrina = &world.sabrina;
+        let charging = world.crystal.magic.state == reef_sim::Spell::Charging;
+        let (progress, blocked, active) = match self {
+            Self::Crystal => (
+                1.0 - sabrina.cooldown / reef_sim::recharge_duration(world),
+                world.crystal.magic.state != reef_sim::Spell::Resting,
+                charging,
+            ),
+            Self::Song => (
+                sabrina.song.energy / 100.0,
+                sabrina.song.locked,
+                sabrina.song.active,
+            ),
+            Self::Wave => (
+                1.0 - sabrina.wave.cooldown / reef_sim::wave_recharge_duration(world),
+                charging,
+                sabrina.wave.active,
+            ),
+        };
+        Vec4::new(
+            progress.clamp(0.0, 1.0),
+            f32::from(blocked),
+            f32::from(active),
+            0.0,
+        )
+    }
+}
+
+#[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]
+struct AbilityIcon {
+    #[uniform(0)]
+    state: Vec4,
+    #[texture(1)]
+    #[sampler(2)]
+    image: Handle<Image>,
+}
+
+impl UiMaterial for AbilityIcon {
+    fn fragment_shader() -> ShaderRef {
+        "shaders/ability_icon.wesl".into()
+    }
+}
+
 #[derive(Resource, Default)]
 struct Focus {
     index: usize,
@@ -221,9 +276,11 @@ pub struct ReefUiPlugin;
 impl Plugin for ReefUiPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Focus>()
+            .add_plugins(UiMaterialPlugin::<AbilityIcon>::default())
             .init_resource::<Hints>()
             .add_systems(Startup, setup_fps)
             .add_systems(Update, update_fps)
+            .add_systems(Update, update_abilities.after(draw))
             .add_systems(
                 Update,
                 (update_loading_stats, pulse_loading_prompt).after(draw),
@@ -245,6 +302,23 @@ impl Plugin for ReefUiPlugin {
                 Update,
                 (draw, update).chain().before(crate::presentation::prepare),
             );
+    }
+}
+
+fn update_abilities(
+    simulation: Res<Simulation>,
+    icons: Query<(&Ability, &MaterialNode<AbilityIcon>)>,
+    mut materials: ResMut<Assets<AbilityIcon>>,
+) {
+    for (ability, handle) in &icons {
+        let state = ability.state(&simulation.0);
+        let Some(current) = materials.get(&handle.0) else {
+            error!("Ability icon has no material: {ability:?}");
+            continue;
+        };
+        if current.state != state {
+            materials.get_mut(&handle.0).unwrap().state = state;
+        }
     }
 }
 
@@ -487,6 +561,85 @@ impl Builder<'_, '_, '_> {
         }
     }
 
+    fn ability(
+        &mut self,
+        x: f32,
+        ability: Ability,
+        materials: &mut Assets<AbilityIcon>,
+        clickable: bool,
+    ) {
+        let (name, control, action, image) = match ability {
+            Ability::Crystal => ("Crystal", Control::Crystal, Action::Crystal, "crystal"),
+            Ability::Song => ("Song", Control::Song, Action::Song, "song"),
+            Ability::Wave => ("Wave", Control::Wave, Action::Wave, "wave"),
+        };
+        let area = rect(x, 754.0, 92.0, 92.0);
+        let frame = self
+            .commands
+            .spawn((
+                area.node(),
+                BackgroundColor(Color::srgba(0.015, 0.07, 0.11, 0.82)),
+                BorderColor::all(Color::srgba(0.48, 0.88, 0.92, 0.65)),
+            ))
+            .id();
+        self.commands.entity(frame).insert(Node {
+            border: UiRect::all(px(2.0)),
+            border_radius: BorderRadius::all(px(10.0)),
+            ..area.node()
+        });
+        self.commands.entity(self.root).add_child(frame);
+        if clickable {
+            self.commands.entity(frame).insert(Hit {
+                rect: area,
+                action,
+                index: self.index,
+                slider: false,
+            });
+            self.index += 1;
+        }
+        let icon = self
+            .commands
+            .spawn((
+                rect(x + 4.0, 758.0, 84.0, 84.0).node(),
+                ability,
+                MaterialNode(materials.add(AbilityIcon {
+                    state: Vec4::X,
+                    image: self.server.load(format!("ui/ability_{image}.png")),
+                })),
+            ))
+            .id();
+        self.commands.entity(self.root).add_child(icon);
+        let label = self.label(
+            rect(x - 20.0, 728.0, 132.0, 24.0),
+            17.0,
+            tr(name, self.lang),
+            None,
+        );
+        self.commands
+            .entity(label)
+            .insert(TextLayout::justify(Justify::Center));
+        let binding = self.controls.binding(control);
+        let label = self.label(rect(x - 26.0, 850.0, 144.0, 26.0), 17.0, "", None);
+        self.commands
+            .entity(label)
+            .insert(TextLayout::justify(Justify::Center))
+            .with_children(|parent| {
+                parent.spawn((
+                    TextSpan::new(tr(binding.label, self.lang)),
+                    TextColor(binding.color),
+                    TextFont {
+                        font: self.font.clone().into(),
+                        font_size: FontSize::Px(17.0),
+                        ..default()
+                    },
+                ));
+            });
+        let label = self.label(rect(x - 20.0, 791.0, 132.0, 24.0), 18.0, "", Some(image));
+        self.commands
+            .entity(label)
+            .insert(TextLayout::justify(Justify::Center));
+    }
+
     fn meter(&mut self, r: Rect, color: Color, key: &'static str) {
         let e = self
             .commands
@@ -550,6 +703,7 @@ fn draw(
     options: Res<Options>,
     hints: Res<Hints>,
     adapter: Res<RenderAdapterInfo>,
+    mut ability_materials: ResMut<Assets<AbilityIcon>>,
 ) {
     let zoom = (window.width() / CANVAS_WIDTH).min(window.height() / CANVAS_HEIGHT);
     scale.0 = zoom;
@@ -747,7 +901,7 @@ fn draw(
         return;
     }
     if ui.started && !matches!(ui.screen, Screen::Victory | Screen::GameOver) {
-        draw_hud(&mut builder, ui.screen);
+        draw_hud(&mut builder, ui.screen, &mut ability_materials);
     }
     match ui.screen {
         Screen::Menu => draw_menu(&mut builder, &preferences, renderer_label(&adapter)),
@@ -928,7 +1082,11 @@ fn update_loading_stats(
     }
 }
 
-fn draw_hud(builder: &mut Builder<'_, '_, '_>, screen: Screen) {
+fn draw_hud(
+    builder: &mut Builder<'_, '_, '_>,
+    screen: Screen,
+    materials: &mut Assets<AbilityIcon>,
+) {
     builder.background_alpha = HUD_BACKGROUND_ALPHA;
     builder.panel(rect(24.0, 22.0, 490.0, 160.0));
     builder.label(rect(48.0, 42.0, 450.0, 32.0), 24.0, "", Some("phase"));
@@ -942,25 +1100,25 @@ fn draw_hud(builder: &mut Builder<'_, '_, '_>, screen: Screen) {
         Color::srgb(1.0, 0.4, 0.48),
         "health",
     );
-    for (x, key, color) in [
-        (270.0, "crystal", Color::srgb(0.55, 0.8, 1.0)),
-        (630.0, "song", Color::srgb(1.0, 0.58, 0.85)),
-        (990.0, "wave", Color::srgb(0.38, 1.0, 0.76)),
+    for (x, ability) in [
+        (610.0, Ability::Crystal),
+        (754.0, Ability::Song),
+        (898.0, Ability::Wave),
     ] {
-        builder.panel(rect(x, 790.0, 340.0, 70.0));
-        builder.label(rect(x + 20.0, 807.0, 300.0, 29.0), 17.0, "", Some(key));
-        builder.meter(rect(x + 20.0, 836.0, 300.0, 10.0), color, key);
+        builder.ability(x, ability, materials, screen == Screen::Playing);
     }
-    builder.image(rect(240.0, 779.0, 58.0, 58.0), "shell");
-    builder.image(rect(1315.0, 806.0, 58.0, 58.0), "star");
-    builder.control_hints(rect(40.0, 864.0, 1520.0, 32.0), 17.0);
+    let swim = builder.label(
+        rect(40.0, 864.0, 450.0, 32.0),
+        17.0,
+        tr("Swim", builder.lang),
+        None,
+    );
+    builder.binding_span(swim, Control::Swim, 17.0, false);
     builder.label(rect(500.0, 130.0, 600.0, 90.0), 21.0, "", Some("score"));
     builder.label(rect(500.0, 225.0, 600.0, 160.0), 22.0, "", Some("reward"));
-    builder.label(rect(350.0, 700.0, 900.0, 48.0), 23.0, "", Some("notice"));
-    builder.label(rect(350.0, 748.0, 900.0, 36.0), 19.0, "", Some("caption"));
+    builder.label(rect(350.0, 635.0, 900.0, 48.0), 23.0, "", Some("notice"));
+    builder.label(rect(350.0, 683.0, 900.0, 36.0), 19.0, "", Some("caption"));
     if screen == Screen::Playing {
-        builder.button(rect(1020.0, 24.0, 135.0, 50.0), "Wave", Action::Wave, false);
-        builder.button(rect(1170.0, 24.0, 225.0, 50.0), "Sing", Action::Song, false);
         builder.button(rect(1415.0, 24.0, 160.0, 50.0), "II", Action::Pause, false);
     }
     builder.background_alpha = 1.0;
@@ -1673,6 +1831,7 @@ fn actions(
             preferences.visitors = preferences.visitors % 3 + 1;
             simulation.0.settings.visitor_limit = preferences.visitors
         }
+        Action::Crystal => pending.0.cast = true,
         Action::Song => pending.0.toggle_song = true,
         Action::Wave => pending.0.wave = true,
         Action::Original => {
@@ -1708,7 +1867,10 @@ fn actions(
             }
         }
     }
-    if !matches!(action, Action::Song | Action::Wave | Action::Pause) {
+    if !matches!(
+        action,
+        Action::Crystal | Action::Song | Action::Wave | Action::Pause
+    ) {
         preferences.save();
     }
 }
@@ -1832,37 +1994,11 @@ fn update(
                 tr("Health · ", language),
                 sabrina.vitality.health.ceil() as i32
             ),
-            "crystal" => format!(
-                "{}{}",
-                tr("Crystal · ", language),
-                if sabrina.cooldown > 0.0 {
-                    let n = sabrina.cooldown.ceil() as i32;
-                    format!("{}:{:02}", n / 60, n % 60)
-                } else {
-                    tr("ready", language)
-                }
-            ),
-            "song" => format!(
-                "{}{}%{}",
-                tr("Song · ", language),
-                sabrina.song.energy as i32,
-                if sabrina.song.locked {
-                    tr(" · recharging", language)
-                } else if sabrina.song.active {
-                    format!(" · {:.1} m", reef_sim::song_radius(&simulation.0))
-                } else {
-                    String::new()
-                }
-            ),
-            "wave" => format!(
-                "{}{}",
-                tr("Wave · ", language),
-                if sabrina.wave.cooldown > 0.0 {
-                    format!("{:.1} s", sabrina.wave.cooldown)
-                } else {
-                    tr("ready", language)
-                }
-            ),
+            "crystal" if sabrina.cooldown > 0.0 => format!("{}", sabrina.cooldown.ceil() as i32),
+            "song" if sabrina.song.energy < 99.99 || sabrina.song.active => {
+                format!("{}%", sabrina.song.energy as i32)
+            }
+            "wave" if sabrina.wave.cooldown > 0.0 => format!("{:.1}", sabrina.wave.cooldown),
             "caption" => ui.caption.clone(),
             "notice" => {
                 if ui.notice_time > 0.0 {
@@ -1965,6 +2101,115 @@ mod tests {
         InputPlugin,
         gamepad::{RawGamepadButtonChangedEvent, RawGamepadEvent},
     };
+
+    #[test]
+    fn ability_icons_track_cooldowns_energy_and_charging() {
+        let mut world = reef_sim::World::default();
+        assert_eq!(Ability::Crystal.state(&world), Vec4::X);
+        assert_eq!(Ability::Wave.state(&world), Vec4::X);
+        world.sabrina.cooldown = reef_sim::recharge_duration(&world) * 0.5;
+        world.sabrina.wave.cooldown = reef_sim::wave_recharge_duration(&world) * 0.75;
+        world.sabrina.song.energy = 40.0;
+        world.sabrina.song.locked = true;
+        assert_eq!(Ability::Crystal.state(&world).x, 0.5);
+        assert_eq!(Ability::Wave.state(&world).x, 0.25);
+        assert_eq!(Ability::Song.state(&world), Vec4::new(0.4, 1.0, 0.0, 0.0));
+        world.crystal.magic.state = reef_sim::Spell::Charging;
+        assert_eq!(Ability::Crystal.state(&world).y, 1.0);
+        assert_eq!(Ability::Wave.state(&world).y, 1.0);
+        world.sabrina.song.locked = false;
+        world.sabrina.song.active = true;
+        assert_eq!(Ability::Song.state(&world), Vec4::new(0.4, 0.0, 1.0, 0.0));
+    }
+
+    #[test]
+    fn hud_has_one_clickable_icon_per_ability_and_no_duplicate_bars() {
+        fn build(
+            mut commands: Commands,
+            server: Res<AssetServer>,
+            mut materials: ResMut<Assets<AbilityIcon>>,
+        ) {
+            let root = commands.spawn_empty().id();
+            let mut builder = Builder {
+                commands: &mut commands,
+                server: &server,
+                root,
+                lang: 0,
+                index: 0,
+                font: default(),
+                background_alpha: 1.0,
+                controls: Style::Keyboard,
+            };
+            draw_hud(&mut builder, Screen::Playing, &mut materials);
+        }
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, AssetPlugin::default()))
+            .init_asset::<Image>()
+            .init_asset::<AbilityIcon>()
+            .add_systems(Startup, build);
+        app.update();
+        let world = app.world_mut();
+        assert_eq!(world.query::<&Ability>().iter(world).count(), 3);
+        for predicate in [
+            |action: Action| matches!(action, Action::Crystal),
+            |action: Action| matches!(action, Action::Song),
+            |action: Action| matches!(action, Action::Wave),
+        ] {
+            assert_eq!(
+                world
+                    .query::<&Hit>()
+                    .iter(world)
+                    .filter(|hit| predicate(hit.action))
+                    .count(),
+                1
+            );
+        }
+        assert!(
+            world
+                .query::<&Meter>()
+                .iter(world)
+                .all(|meter| meter.0 == "health")
+        );
+        assert!(
+            world
+                .query::<&Hit>()
+                .iter(world)
+                .filter(|hit| !matches!(hit.action, Action::Pause))
+                .all(|hit| hit.rect.y == 754.0)
+        );
+    }
+
+    #[test]
+    fn ability_material_is_not_reuploaded_when_state_is_unchanged() {
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, AssetPlugin::default()))
+            .init_asset::<AbilityIcon>()
+            .insert_resource(Simulation(reef_sim::World::default()))
+            .add_systems(Update, update_abilities);
+        let handle = app
+            .world_mut()
+            .resource_mut::<Assets<AbilityIcon>>()
+            .add(AbilityIcon {
+                state: Vec4::ZERO,
+                image: default(),
+            });
+        app.world_mut()
+            .spawn((Ability::Crystal, MaterialNode(handle)));
+        app.update();
+        app.update();
+        app.world_mut()
+            .resource_mut::<Messages<AssetEvent<AbilityIcon>>>()
+            .clear();
+        for _ in 0..3 {
+            app.update();
+        }
+        assert!(
+            !app.world()
+                .resource::<Messages<AssetEvent<AbilityIcon>>>()
+                .iter_current_update_messages()
+                .any(|event| matches!(event, AssetEvent::Modified { .. }))
+        );
+    }
 
     #[test]
     fn tail_presets_and_instructions_are_localized() {
@@ -2150,6 +2395,52 @@ mod tests {
         });
         app.update();
         (app, pad)
+    }
+
+    #[test]
+    fn ability_icon_clicks_trigger_only_the_selected_action() {
+        use bevy::ecs::system::RunSystemOnce;
+
+        for action in [Action::Crystal, Action::Song, Action::Wave] {
+            let (mut app, _) = input_app();
+            let entities: Vec<_> = app
+                .world_mut()
+                .query_filtered::<Entity, With<Hit>>()
+                .iter(app.world())
+                .collect();
+            for entity in entities {
+                app.world_mut().despawn(entity);
+            }
+            app.world_mut().resource_mut::<SessionUi>().screen = Screen::Playing;
+            app.world_mut().resource_mut::<Focus>().last_screen = Some(Screen::Playing);
+            let area = rect(610.0, 754.0, 92.0, 92.0);
+            app.world_mut().spawn(Hit {
+                rect: area,
+                action,
+                index: 0,
+                slider: false,
+            });
+            let mut query = app
+                .world_mut()
+                .query_filtered::<&mut Window, With<PrimaryWindow>>();
+            let mut window = query.single_mut(app.world_mut()).unwrap();
+            let zoom = (window.width() / CANVAS_WIDTH).min(window.height() / CANVAS_HEIGHT);
+            let point = (Vec2::new(area.x + 46.0, area.y + 46.0)
+                + Vec2::new(
+                    (window.width() / zoom - CANVAS_WIDTH) / 2.0,
+                    (window.height() / zoom - CANVAS_HEIGHT) / 2.0,
+                ))
+                * zoom;
+            window.set_cursor_position(Some(point));
+            app.world_mut()
+                .resource_mut::<ButtonInput<MouseButton>>()
+                .press(MouseButton::Left);
+            app.world_mut().run_system_once(actions).unwrap();
+            let input = &app.world().resource::<PendingInput>().0;
+            assert_eq!(input.cast, matches!(action, Action::Crystal));
+            assert_eq!(input.toggle_song, matches!(action, Action::Song));
+            assert_eq!(input.wave, matches!(action, Action::Wave));
+        }
     }
 
     fn button(app: &mut App, pad: Entity, button: GamepadButton, value: f32) {

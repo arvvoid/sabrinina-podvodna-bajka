@@ -145,7 +145,8 @@ component!(FishSwimming {
     turn_in: f32 = 0.0,
     cruise_heading: f32 = 0.0,
     speed: f32 = 1.0,
-    tail_phase: f32 = 0.0
+    tail_phase: f32 = 0.0,
+    avoidance: V2 = v(0.0, 0.0)
 });
 component!(WaterContact {
     impulse: V2 = v(0.0, 0.0),

@@ -38,6 +38,14 @@ The game is playable already, but I am still working on it. There are animations
 
 ## Playing
 
+**Ability HUD:** three clickable square icons at the bottom center activate
+Crystal, Song and Wave. The supplied crystal, musical shell and wave artwork
+is packaged as small transparent icons. Keyboard/mouse bindings appear below
+each icon, switching to the active controller's labels and colors. Unavailable
+abilities are muted; cooldowns reveal the icon's color clockwise, with remaining
+time shown over it. Song uses the same sweep for its remaining/recharging energy.
+The sweep is shader-rendered: only small progress uniforms change, not textures.
+
 **Tail color:** open Settings → Tail color and choose **None**, **Natural green**,
 **Violet**, **Pink**, **Lagoon blue**, **Coral**, **Gold**, or **Magic** using the
 mouse, keyboard or controller. **None** keeps the original texture colors and

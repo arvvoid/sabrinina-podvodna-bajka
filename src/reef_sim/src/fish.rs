@@ -185,7 +185,11 @@ pub fn fish_swimming(world: &mut World, dt: f32) {
             award_rescue(world, i);
             fish = world.fish[i];
         }
-        desired_velocity = desired_velocity + separation;
+        // Damped steering removes abrupt flips as neighbours enter or leave the lookahead.
+        let response = 1.0 - (-5.0 * dt).exp();
+        fish.swimming.avoidance =
+            fish.swimming.avoidance + (separation - fish.swimming.avoidance) * response;
+        desired_velocity = desired_velocity + fish.swimming.avoidance;
         let mut heading = fish.motion.direction.y.atan2(fish.motion.direction.x);
         let target = desired_velocity.y.atan2(desired_velocity.x);
         let change = (target - heading).sin().atan2((target - heading).cos());
