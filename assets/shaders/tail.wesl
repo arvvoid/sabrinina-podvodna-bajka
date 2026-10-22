@@ -28,17 +28,26 @@ fn fragment(input: VertexOutput, @builtin(front_facing) front: bool) -> Fragment
             let local = (get_local_from_world(input.instance_index) * input.world_position).xyz;
             let center = local.xy * 0.22 + vec2<f32>(0.3, 0.25);
             let radius_squared = dot(center, center);
-            let angle = time * 0.35 - radius_squared * 5.0;
+            let angle = time * 0.55 - radius_squared * 6.0;
             let rotation = vec2<f32>(cos(angle), sin(angle));
             let swirl = vec2<f32>(
                 dot(center, vec2<f32>(rotation.x, -rotation.y)),
                 dot(center, rotation.yx));
-            let phase = swirl.x * 0.85 + swirl.y * 0.35 + local.z * 0.12 - time * 0.06;
-            let rainbow = 0.5 + 0.5 * cos(6.283185 * (phase + vec3<f32>(0.0, 0.666667, 0.333333)));
-            let saturated = rainbow * rainbow * rainbow;
-            hue = vec3<f32>(0.002) + saturated * (0.32 / max(saturated.r, max(saturated.g, saturated.b)));
+            let phase = fract(swirl.x * 0.95 + swirl.y * 0.4 + local.z * 0.12 - time * 0.09) * 3.0;
+            let violet = vec3<f32>(0.16, 0.008, 0.32);
+            let pink = vec3<f32>(0.32, 0.012, 0.13);
+            let turquoise = vec3<f32>(0.006, 0.22, 0.19);
+            let blend = smoothstep(0.0, 1.0, fract(phase));
+            hue = select(
+                select(mix(violet, pink, blend), mix(pink, turquoise, blend), phase >= 1.0),
+                mix(turquoise, violet, blend), phase >= 2.0);
             let detail = mix(0.65, 1.0, sqrt(max(source.r, max(source.g, source.b))));
-            pbr.material.emissive += vec4<f32>(hue * detail * 0.025, 0.0);
+            let rim = 1.0 - clamp(dot(pbr.N, pbr.V), 0.0, 1.0);
+            // Steady color-matched sheen, without pulsing brightness.
+            pbr.material.emissive += vec4<f32>(
+                hue * detail * (0.04 + rim * rim * 0.06), 0.0);
+            pbr.material.perceptual_roughness = max(0.5, pbr.material.perceptual_roughness * 0.88);
+            pbr.material.metallic = 0.2;
         }
         // Lift baked dark paint in perceptual space so it cannot bury the chosen hue.
         let detail = max(source.r, max(source.g, source.b));

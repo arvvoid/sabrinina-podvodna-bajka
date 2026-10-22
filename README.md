@@ -41,8 +41,9 @@ The game is playable already, but I am still working on it. There are animations
 **Tail color:** open Settings → Tail color and choose **None**, **Natural green**,
 **Violet**, **Pink**, **Lagoon blue**, **Coral**, **Gold**, or **Magic** using the
 mouse, keyboard or controller. **None** keeps the original texture colors and
-standard PBR lighting without recoloring. **Magic** creates a slowly flowing,
-deep, saturated rainbow without white gleams or bright glowing bands.
+standard PBR lighting without recoloring. **Magic** creates a subtle,
+continuous twirl of violet, pink and turquoise with a restrained colored sheen,
+without pulsing brightness, white gleams or pastel glare.
 One shared model-space pattern flows across the tail and fins without restarting
 at texture seams. It runs entirely in the shader: no extra textures, texture
 uploads or per-frame material changes. Reduced motion keeps the colors and
@@ -54,6 +55,7 @@ choose a preset.
 Sabrina's skin, costume, tail and hair use a softer satin finish. Roughness is
 limited after sampling the material maps, with normal-variation filtering to
 reduce tiny sparkling white reflections without changing the scene lighting.
+Only Magic gives the tail a shinier finish; the rest of Sabrina stays satin.
 
 The fish swim around during the quieter parts. Every now and then jellyfish show up and try to eat them. Each jellyfish has **100 health** and only retreats after you bring that down to zero. There is no timeout or limit to the number of fish it can eat. If you lose all the fish during a round, or Sabrina loses all her health, it is game over. Jellyfish get bigger as they eat, and Sabrina slowly recovers if she stays safe for a while.
 
@@ -96,7 +98,16 @@ HUD backgrounds and progress fills are semi-transparent. The lower-left foregrou
 
 Enable **Show FPS counter** in Settings to display a small, smoothed frames-per-second counter in the upper-right corner, below the HUD buttons. It is off by default, works in menus and during play, and is saved with your preferences.
 
-English, Croatian and Italian are available through the main menu's **Language… / Jezik… / Lingua…** button. Select a language by name in the chooser; a checkmark identifies the selected language. Graphics, sound, controls and best score are saved locally. The loading screen uses localized text and asset-loading progress, then waits for character instances before opening the menu. The first launch uses fullscreen and Balanced graphics. Balanced has subtle soft shadows; High adds finer shadows and 2× MSAA; Light reduces effects and disables shadows. **V-sync** is on by default. Bevy's `AutoVsync` selects relaxed FIFO when the surface supports it, otherwise standard FIFO. Relaxed FIFO presents late frames without waiting for another refresh, but those frames may tear; neither mode guarantees a frame rate. Turn V-sync off in Settings to request uncapped presentation and potentially reduce input latency (may tear; falls back to supported modes).
+English, Croatian and Italian are available through the main menu's **Language… / Jezik… / Lingua…** button. Select a language by name in the chooser; a checkmark identifies the selected language. Graphics, sound, controls and best score are saved locally. The loading screen uses localized text and asset-loading progress, then waits for character instances before opening the menu. The first launch uses fullscreen and Balanced graphics.
+
+| Graphics | Antialiasing | Shadows |
+|---|---|---|
+| Light | Off | Off |
+| Balanced | Lightweight FXAA | Soft, single 1024×1024 map |
+| High | 4× MSAA | More defined, soft single 2048×2048 map |
+
+Shadow contrast remains restrained, with neutral fill keeping shaded faces readable.
+**V-sync** is on by default. Bevy's `AutoVsync` selects relaxed FIFO when the surface supports it, otherwise standard FIFO. Relaxed FIFO presents late frames without waiting for another refresh, but those frames may tear; neither mode guarantees a frame rate. Turn V-sync off in Settings to request uncapped presentation and potentially reduce input latency (may tear; falls back to supported modes).
 
 ## Build and run
 

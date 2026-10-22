@@ -186,9 +186,9 @@ fn setup(
         .as_deref()
         .is_some_and(|k| k.starts_with("graphics-") || k.starts_with("pose-") || k == "rig");
     let casting = options.capture.as_deref() == Some("throw");
-    // One small shadow map is sufficient for this fixed, orthographic stage.
+    // A single cascade covers the fixed orthographic stage.
     commands.insert_resource(DirectionalLightShadowMap {
-        size: if preferences.quality == 2 { 1024 } else { 512 },
+        size: quality_shadow_map_size(preferences.quality),
     });
     commands.insert_resource(GlobalAmbientLight {
         color: Color::WHITE,
@@ -209,7 +209,7 @@ fn setup(
         ShadowFilteringMethod::Gaussian,
         quality_msaa(preferences.quality),
         Fxaa {
-            enabled: false,
+            enabled: preferences.quality == 1,
             ..default()
         },
         Projection::from(OrthographicProjection {
@@ -897,20 +897,23 @@ fn effects(
 fn uses_clock(kind: f32) -> bool {
     matches!(kind as i32, 0 | 1 | 3 | 7)
 }
-// Preserve total sunlight when changing shadow strength. Balanced contributes
-// only 18% shadowed light; broad fill keeps faces readable in the reef's shade.
+// Preserve total sunlight while giving shadows readable contrast.
 
 fn sunlight_weight(shadow_layer: bool, quality: u8) -> f32 {
-    let shadow = if quality == 2 { 0.22 } else { 0.18 };
+    let shadow = if quality == 2 { 0.5 } else { 0.35 };
     if shadow_layer { shadow } else { 1.0 - shadow }
 }
 
 fn quality_msaa(quality: u8) -> Msaa {
-    if quality > 0 {
-        Msaa::Sample2
+    if quality == 2 {
+        Msaa::Sample4
     } else {
         Msaa::Off
     }
+}
+
+fn quality_shadow_map_size(quality: u8) -> usize {
+    if quality == 2 { 2048 } else { 1024 }
 }
 
 fn lighting(
@@ -928,7 +931,7 @@ fn lighting(
     } else {
         1.0
     };
-    let size = if preferences.quality == 2 { 1024 } else { 512 };
+    let size = quality_shadow_map_size(preferences.quality);
     if shadow_map.size != size {
         shadow_map.size = size;
     }
@@ -947,7 +950,7 @@ fn lighting(
     }
     for (mut fxaa, mut msaa) in &mut cameras {
         let probe_fxaa = options.capture.is_some() && options.capture_fxaa;
-        let enabled = preferences.quality > 0 && probe_fxaa;
+        let enabled = preferences.quality == 1 || (preferences.quality > 0 && probe_fxaa);
         let samples = if probe_fxaa {
             Msaa::Off
         } else {
@@ -1209,16 +1212,62 @@ mod tests {
     }
 
     #[test]
-    fn balanced_has_low_cost_aa_and_conservative_shadows() {
+    fn graphics_tiers_have_distinct_aa_and_shadow_budgets() {
         assert_eq!(quality_msaa(0), Msaa::Off);
-        assert_eq!(quality_msaa(1), Msaa::Sample2);
-        assert_eq!(quality_msaa(2), Msaa::Sample2);
-        assert_eq!(sunlight_weight(true, 1), 0.18);
+        assert_eq!(quality_msaa(1), Msaa::Off);
+        assert_eq!(quality_msaa(2), Msaa::Sample4);
+        assert_eq!(sunlight_weight(true, 1), 0.35);
+        assert_eq!(sunlight_weight(true, 2), 0.5);
+        assert_eq!(quality_shadow_map_size(1), 1024);
+        assert_eq!(quality_shadow_map_size(2), 2048);
         for quality in 0..=2 {
             assert_eq!(
                 sunlight_weight(true, quality) + sunlight_weight(false, quality),
                 1.0
             );
+        }
+    }
+
+    #[test]
+    fn graphics_tiers_apply_at_startup_and_when_switching_live() {
+        use bevy::ecs::system::RunSystemOnce;
+
+        for initial in 0..=2 {
+            let mut app = App::new();
+            app.init_resource::<Assets<Mesh>>()
+                .init_resource::<Assets<WaterMaterial>>()
+                .init_resource::<Assets<StandardMaterial>>()
+                .init_resource::<Assets<ReefMaterial>>()
+                .init_resource::<SessionUi>()
+                .init_resource::<Presentation>()
+                .insert_resource(Preferences {
+                    quality: initial,
+                    ..default()
+                })
+                .init_resource::<Options>()
+                .add_systems(Startup, setup);
+            app.update();
+            for (step, quality) in [initial, 2, 0, 1].into_iter().enumerate() {
+                app.world_mut().resource_mut::<Preferences>().quality = quality;
+                if step > 0 {
+                    app.world_mut().run_system_once(lighting).unwrap();
+                }
+                let world = app.world_mut();
+                for (msaa, fxaa) in world.query::<(&Msaa, &Fxaa)>().iter(world) {
+                    assert_eq!(*msaa, quality_msaa(quality));
+                    assert_eq!(fxaa.enabled, quality == 1);
+                }
+                assert_eq!(
+                    world.resource::<DirectionalLightShadowMap>().size,
+                    quality_shadow_map_size(quality)
+                );
+                let mut casters = 0;
+                for (sun, light) in world.query::<(&Sun, &DirectionalLight)>().iter(world) {
+                    assert_eq!(light.shadow_maps_enabled, sun.shadow_layer && quality > 0);
+                    casters += usize::from(light.shadow_maps_enabled);
+                }
+                assert_eq!(casters, usize::from(quality > 0));
+            }
         }
     }
 

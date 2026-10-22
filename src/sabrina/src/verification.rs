@@ -604,7 +604,7 @@ fn check_pose(
         Res<crate::settings::Preferences>,
     ),
     lighting_checks: (
-        Query<&Msaa, With<Camera3d>>,
+        Query<(&Msaa, &bevy::anti_alias::fxaa::Fxaa), With<Camera3d>>,
         Query<(Entity, &Actor)>,
         Query<&Children>,
         Query<
@@ -625,12 +625,13 @@ fn check_pose(
     }
     if check.frame == 55 {
         let (cameras, roots, children, surfaces, lights, shadow_map) = lighting_checks;
-        assert!(cameras.iter().all(|aa| *aa
-            == if preferences.quality > 0 {
-                Msaa::Sample2
+        assert!(cameras.iter().all(|(aa, fxaa)| *aa
+            == if preferences.quality == 2 {
+                Msaa::Sample4
             } else {
                 Msaa::Off
-            }));
+            }
+            && fxaa.enabled == (preferences.quality == 1)));
         assert_eq!(
             lights
                 .iter()
@@ -640,7 +641,7 @@ fn check_pose(
         );
         assert_eq!(
             shadow_map.size,
-            if preferences.quality == 2 { 1024 } else { 512 }
+            if preferences.quality == 2 { 2048 } else { 1024 }
         );
         let mut excluded = 0;
         for (root, actor) in &roots {
@@ -655,7 +656,7 @@ fn check_pose(
         }
         assert!(excluded >= 9);
         println!(
-            "BEVY CHECK OK: quality AA, one small shadow map, shadow-free crystal and jellyfish"
+            "BEVY CHECK OK: quality AA, one tier-sized shadow map, shadow-free crystal and jellyfish"
         );
         assert!(
             ui_images
