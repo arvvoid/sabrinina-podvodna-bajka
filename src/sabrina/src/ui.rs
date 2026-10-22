@@ -41,7 +41,7 @@ struct UiRoot;
 pub(crate) struct FpsCounter;
 
 #[derive(Component)]
-struct LoadingStats;
+struct RuntimeStats;
 
 #[derive(Clone, Copy)]
 struct Rect {
@@ -189,7 +189,7 @@ impl Plugin for ReefUiPlugin {
             .init_resource::<Hints>()
             .add_systems(Startup, setup_fps)
             .add_systems(Update, update_fps)
-            .add_systems(Update, update_loading_stats.after(draw))
+            .add_systems(Update, update_runtime_stats.after(draw))
             .add_systems(
                 PreUpdate,
                 crate::controls::update
@@ -606,25 +606,7 @@ fn draw(
             let inlay = on_loading_image(image, rect(x, 719.0, 107.0, 2.0));
             builder.meter(inlay, Color::srgb(0.60, 0.98, 0.91), key);
         }
-        let stats_scale = (0.8 / zoom).max(1.0);
-        let stats_width = (600.0 * stats_scale).min(viewport_width - 48.0 * stats_scale);
-        let stats = builder.label(
-            rect(
-                (CANVAS_WIDTH + viewport_width) / 2.0 - stats_width - 24.0 * stats_scale,
-                (CANVAS_HEIGHT - viewport_height) / 2.0 + 20.0 * stats_scale,
-                stats_width,
-                300.0 * stats_scale,
-            ),
-            18.0 * stats_scale,
-            "",
-            None,
-        );
-        builder.commands.entity(stats).insert((
-            LoadingStats,
-            text_color,
-            shadow,
-            TextLayout::justify(Justify::Right),
-        ));
+        draw_runtime_stats(&mut builder, viewport_width, viewport_height, zoom, false);
         focus.count = 0;
         return;
     }
@@ -634,7 +616,16 @@ fn draw(
     match ui.screen {
         Screen::Menu => draw_menu(&mut builder, &preferences, renderer_label(&adapter)),
         Screen::Pause => draw_pause(&mut builder),
-        Screen::Settings => draw_settings(&mut builder, &preferences),
+        Screen::Settings => {
+            draw_settings(&mut builder, &preferences);
+            draw_runtime_stats(
+                &mut builder,
+                window.width() / zoom,
+                window.height() / zoom,
+                zoom,
+                true,
+            );
+        }
         Screen::Credits | Screen::Help => draw_help_or_credits(&mut builder, ui.screen),
         Screen::GameOver => draw_game_over(&mut builder),
         Screen::Victory => draw_victory(&mut builder),
@@ -645,8 +636,51 @@ fn draw(
     focus.index = focus.index.min(focus.count.saturating_sub(1));
 }
 
-fn update_loading_stats(
-    mut texts: Query<&mut Text, With<LoadingStats>>,
+fn draw_runtime_stats(
+    builder: &mut Builder<'_, '_, '_>,
+    viewport_width: f32,
+    viewport_height: f32,
+    zoom: f32,
+    compact: bool,
+) {
+    let stats_scale = (0.8 / zoom).max(1.0);
+    let stats_width = if compact {
+        735.0 * stats_scale
+    } else {
+        600.0 * stats_scale
+    }
+    .min(viewport_width - 48.0 * stats_scale);
+    let x = (CANVAS_WIDTH + viewport_width) / 2.0 - stats_width - 24.0 * stats_scale;
+    let y = (CANVAS_HEIGHT - viewport_height) / 2.0
+        + if compact {
+            12.0 * stats_scale
+        } else {
+            20.0 * stats_scale
+        };
+    let height = if compact {
+        175.0 * stats_scale
+    } else {
+        300.0 * stats_scale
+    };
+    let font_size = if compact {
+        12.5 * stats_scale
+    } else {
+        18.0 * stats_scale
+    };
+    let stats = builder.label(rect(x, y, stats_width, height), font_size, "", None);
+    builder.commands.entity(stats).insert((
+        RuntimeStats,
+        TextColor(Color::srgb(1.0, 0.92, 0.60)),
+        TextShadow {
+            offset: Vec2::splat(2.0 / zoom),
+            color: Color::BLACK,
+        },
+        TextLayout::justify(Justify::Right),
+    ));
+}
+
+fn update_runtime_stats(
+    mut texts: Query<&mut Text, With<RuntimeStats>>,
     window: Single<&Window, With<PrimaryWindow>>,
     adapter: Res<RenderAdapterInfo>,
     options: Res<Options>,
@@ -680,12 +714,22 @@ fn update_loading_stats(
         Style::PlayStation => "PlayStation",
         Style::Generic => "Generic gamepad",
     };
+    let window_system = if cfg!(target_os = "linux") {
+        format!(
+            "{}: {}\n",
+            tr("Window system", lang),
+            options.window_system_label()
+        )
+    } else {
+        String::new()
+    };
     let value = format!(
-        "{} ({}) · {} × {} px\n{}: {}\n{} · {} draw\nGPU: {}\n{}: {} {}\n{}: {} + {}\n{}: {} · {} ({}): {}\n{}: {}/{} · {}: {}/{}",
+        "{} ({}) · {} × {} px\n{}{}: {}\n{} · {} draw\nGPU: {}\n{}: {} {}\n{}: {} + {}\n{}: {} · {} ({}): {}\n{}: {}/{} · {}: {}/{}",
         std::env::consts::OS,
         std::env::consts::ARCH,
         window.physical_width(),
         window.physical_height(),
+        window_system,
         tr("Build", lang),
         crate::build_info::menu_label(),
         renderer_label(&adapter),
@@ -904,7 +948,7 @@ fn draw_settings(builder: &mut Builder<'_, '_, '_>, preferences: &Preferences) {
     let lang = builder.lang;
     builder.panel(rect(270.0, 70.0, 1060.0, 760.0));
     builder.label(
-        rect(315.0, 103.0, 970.0, 60.0),
+        rect(315.0, 103.0, 500.0, 60.0),
         36.0,
         tr("Make yourself at home", lang),
         None,

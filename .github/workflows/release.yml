@@ -120,7 +120,7 @@ jobs:
           ### Downloads
 
           - **Linux x86_64:** `.tar.gz` for Ubuntu 24.04 or compatible newer systems.
-            Requires Vulkan drivers, ALSA, libudev and X11 runtime libraries.
+            Requires Vulkan drivers, ALSA, libudev and X11/Wayland runtime libraries.
           - **Windows x86_64:** `.zip`; extract and open `sabrina.exe`.
           - **macOS Apple Silicon:** `.tar.gz`; extract and open `Sabrina.app`.
             Unsigned and not notarized; follow your system's security guidance.

@@ -1,6 +1,7 @@
 {
   "Ready!": ["Ready!", "Spremno!", "Pronto!"],
   "Build": ["Build", "Verzija", "Versione"],
+  "Window system": ["Window system", "Prozorski sustav", "Sistema di finestre"],
   "Driver": ["Driver", "Upravljački program", "Driver"],
   "Input": ["Input", "Ulaz", "Input"],
   "Keyboard / mouse": ["Keyboard / mouse", "Tipkovnica / miš", "Tastiera / mouse"],
