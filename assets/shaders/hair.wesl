@@ -5,12 +5,15 @@ import bevy_pbr::render::{
     pbr_fragment::pbr_input_from_standard_material,
     pbr_functions::{alpha_discard, apply_pbr_lighting, main_pass_post_lighting_processing},
 };
+import super::mermaid_surface::satin_roughness;
 
 @group(constants::MATERIAL_BIND_GROUP) @binding(100) var<uniform> settings: vec4<f32>;
 
 @fragment
 fn fragment(input: VertexOutput, @builtin(front_facing) front: bool) -> FragmentOutput {
     var pbr = pbr_input_from_standard_material(input, front);
+    pbr.material.perceptual_roughness = satin_roughness(pbr.N, pbr.material.perceptual_roughness);
+    pbr.material.reflectance *= 0.55;
     pbr.material.base_color = alpha_discard(
         pbr.material.flags, pbr.material.alpha_cutoff, pbr.material.base_color);
     pbr.material.base_color = vec4<f32>(

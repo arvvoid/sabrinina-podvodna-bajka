@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Luka Dežulović
 // SPDX-License-Identifier: Apache-2.0
-//! Tail-only recoloring keeps the authored textures and standard PBR lighting.
+//! Mermaid satin shading with tail-only recoloring and authored texture detail.
 use crate::{
     assets::{Actor, CharacterSurface},
     presentation::Presentation,
@@ -31,6 +31,7 @@ pub(crate) type TailMaterial = ExtendedMaterial<StandardMaterial, TailExtension>
 struct TailSurface {
     normal: Handle<TailMaterial>,
     hurt: Handle<TailMaterial>,
+    tintable: bool,
 }
 
 // These authored parts are the tail body, flukes, hip fins and lower fins.
@@ -88,19 +89,24 @@ fn bind(
     preferences: Res<Preferences>,
 ) {
     for (entity, surface, name) in &surfaces {
-        if surface.actor != Actor::Sabrina || !is_tail(&name.0) {
+        if surface.actor != Actor::Sabrina || name.0 == "Sabrina_Hair" {
             continue;
         }
+        let tintable = is_tail(&name.0);
         let (Some(normal), Some(hurt)) =
             (standard.get(&surface.normal), standard.get(&surface.hurt))
         else {
-            warn!("Tail surface {} has no loaded base materials", name.0);
+            warn!("Mermaid surface {} has no loaded base materials", name.0);
             continue;
         };
         let normal = materials.add(ExtendedMaterial {
             base: normal.clone(),
             extension: TailExtension {
-                color: tint(&preferences),
+                color: if tintable {
+                    tint(&preferences)
+                } else {
+                    Vec4::ZERO
+                },
             },
         });
         let hurt = materials.add(ExtendedMaterial {
@@ -110,7 +116,14 @@ fn bind(
         commands
             .entity(entity)
             .remove::<MeshMaterial3d<StandardMaterial>>()
-            .insert((MeshMaterial3d(normal.clone()), TailSurface { normal, hurt }));
+            .insert((
+                MeshMaterial3d(normal.clone()),
+                TailSurface {
+                    normal,
+                    hurt,
+                    tintable,
+                },
+            ));
     }
 }
 
@@ -125,7 +138,8 @@ fn update(
     let hurt = vitality.hurt_flash > 0.0 || vitality.stunned > 0.0;
     for (surface, mut handle) in &mut surfaces {
         // Do not mark assets changed (and re-upload them) on unchanged frames.
-        if let Some(color) = color
+        if surface.tintable
+            && let Some(color) = color
             && materials
                 .get(&surface.normal)
                 .is_some_and(|material| material.extension.color != color)
@@ -175,7 +189,7 @@ mod tests {
     }
 
     #[test]
-    fn only_tail_surfaces_are_bound_and_other_materials_are_untouched() {
+    fn satin_shading_preserves_maps_and_only_tail_surfaces_are_recolored() {
         let mut app = App::new();
         app.add_plugins((MinimalPlugins, AssetPlugin::default()))
             .init_asset::<StandardMaterial>()
@@ -204,6 +218,7 @@ mod tests {
                 ..base
             });
         let mut tails = Vec::new();
+        let mut bodies = Vec::new();
         let mut others = Vec::new();
         for name in [
             "Sabrina_Hair",
@@ -233,6 +248,8 @@ mod tests {
                 .id();
             if is_tail(name) {
                 tails.push(entity);
+            } else if name != "Sabrina_Hair" {
+                bodies.push(entity);
             } else {
                 others.push(entity);
             }
@@ -249,7 +266,7 @@ mod tests {
                 normal
             );
         }
-        for entity in &tails {
+        for entity in tails.iter().chain(&bodies) {
             assert!(
                 app.world()
                     .get::<MeshMaterial3d<StandardMaterial>>(*entity)
@@ -273,7 +290,7 @@ mod tests {
         }
         app.world_mut().resource_mut::<Preferences>().tail_color = TailColor::Custom([255, 0, 128]);
         app.update();
-        for entity in &tails {
+        for entity in tails.iter().chain(&bodies) {
             let surface = app.world().get::<TailSurface>(*entity).unwrap();
             assert_eq!(
                 app.world()
@@ -282,7 +299,11 @@ mod tests {
                     .unwrap()
                     .extension
                     .color,
-                tint(app.world().resource::<Preferences>())
+                if surface.tintable {
+                    tint(app.world().resource::<Preferences>())
+                } else {
+                    Vec4::ZERO
+                }
             );
         }
         app.world_mut()
@@ -292,7 +313,7 @@ mod tests {
             .vitality
             .hurt_flash = 1.0;
         app.update();
-        for entity in &tails {
+        for entity in tails.iter().chain(&bodies) {
             let surface = app.world().get::<TailSurface>(*entity).unwrap();
             assert_eq!(
                 app.world()
@@ -319,7 +340,7 @@ mod tests {
             .hurt_flash = 0.0;
         app.world_mut().resource_mut::<Preferences>().tail_color = TailColor::None;
         app.update();
-        for entity in &tails {
+        for entity in tails.iter().chain(&bodies) {
             let surface = app.world().get::<TailSurface>(*entity).unwrap();
             assert_eq!(
                 app.world()
@@ -355,6 +376,7 @@ mod tests {
                 );
             }
         }
-        assert_eq!(app.world().resource::<Assets<TailMaterial>>().len(), 12);
+        assert_eq!(bodies.len(), 5);
+        assert_eq!(app.world().resource::<Assets<TailMaterial>>().len(), 22);
     }
 }

@@ -7,14 +7,16 @@ import bevy_pbr::render::{
     pbr_functions::{alpha_discard, apply_pbr_lighting, main_pass_post_lighting_processing},
 };
 import bevy_pbr::render::mesh_view_bindings::globals;
+import super::mermaid_surface::satin_roughness;
 
 @group(constants::MATERIAL_BIND_GROUP) @binding(100) var<uniform> color: vec4<f32>;
 
 @fragment
 fn fragment(input: VertexOutput, @builtin(front_facing) front: bool) -> FragmentOutput {
     var pbr = pbr_input_from_standard_material(input, front);
-    let normal_dx = dpdx(pbr.N);
-    let normal_dy = dpdy(pbr.N);
+    pbr.material.perceptual_roughness = satin_roughness(pbr.N, pbr.material.perceptual_roughness);
+    pbr.material.reflectance *= 0.45;
+    pbr.material.metallic = min(pbr.material.metallic, 0.15);
     pbr.material.base_color = alpha_discard(
         pbr.material.flags, pbr.material.alpha_cutoff, pbr.material.base_color);
     if color.w > 0.0 {
@@ -26,24 +28,17 @@ fn fragment(input: VertexOutput, @builtin(front_facing) front: bool) -> Fragment
             let local = (get_local_from_world(input.instance_index) * input.world_position).xyz;
             let center = local.xy * 0.22 + vec2<f32>(0.3, 0.25);
             let radius_squared = dot(center, center);
-            let angle = time * 0.85 - radius_squared * 5.0;
+            let angle = time * 0.35 - radius_squared * 5.0;
             let rotation = vec2<f32>(cos(angle), sin(angle));
             let swirl = vec2<f32>(
                 dot(center, vec2<f32>(rotation.x, -rotation.y)),
                 dot(center, rotation.yx));
-            let phase = swirl.x * 0.85 + swirl.y * 0.35 + local.z * 0.12 - time * 0.16;
+            let phase = swirl.x * 0.85 + swirl.y * 0.35 + local.z * 0.12 - time * 0.06;
             let rainbow = 0.5 + 0.5 * cos(6.283185 * (phase + vec3<f32>(0.0, 0.666667, 0.333333)));
-            hue = mix(vec3<f32>(0.004), vec3<f32>(0.18), rainbow * rainbow);
-            let gleam_wave = sin(phase * 6.283185 + swirl.y * 4.0 - time * 1.2);
-            let gleam_width = max(fwidth(gleam_wave), 0.025);
-            let gleam = smoothstep(0.4 - gleam_width, 1.0 + gleam_width, gleam_wave);
-            let rim = 1.0 - clamp(dot(pbr.N, pbr.V), 0.0, 1.0);
+            let saturated = rainbow * rainbow * rainbow;
+            hue = vec3<f32>(0.002) + saturated * (0.32 / max(saturated.r, max(saturated.g, saturated.b)));
             let detail = mix(0.65, 1.0, sqrt(max(source.r, max(source.g, source.b))));
-            // Restrained emission keeps the moving shine visible without washing out scales.
-            pbr.material.emissive += vec4<f32>(
-                mix(hue, vec3<f32>(0.18), gleam * 0.15)
-                    * detail * (0.04 + gleam * 0.18 + rim * rim * 0.10),
-                0.0);
+            pbr.material.emissive += vec4<f32>(hue * detail * 0.025, 0.0);
         }
         // Lift baked dark paint in perceptual space so it cannot bury the chosen hue.
         let detail = max(source.r, max(source.g, source.b));
@@ -52,13 +47,6 @@ fn fragment(input: VertexOutput, @builtin(front_facing) front: bool) -> Fragment
         let recolored = hue * brightness;
         pbr.material.base_color = vec4<f32>(
             recolored, pbr.material.base_color.a);
-        // Filter subpixel normal-map highlights, after the roughness texture is sampled.
-        let roughness = max(pbr.material.perceptual_roughness, select(0.42, 0.30, magic));
-        let variance = min(0.15 * (dot(normal_dx, normal_dx) + dot(normal_dy, normal_dy)), 0.18);
-        let roughness_squared = roughness * roughness;
-        let filtered = sqrt(sqrt(min(roughness_squared * roughness_squared + variance, 1.0)));
-        pbr.material.perceptual_roughness = filtered;
-        pbr.material.reflectance *= select(0.6, 0.55, magic);
     }
     var output: FragmentOutput;
     output.color = apply_pbr_lighting(pbr);

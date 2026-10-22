@@ -46,6 +46,7 @@ mod tests {
             "shaders/water.wesl",
             "shaders/crystal.wesl",
             "shaders/tail.wesl",
+            "shaders/mermaid_surface.wesl",
             "shaders/caustics.wesl",
             "shaders/surface_caustics.wesl",
             "shaders/particles.wesl",
