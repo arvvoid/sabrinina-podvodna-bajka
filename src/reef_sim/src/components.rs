@@ -178,8 +178,6 @@ component!(JellyBehaviour {
     eaten: i32 = 0,
     kind: i32 = 0,
     exit_side: i32 = 1,
-    song_check: f32 = 0.0,
-    song_interest: f32 = 0.0,
     repel_flash: f32 = 0.0,
     health: f32 = 100.0,
     bubble: f32 = 0.0,

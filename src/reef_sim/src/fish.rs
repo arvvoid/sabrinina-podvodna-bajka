@@ -116,10 +116,7 @@ pub fn fish_swimming(world: &mut World, dt: f32) {
         }
         let away = fish.motion.pos - world.sabrina.motion.pos;
         let radius = song_radius(world);
-        let hearing = world.sabrina.song.active
-            && world.sabrina.song.strength > 0.05
-            && away.length() < radius
-            && fish.rescue.wave_flow <= 0.0;
+        let hearing = song_reaches(world, fish.motion.pos) && fish.rescue.wave_flow <= 0.0;
         if hearing {
             let wake = if world.sabrina.motion.velocity.length() > 0.4 {
                 world.sabrina.motion.velocity.unit() * -(radius * 0.22).min(1.4)

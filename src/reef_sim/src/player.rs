@@ -32,6 +32,12 @@ pub fn song_radius(world: &World) -> f32 {
     }
 }
 
+pub fn song_reaches(world: &World, position: V2) -> bool {
+    world.sabrina.song.active
+        && world.sabrina.song.strength > 0.05
+        && (position - world.sabrina.motion.pos).length() < song_radius(world)
+}
+
 pub fn toggle_song(world: &mut World) -> bool {
     let sabrina = &mut world.sabrina;
     if sabrina.song.active {

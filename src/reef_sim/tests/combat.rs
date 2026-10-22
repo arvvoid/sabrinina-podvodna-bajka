@@ -24,6 +24,114 @@ fn encounter(gentle: bool) -> World {
 }
 
 #[test]
+fn song_reliably_lures_all_visitors_only_inside_the_fish_radius() {
+    for gentle in [false, true] {
+        for energy in [100.0, 25.0, 1.0] {
+            for state in [JellyState::Hungry, JellyState::Arriving] {
+                for inside in [false, true] {
+                    let mut world = four_visitors();
+                    world.settings.gentle = gentle;
+                    world.sabrina.motion.pos = v(0.0, 8.0);
+                    world.sabrina.song.active = true;
+                    world.sabrina.song.strength = 1.0;
+                    world.sabrina.song.energy = energy;
+                    let radius = song_radius(&world);
+                    let position = v(radius + if inside { -0.01 } else { 0.01 }, 8.0);
+                    assert_eq!(song_reaches(&world, position), inside);
+                    for fish in &mut world.fish {
+                        fish.life.active = false;
+                    }
+                    for jelly in &mut world.jelly {
+                        jelly.behaviour.state = state;
+                        jelly.behaviour.turn_in = 100.0;
+                        jelly.behaviour.exit_side = -1;
+                        jelly.motion.pos = position;
+                        jelly.motion.direction = v(1.0, 0.0);
+                        jelly.motion.velocity = v(0.0, 0.0);
+                    }
+                    for slot in 0..JELLY_COUNT {
+                        let mut single = world.clone();
+                        for (index, jelly) in single.jelly.iter_mut().enumerate() {
+                            if index != slot {
+                                jelly.behaviour.state = JellyState::Hidden;
+                            }
+                        }
+                        jellyfish::jellyfish_and_contacts(
+                            &mut single,
+                            0.01,
+                            &mut Events::default(),
+                        );
+                        assert_eq!(
+                            single.jelly[slot].motion.velocity.x < 0.0,
+                            inside,
+                            "{gentle}, {energy}, {state:?}, inside={inside}"
+                        );
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn song_lure_overrides_fish_pursuit_and_stops_when_radius_shrinks_or_song_stops() {
+    for stop in [false, true] {
+        let mut world = encounter(true);
+        world.sabrina.motion.pos = v(0.0, 8.0);
+        world.sabrina.song.active = true;
+        world.sabrina.song.strength = 1.0;
+        world.jelly[0].motion.pos = v(4.5, 8.0);
+        world.jelly[0].motion.direction = v(1.0, 0.0);
+        world.jelly[0].behaviour.turn_in = 100.0;
+        world.jelly[0].behaviour.kind = 1;
+        world.fish[0].motion.pos = v(8.0, 8.0);
+        jellyfish::jellyfish_and_contacts(&mut world, 0.01, &mut Events::default());
+        assert!(world.jelly[0].motion.velocity.x < 0.0);
+        if stop {
+            world.sabrina.song.active = false;
+        } else {
+            world.sabrina.song.energy = 1.0;
+        }
+        // Compare steering from rest so old momentum cannot masquerade as attraction.
+        world.jelly[0].motion.velocity = v(0.0, 0.0);
+        jellyfish::jellyfish_and_contacts(&mut world, 0.01, &mut Events::default());
+        assert!(world.jelly[0].motion.velocity.x > 0.0);
+    }
+}
+
+#[test]
+fn song_does_not_override_bubbles_retreat_or_arrival_completion() {
+    for state in [JellyState::Hidden, JellyState::Leaving, JellyState::Hungry] {
+        let mut world = encounter(true);
+        world.sabrina.motion.pos = v(0.0, 8.0);
+        world.sabrina.song.active = true;
+        world.sabrina.song.strength = 1.0;
+        world.jelly[0].motion.pos = v(4.0, 8.0);
+        world.jelly[0].behaviour.state = state;
+        world.jelly[0].behaviour.exit_side = 1;
+        if state == JellyState::Hungry {
+            world.jelly[0].behaviour.bubble = 3.0;
+        }
+        let before = world.jelly[0].motion.pos.x;
+        jellyfish::jellyfish_and_contacts(&mut world, 0.01, &mut Events::default());
+        assert!(world.jelly[0].motion.pos.x >= before);
+    }
+    let mut world = encounter(true);
+    world.sabrina.motion.pos = v(0.0, 8.0);
+    world.sabrina.song.active = true;
+    world.sabrina.song.strength = 1.0;
+    world.jelly[0].motion.pos = v(4.0, 8.0);
+    world.jelly[0].behaviour.state = JellyState::Arriving;
+    world.jelly[0].behaviour.time = 4.5;
+    jellyfish::jellyfish_and_contacts(&mut world, 0.01, &mut Events::default());
+    assert_eq!(world.jelly[0].behaviour.state, JellyState::Hungry);
+    let edge = world.sabrina.motion.pos + v(song_radius(&world), 0.0);
+    assert!(!song_reaches(&world, edge));
+    world.sabrina.song.strength = 0.05;
+    assert!(!song_reaches(&world, world.sabrina.motion.pos));
+}
+
+#[test]
 fn crystal_hit_bubbles_instead_of_dispatching_and_returns_without_a_second_hit() {
     let mut world = encounter(true);
     world.crystal.magic.state = Spell::Flying;
