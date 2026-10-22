@@ -1,6 +1,11 @@
 {
-  "Ready!": ["Ready!", "Spremno!", "Pronto!"],
+  "Press any key to continue": [
+    "Press any key to continue",
+    "Pritisni bilo koju tipku za nastavak",
+    "Premi un tasto qualsiasi per continuare"
+  ],
   "Build": ["Build", "Verzija", "Versione"],
+  "Window system": ["Window system", "Prozorski sustav", "Sistema di finestre"],
   "Driver": ["Driver", "Upravljački program", "Driver"],
   "Input": ["Input", "Ulaz", "Input"],
   "Keyboard / mouse": ["Keyboard / mouse", "Tipkovnica / miš", "Tastiera / mouse"],

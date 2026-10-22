@@ -266,8 +266,8 @@ pub(crate) fn finish_load(
         return;
     }
     ui.loaded = true;
-    ui.screen = Screen::Menu;
     if let Some(kind) = &options.capture {
+        ui.screen = Screen::Menu;
         let short = kind
             .strip_prefix("hr-")
             .or_else(|| kind.strip_prefix("it-"))

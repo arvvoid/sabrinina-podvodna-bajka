@@ -48,9 +48,17 @@ use bevy::{
 };
 
 fn main() {
+    let options = app::Options::from_args();
+    #[cfg(target_os = "linux")]
+    options.apply_window_system_override();
     let mut app = App::new();
     diagnostics::init(&mut app);
-    let options = app::Options::from_args();
+    #[cfg(target_os = "linux")]
+    info!("WINDOW SYSTEM: {}", options.window_system_label());
+    #[cfg(not(target_os = "linux"))]
+    if options.window_system.is_some() {
+        warn!("Ignoring --x11/--wayland: window-system overrides are only available on Linux");
+    }
     let mut prefs = settings::Preferences::load();
     if let Some(kind) = &options.capture {
         if kind.starts_with("hr-") {

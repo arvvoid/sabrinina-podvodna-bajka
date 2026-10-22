@@ -88,7 +88,7 @@ Install [Rust](https://rustup.rs/) first. I pin the toolchain and dependencies i
 On Debian/Ubuntu, install the native dependencies:
 
 ```sh
-sudo apt install build-essential pkg-config libasound2-dev libudev-dev libx11-dev libxrandr-dev libxi-dev libgl1-mesa-dev
+sudo apt install build-essential pkg-config libasound2-dev libudev-dev libx11-dev libxrandr-dev libxi-dev libgl1-mesa-dev libwayland-dev libxkbcommon-dev
 ./tools/build.sh
 ./tools/run.sh
 ```
@@ -123,6 +123,8 @@ These are just results from machines I have tested, not proper comparable benchm
 
 Defaults are Direct3D 12 on Windows, Vulkan on Linux and Metal on macOS. See the runtime-options table for supported overrides. An unsupported flag warns and uses the platform default; if a selected backend cannot initialize, the game does not silently switch. OpenGL requires a compatible driver and, on Unix-like systems, an available EGL implementation.
 
+Linux builds support both native Wayland and X11. By default, the window library automatically prefers Wayland when `WAYLAND_DISPLAY` or `WAYLAND_SOCKET` is nonempty, including when Xwayland also provides `DISPLAY`; otherwise it uses X11 when `DISPLAY` is available. Use `--x11` or `--wayland` to force a choice (`--X11` and `--Wayland` are accepted too). `--x11` requires `DISPLAY` and ignores Wayland session variables; `--wayland` requires a Wayland session and never falls back to X11. These flags select the window system independently of the Vulkan/OpenGL renderer and GPU. The loading screen shows the detected window system alongside the resolution and graphics-device details.
+
 On multi-GPU/eGPU systems, `WGPU_ADAPTER_NAME` requests an adapter by a case-insensitive part of its name, without changing the backend. For example, on Linux: `WGPU_ADAPTER_NAME="RTX 3070 Laptop" cargo run --locked --release -p sabrina`. Check the startup `RENDER DEVICE` line: Bevy falls back to automatic selection if no compatible adapter matches. Selecting the internal GPU can work around an eGPU presentation/driver failure without disconnecting the eGPU.
 
 Windows x86_64 MSVC builds embed the modern DXC shader compiler in the executable. No separate `dxcompiler.dll` or installed Windows SDK is needed to play. This avoids the legacy FXC rendering path, which produced dark silhouettes on the tested NVIDIA Windows machine. To build on Windows, install Rust and Visual Studio's **Desktop development with C++** workload, including a Windows SDK and the **C++ ATL for latest build tools** component, then run the Cargo command above in PowerShell.
@@ -131,7 +133,7 @@ Windows release builds open only the game window, without an extra console; debu
 
 I embed all game assets directly into the executable. You do not need to distribute an `assets/` folder or extract files somewhere before playing. This applies to local and tagged release builds. Rebuild after changing assets, or set `SABRINA_ASSETS=/absolute/path/to/assets` to use an external asset tree while developing artwork. Blender is needed only to edit artwork.
 
-The loading screen is not just a fake progress bar. It follows asset loading, creation of the characters and graphics warm-up. Models (including render LODs), textures, UI images, fonts, audio and custom shaders are preloaded and retained. Actors and effects render behind the splash while the current graphics pipelines compile; the menu opens only after the pipeline queue settles. This reduces first-use stalls, but changing graphics settings or encountering a new rendering variant can still require additional driver work. The main-menu title artwork follows the selected English, Croatian or Italian language.
+The loading screen is not just a fake progress bar. It follows asset loading, creation of the characters and graphics warm-up. Models (including render LODs), textures, UI images, fonts, audio and custom shaders are preloaded and retained. Actors and effects render behind the splash while the current graphics pipelines compile; once loading is complete, the screen waits for a key, mouse button or controller button before opening the menu, so there is time to read the progress and diagnostics. Changing graphics settings or encountering a new rendering variant can still require additional driver work. The main-menu title artwork follows the selected English, Croatian or Italian language.
 
 The loading progress fills the artwork's two decorative inlays around the central shell. The live phase and percentage appear above the existing “Loading…” lettering, without an opaque panel. Loading text and corner diagnostics use larger warm-gold lettering with solid black drop shadows that remain two logical window pixels wide when the UI scales. On wide windows the artwork's crop shifts to keep its progress area visible; the fill remains aligned with the original ornament. A corner overlay reports physical window resolution, OS/architecture, build, actual graphics adapter/backend/driver, draw mode, controller input backend, connected controller names, active control hints and asset/pipeline counts. EGL is a graphics-context interface, not a controller backend; the overlay reports the graphics API returned by the adapter rather than guessing an EGL/WGL implementation.
 
@@ -159,6 +161,7 @@ Pass flags after the executable name, for example `./tools/run.sh --vulkan --cap
 | `--vulkan` | Use Vulkan on Linux (default), or as a test override on Windows and macOS. |
 | `--metal` | Use Metal on macOS (the default); ignored elsewhere. |
 | `--opengl` | Use wgpu's GL/GLES backend on Windows, Linux and macOS for testing; requires a compatible driver and, on Unix-like systems, EGL. |
+| `--x11`, `--wayland` | Linux only: force the X11 or Wayland window system instead of automatic desktop detection. Uppercase `--X11` and `--Wayland` spellings are also accepted. |
 | `--direct-draw` | Force regular draw calls instead of Bevy's indirect drawing (the default on DX12). |
 | `--indirect-draw` | Force Bevy's indirect drawing, overriding the DX12 direct-draw default. Indirect drawing remains the default on other backends. If both draw flags are passed, the last one wins. |
 | `--wgi` | Windows only: use Bevy/GilRs Windows Gaming Input instead of native XInput. Allows direct-device testing; native XInput is the default for Xbox and Steam Input. |

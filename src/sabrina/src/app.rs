@@ -38,6 +38,29 @@ impl RenderBackend {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum WindowSystem {
+    X11,
+    Wayland,
+}
+
+impl WindowSystem {
+    fn from_flag(argument: &str) -> Option<Self> {
+        match argument {
+            "--x11" | "--X11" => Some(Self::X11),
+            "--wayland" | "--Wayland" => Some(Self::Wayland),
+            _ => None,
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::X11 => "X11",
+            Self::Wayland => "Wayland",
+        }
+    }
+}
+
 #[derive(Resource, Default)]
 pub struct Options {
     pub capture: Option<String>,
@@ -49,6 +72,8 @@ pub struct Options {
     pub direct_draw: bool,
     pub backend: Option<RenderBackend>,
     pub wgi: bool,
+    pub window_system: Option<WindowSystem>,
+    pub window_system_conflict: bool,
 }
 
 impl Options {
@@ -67,6 +92,45 @@ impl Options {
             options.capture_frames = Some(directory);
         }
         options
+    }
+
+    pub fn window_system_label(&self) -> &'static str {
+        self.window_system
+            .or_else(|| {
+                detected_window_system(
+                    has_nonempty_env("WAYLAND_DISPLAY"),
+                    has_nonempty_env("WAYLAND_SOCKET"),
+                    has_nonempty_env("DISPLAY"),
+                )
+            })
+            .map_or("Unknown", WindowSystem::label)
+    }
+
+    #[cfg(target_os = "linux")]
+    pub fn apply_window_system_override(&self) {
+        assert!(
+            !self.window_system_conflict,
+            "Use either --x11 or --wayland, not both"
+        );
+        match self.window_system {
+            Some(WindowSystem::X11) => {
+                assert!(
+                    has_nonempty_env("DISPLAY"),
+                    "--x11 requires DISPLAY to be set"
+                );
+                // SAFETY: called before Bevy starts any threads, so no other thread can
+                // read or mutate the process environment while these values are removed.
+                unsafe {
+                    std::env::remove_var("WAYLAND_DISPLAY");
+                    std::env::remove_var("WAYLAND_SOCKET");
+                }
+            }
+            Some(WindowSystem::Wayland) => assert!(
+                has_nonempty_env("WAYLAND_DISPLAY") || has_nonempty_env("WAYLAND_SOCKET"),
+                "--wayland requires WAYLAND_DISPLAY or WAYLAND_SOCKET to be set"
+            ),
+            None => {}
+        }
     }
 
     fn from_arguments(
@@ -95,6 +159,15 @@ impl Options {
             if let Some(backend) = RenderBackend::from_flag(argument) {
                 options.backend = Some(backend);
             }
+            if let Some(window_system) = WindowSystem::from_flag(argument) {
+                if options
+                    .window_system
+                    .is_some_and(|previous| previous != window_system)
+                {
+                    options.window_system_conflict = true;
+                }
+                options.window_system = Some(window_system);
+            }
             if let Some(kind) = argument.strip_prefix("--capture-") {
                 options.capture = Some(kind.into());
                 options.school = kind == "school";
@@ -104,6 +177,24 @@ impl Options {
             crate::selected_backend(platform, options.backend) == RenderBackend::Dx12
         });
         options
+    }
+}
+
+fn has_nonempty_env(name: &str) -> bool {
+    std::env::var_os(name).is_some_and(|value| !value.is_empty())
+}
+
+fn detected_window_system(
+    wayland_display: bool,
+    wayland_socket: bool,
+    x11_display: bool,
+) -> Option<WindowSystem> {
+    if wayland_display || wayland_socket {
+        Some(WindowSystem::Wayland)
+    } else if x11_display {
+        Some(WindowSystem::X11)
+    } else {
+        None
     }
 }
 
@@ -517,6 +608,44 @@ mod tests {
         assert!(options.wgi);
         assert_eq!(options.backend, Some(RenderBackend::Vulkan));
         assert!(!options.direct_draw);
+    }
+
+    #[test]
+    fn window_system_flags_parse_both_requested_casings() {
+        for (flag, window_system) in [
+            ("--x11", WindowSystem::X11),
+            ("--X11", WindowSystem::X11),
+            ("--wayland", WindowSystem::Wayland),
+            ("--Wayland", WindowSystem::Wayland),
+        ] {
+            let options = Options::from_arguments([flag], crate::Platform::Other);
+            assert_eq!(options.window_system, Some(window_system));
+            assert!(!options.window_system_conflict);
+        }
+    }
+
+    #[test]
+    fn conflicting_window_system_flags_are_reported() {
+        let options = Options::from_arguments(["--x11", "--wayland"], crate::Platform::Other);
+        assert!(options.window_system_conflict);
+        assert_eq!(options.window_system, Some(WindowSystem::Wayland));
+    }
+
+    #[test]
+    fn automatic_window_system_detection_prefers_wayland() {
+        assert_eq!(
+            detected_window_system(true, false, true),
+            Some(WindowSystem::Wayland)
+        );
+        assert_eq!(
+            detected_window_system(false, true, true),
+            Some(WindowSystem::Wayland)
+        );
+        assert_eq!(
+            detected_window_system(false, false, true),
+            Some(WindowSystem::X11)
+        );
+        assert_eq!(detected_window_system(false, false, false), None);
     }
 
     #[test]

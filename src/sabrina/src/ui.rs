@@ -104,6 +104,17 @@ fn loading_overlay(image: Rect) -> (Rect, Rect) {
     )
 }
 
+fn loading_ready_overlay(image: Rect) -> Rect {
+    let (status, bar) = loading_overlay(image);
+    let scale = image.w / 1365.0;
+    rect(
+        status.x - 12.0 * scale,
+        status.y - 10.0 * scale,
+        status.w + 24.0 * scale,
+        bar.y + bar.h - status.y + 20.0 * scale,
+    )
+}
+
 fn loading_bar_fraction(progress: f32, right: bool) -> f32 {
     (progress * 2.0 - if right { 1.0 } else { 0.0 }).clamp(0.0, 1.0)
 }
@@ -194,6 +205,12 @@ impl Plugin for ReefUiPlugin {
                 PreUpdate,
                 crate::controls::update
                     .after(bevy::input::InputSystems)
+                    .before(crate::app::input),
+            )
+            .add_systems(
+                PreUpdate,
+                continue_from_loading
+                    .after(crate::controls::update)
                     .before(crate::app::input),
             )
             .add_systems(PreUpdate, actions.after(crate::app::input))
@@ -511,7 +528,7 @@ fn draw(
     scale.0 = zoom;
     // Rebuild only when layout or settings change; HUD values update separately.
     let key = format!(
-        "{:?}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{:?}:{}:{}",
+        "{:?}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{:?}:{}:{}:{}",
         ui.screen,
         preferences.language,
         preferences.quality,
@@ -529,7 +546,8 @@ fn draw(
         window.height(),
         hints.style,
         preferences.show_fps,
-        preferences.rumble
+        preferences.rumble,
+        ui.loaded && options.capture.is_none()
     );
     if key == focus.key {
         return;
@@ -578,7 +596,6 @@ fn draw(
         let viewport_width = window.width() / zoom;
         let viewport_height = window.height() / zoom;
         let image = loading_image_rect(viewport_width, viewport_height);
-        let (status_area, _) = loading_overlay(image);
         let e = builder
             .commands
             .spawn((
@@ -590,41 +607,61 @@ fn draw(
             ))
             .id();
         builder.commands.entity(root).add_child(e);
-        let shadow = TextShadow {
-            offset: Vec2::splat(2.0 / zoom),
-            color: Color::BLACK,
-        };
-        let text_color = TextColor(Color::srgb(1.0, 0.92, 0.60));
-        let status = builder.label(status_area, 20.0 * image.w / 1365.0, "", Some("loading"));
-        builder.commands.entity(status).insert((
-            TextLayout::justify(Justify::Center),
-            text_color,
-            shadow,
-        ));
-        // Fill only the two narrow inlays, leaving the gold frame and shell visible.
-        for (x, key) in [(548.0, "loading_left"), (710.0, "loading_right")] {
-            let inlay = on_loading_image(image, rect(x, 719.0, 107.0, 2.0));
-            builder.meter(inlay, Color::srgb(0.60, 0.98, 0.91), key);
+        if ui.loaded && options.capture.is_none() {
+            let ready = loading_ready_overlay(image);
+            builder.image(ready, "button");
+            let content = builder
+                .commands
+                .spawn((Node {
+                    display: Display::Flex,
+                    align_items: AlignItems::Center,
+                    justify_content: JustifyContent::Center,
+                    ..ready.node()
+                },))
+                .id();
+            builder.commands.entity(root).add_child(content);
+            let prompt = builder
+                .commands
+                .spawn((
+                    Text::new(tr("Press any key to continue", preferences.language)),
+                    TextFont {
+                        font: builder.font.clone().into(),
+                        font_size: FontSize::Px(23.0 * image.w / 1365.0),
+                        ..default()
+                    },
+                    TextColor(Color::srgb(0.20, 0.17, 0.18)),
+                    TextLayout::justify(Justify::Center),
+                    Node {
+                        width: percent(100.0),
+                        ..default()
+                    },
+                ))
+                .id();
+            builder.commands.entity(content).add_child(prompt);
+            builder.commands.entity(prompt).insert((TextShadow {
+                offset: Vec2::splat(2.0 / zoom),
+                color: Color::WHITE.with_alpha(0.45),
+            },));
+        } else {
+            let (status_area, _) = loading_overlay(image);
+            let shadow = TextShadow {
+                offset: Vec2::splat(2.0 / zoom),
+                color: Color::BLACK,
+            };
+            let text_color = TextColor(Color::srgb(1.0, 0.92, 0.60));
+            let status = builder.label(status_area, 20.0 * image.w / 1365.0, "", Some("loading"));
+            builder.commands.entity(status).insert((
+                TextLayout::justify(Justify::Center),
+                text_color,
+                shadow,
+            ));
+            // Fill only the two narrow inlays, leaving the gold frame and shell visible.
+            for (x, key) in [(548.0, "loading_left"), (710.0, "loading_right")] {
+                let inlay = on_loading_image(image, rect(x, 719.0, 107.0, 2.0));
+                builder.meter(inlay, Color::srgb(0.60, 0.98, 0.91), key);
+            }
         }
-        let stats_scale = (0.8 / zoom).max(1.0);
-        let stats_width = (600.0 * stats_scale).min(viewport_width - 48.0 * stats_scale);
-        let stats = builder.label(
-            rect(
-                (CANVAS_WIDTH + viewport_width) / 2.0 - stats_width - 24.0 * stats_scale,
-                (CANVAS_HEIGHT - viewport_height) / 2.0 + 20.0 * stats_scale,
-                stats_width,
-                300.0 * stats_scale,
-            ),
-            18.0 * stats_scale,
-            "",
-            None,
-        );
-        builder.commands.entity(stats).insert((
-            LoadingStats,
-            text_color,
-            shadow,
-            TextLayout::justify(Justify::Right),
-        ));
+        draw_loading_stats(&mut builder, viewport_width, viewport_height, zoom);
         focus.count = 0;
         return;
     }
@@ -643,6 +680,67 @@ fn draw(
     }
     focus.count = builder.index;
     focus.index = focus.index.min(focus.count.saturating_sub(1));
+}
+
+fn draw_loading_stats(
+    builder: &mut Builder<'_, '_, '_>,
+    viewport_width: f32,
+    viewport_height: f32,
+    zoom: f32,
+) {
+    let stats_scale = (0.8 / zoom).max(1.0);
+    let stats_width = (600.0 * stats_scale).min(viewport_width - 48.0 * stats_scale);
+    let x = (CANVAS_WIDTH + viewport_width) / 2.0 - stats_width - 24.0 * stats_scale;
+    let y = (CANVAS_HEIGHT - viewport_height) / 2.0 + 20.0 * stats_scale;
+    let stats = builder.label(
+        rect(x, y, stats_width, 300.0 * stats_scale),
+        18.0 * stats_scale,
+        "",
+        None,
+    );
+    builder.commands.entity(stats).insert((
+        LoadingStats,
+        TextColor(Color::srgb(1.0, 0.92, 0.60)),
+        TextShadow {
+            offset: Vec2::splat(2.0 / zoom),
+            color: Color::BLACK,
+        },
+        TextLayout::justify(Justify::Right),
+    ));
+}
+
+fn continue_from_loading(
+    keys: Res<ButtonInput<KeyCode>>,
+    mouse: Res<ButtonInput<MouseButton>>,
+    pads: Query<&Gamepad>,
+    options: Res<Options>,
+    window: Single<&Window, With<PrimaryWindow>>,
+    mut ui: ResMut<SessionUi>,
+) {
+    if options.capture.is_some()
+        || !ui.loaded
+        || ui.screen != Screen::Loading
+        || (!window.focused && !options.verify)
+        || !any_loading_input_pressed(
+            &keys,
+            &mouse,
+            pads.iter()
+                .any(|pad| pad.get_just_pressed().next().is_some()),
+        )
+    {
+        return;
+    }
+    ui.screen = Screen::Menu;
+}
+
+fn any_loading_input_pressed(
+    keys: &ButtonInput<KeyCode>,
+    mouse: &ButtonInput<MouseButton>,
+    gamepad_pressed: bool,
+) -> bool {
+    keys.get_just_pressed().next().is_some()
+        || mouse.get_just_pressed().next().is_some()
+        || gamepad_pressed
 }
 
 fn update_loading_stats(
@@ -680,12 +778,22 @@ fn update_loading_stats(
         Style::PlayStation => "PlayStation",
         Style::Generic => "Generic gamepad",
     };
+    let window_system = if cfg!(target_os = "linux") {
+        format!(
+            "{}: {}\n",
+            tr("Window system", lang),
+            options.window_system_label()
+        )
+    } else {
+        String::new()
+    };
     let value = format!(
-        "{} ({}) · {} × {} px\n{}: {}\n{} · {} draw\nGPU: {}\n{}: {} {}\n{}: {} + {}\n{}: {} · {} ({}): {}\n{}: {}/{} · {}: {}/{}",
+        "{} ({}) · {} × {} px\n{}{}: {}\n{} · {} draw\nGPU: {}\n{}: {} {}\n{}: {} + {}\n{}: {} · {} ({}): {}\n{}: {}/{} · {}: {}/{}",
         std::env::consts::OS,
         std::env::consts::ARCH,
         window.physical_width(),
         window.physical_height(),
+        window_system,
         tr("Build", lang),
         crate::build_info::menu_label(),
         renderer_label(&adapter),
@@ -1451,12 +1559,11 @@ fn update(
     let language = preferences.language;
     for (key, mut text) in &mut texts {
         let value = match key.0 {
+            "loading" if loading.progress == 1.0 => tr("Press any key to continue", language),
             "loading" => format!(
                 "{}  {:.0}%",
                 tr(
-                    if loading.progress == 1.0 {
-                        "Ready!"
-                    } else if loading.warming {
+                    if loading.warming {
                         "Preparing graphics…"
                     } else if library.ready {
                         "Preparing the characters…"
@@ -1697,6 +1804,21 @@ mod tests {
     }
 
     #[test]
+    fn any_keyboard_mouse_or_controller_button_can_continue_loading() {
+        let mut keys = ButtonInput::<KeyCode>::default();
+        let mut mouse = ButtonInput::<MouseButton>::default();
+        assert!(!any_loading_input_pressed(&keys, &mouse, false));
+
+        keys.press(KeyCode::KeyA);
+        assert!(any_loading_input_pressed(&keys, &mouse, false));
+        keys.clear();
+        mouse.press(MouseButton::Right);
+        assert!(any_loading_input_pressed(&keys, &mouse, false));
+        mouse.clear();
+        assert!(any_loading_input_pressed(&keys, &mouse, true));
+    }
+
+    #[test]
     fn loading_bar_follows_artwork_and_stays_visible_on_wide_and_tall_windows() {
         for (width, height) in [(1280.0_f32, 720.0_f32), (2560.0, 1080.0), (720.0, 1280.0)] {
             let zoom = (width / CANVAS_WIDTH).min(height / CANVAS_HEIGHT);
@@ -1726,6 +1848,20 @@ mod tests {
         }
         assert_eq!(loading_bar_fraction(-1.0, false), 0.0);
         assert_eq!(loading_bar_fraction(2.0, true), 1.0);
+    }
+
+    #[test]
+    fn ready_prompt_overlay_covers_loading_text_and_progress_bar() {
+        let image = loading_image_rect(CANVAS_WIDTH, CANVAS_HEIGHT);
+        let (status, bar) = loading_overlay(image);
+        let overlay = loading_ready_overlay(image);
+
+        for covered in [status, bar] {
+            assert!(overlay.x <= covered.x);
+            assert!(overlay.y <= covered.y);
+            assert!(overlay.x + overlay.w >= covered.x + covered.w);
+            assert!(overlay.y + overlay.h >= covered.y + covered.h);
+        }
     }
 
     #[test]
