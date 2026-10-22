@@ -43,6 +43,12 @@ pub(crate) struct FpsCounter;
 #[derive(Component)]
 struct LoadingStats;
 
+#[derive(Component)]
+struct LoadingPrompt;
+
+const LOADING_ART_WIDTH: f32 = 1347.0;
+const LOADING_ART_HEIGHT: f32 = 768.0;
+
 #[derive(Clone, Copy)]
 struct Rect {
     x: f32,
@@ -76,19 +82,21 @@ fn rect(x: f32, y: f32, w: f32, h: f32) -> Rect {
 }
 
 fn loading_image_rect(viewport_width: f32, viewport_height: f32) -> Rect {
-    let height = viewport_height.max(viewport_width / (1365.0 / 768.0));
-    let width = height * (1365.0 / 768.0);
+    let aspect = LOADING_ART_WIDTH / LOADING_ART_HEIGHT;
+    let height = viewport_height.max(viewport_width / aspect);
+    let width = height * aspect;
     rect(
         (CANVAS_WIDTH - width) / 2.0,
-        ((CANVAS_HEIGHT - height) / 2.0)
-            .min((CANVAS_HEIGHT + viewport_height) / 2.0 - 24.0 - height * 733.0 / 768.0),
+        ((CANVAS_HEIGHT - height) / 2.0).min(
+            (CANVAS_HEIGHT + viewport_height) / 2.0 - 24.0 - height * 733.0 / LOADING_ART_HEIGHT,
+        ),
         width,
         height,
     )
 }
 
 fn on_loading_image(image: Rect, area: Rect) -> Rect {
-    let scale = image.w / 1365.0;
+    let scale = image.w / LOADING_ART_WIDTH;
     rect(
         image.x + area.x * scale,
         image.y + area.y * scale,
@@ -99,14 +107,14 @@ fn on_loading_image(image: Rect, area: Rect) -> Rect {
 
 fn loading_overlay(image: Rect) -> (Rect, Rect) {
     (
-        on_loading_image(image, rect(422.5, 658.0, 520.0, 24.0)),
-        on_loading_image(image, rect(534.5, 708.0, 296.0, 25.0)),
+        on_loading_image(image, rect(423.5, 660.0, 500.0, 30.0)),
+        on_loading_image(image, rect(493.5, 700.0, 360.0, 14.0)),
     )
 }
 
 fn loading_ready_overlay(image: Rect) -> Rect {
     let (status, bar) = loading_overlay(image);
-    let scale = image.w / 1365.0;
+    let scale = image.w / LOADING_ART_WIDTH;
     rect(
         status.x - 12.0 * scale,
         status.y - 10.0 * scale,
@@ -115,8 +123,22 @@ fn loading_ready_overlay(image: Rect) -> Rect {
     )
 }
 
-fn loading_bar_fraction(progress: f32, right: bool) -> f32 {
-    (progress * 2.0 - if right { 1.0 } else { 0.0 }).clamp(0.0, 1.0)
+// The open water between the turtle and crystal, kept inside narrow windows.
+fn loading_title_rect(image: Rect, viewport_width: f32, viewport_height: f32) -> Rect {
+    let mut title = on_loading_image(image, rect(530.0, 8.0, 470.0, 470.0 / 3.0));
+    let left = (CANVAS_WIDTH - viewport_width) / 2.0 + 16.0;
+    let available = viewport_width - 32.0;
+    if title.w > available {
+        title.h *= available / title.w;
+        title.w = available;
+    }
+    title.x = title.x.clamp(left, left + available - title.w);
+    title.y = title.y.max((CANVAS_HEIGHT - viewport_height) / 2.0 + 8.0);
+    title
+}
+
+fn loading_prompt_alpha(seconds: f32) -> f32 {
+    0.62 + 0.38 * (0.5 + 0.5 * (seconds * 2.4).sin())
 }
 
 fn input_backend(windows: bool, wgi: bool) -> &'static str {
@@ -203,7 +225,10 @@ impl Plugin for ReefUiPlugin {
             .init_resource::<Hints>()
             .add_systems(Startup, setup_fps)
             .add_systems(Update, update_fps)
-            .add_systems(Update, update_loading_stats.after(draw))
+            .add_systems(
+                Update,
+                (update_loading_stats, pulse_loading_prompt).after(draw),
+            )
             .add_systems(
                 PreUpdate,
                 crate::controls::update
@@ -604,68 +629,121 @@ fn draw(
             .commands
             .spawn((
                 ImageNode {
-                    image: server.load("ui/loading.png"),
+                    image: server.load("ui/loading.jpg"),
                     ..default()
                 },
                 image.node(),
             ))
             .id();
         builder.commands.entity(root).add_child(e);
+        let title = builder
+            .commands
+            .spawn((
+                ImageNode::new(server.load(title_path(preferences.language))),
+                loading_title_rect(image, viewport_width, viewport_height).node(),
+            ))
+            .id();
+        builder.commands.entity(root).add_child(title);
+        let scale = image.w / LOADING_ART_WIDTH;
+        let halo = loading_ready_overlay(image);
+        let halo = builder
+            .commands
+            .spawn((
+                rect(
+                    halo.x - halo.w * 0.1,
+                    halo.y - halo.h * 0.3,
+                    halo.w * 1.2,
+                    halo.h * 1.6,
+                )
+                .node(),
+                // A soft vignette keeps text readable on bright sand without a button shape.
+                BackgroundGradient::from(RadialGradient::new(
+                    UiPosition::CENTER,
+                    RadialGradientShape::FarthestCorner,
+                    vec![
+                        ColorStop::percent(Color::srgba(0.0, 0.04, 0.09, 0.78), 0.0),
+                        ColorStop::percent(Color::srgba(0.0, 0.04, 0.09, 0.58), 42.0),
+                        ColorStop::percent(Color::srgba(0.0, 0.04, 0.09, 0.0), 71.0),
+                    ],
+                )),
+            ))
+            .id();
+        builder.commands.entity(root).add_child(halo);
+        let shadow = TextShadow {
+            offset: Vec2::splat(2.0 / zoom),
+            color: Color::BLACK.with_alpha(0.9),
+        };
         if ui.loaded && options.capture.is_none() {
             let ready = loading_ready_overlay(image);
-            builder.image(ready, "button");
-            let content = builder
-                .commands
-                .spawn((Node {
-                    display: Display::Flex,
-                    align_items: AlignItems::Center,
-                    justify_content: JustifyContent::Center,
-                    ..ready.node()
-                },))
-                .id();
-            builder.commands.entity(root).add_child(content);
-            let prompt = builder
-                .commands
-                .spawn((
-                    Text::new(tr("Press any key to continue", preferences.language)),
-                    TextFont {
-                        font: builder.font.clone().into(),
-                        font_size: FontSize::Px(23.0 * image.w / 1365.0),
-                        ..default()
-                    },
-                    TextColor(Color::srgb(0.20, 0.17, 0.18)),
-                    TextLayout::justify(Justify::Center),
-                    Node {
-                        width: percent(100.0),
-                        ..default()
-                    },
-                ))
-                .id();
-            builder.commands.entity(content).add_child(prompt);
-            builder.commands.entity(prompt).insert((TextShadow {
-                offset: Vec2::splat(2.0 / zoom),
-                color: Color::WHITE.with_alpha(0.45),
-            },));
-        } else {
-            let (status_area, _) = loading_overlay(image);
-            let shadow = TextShadow {
-                offset: Vec2::splat(2.0 / zoom),
-                color: Color::BLACK,
-            };
-            let text_color = TextColor(Color::srgb(1.0, 0.92, 0.60));
-            let status = builder.label(status_area, 20.0 * image.w / 1365.0, "", Some("loading"));
-            builder.commands.entity(status).insert((
+            let prompt = builder.label(
+                rect(ready.x, ready.y + ready.h * 0.25, ready.w, ready.h * 0.6),
+                27.0 * scale,
+                tr("Press any key to continue", preferences.language),
+                None,
+            );
+            builder.commands.entity(prompt).insert((
+                LoadingPrompt,
                 TextLayout::justify(Justify::Center),
-                text_color,
+                TextColor(Color::srgb(1.0, 0.95, 0.80)),
                 shadow,
             ));
-            // Fill only the two narrow inlays, leaving the gold frame and shell visible.
-            for (x, key) in [(548.0, "loading_left"), (710.0, "loading_right")] {
-                let inlay = on_loading_image(image, rect(x, 719.0, 107.0, 2.0));
-                builder.meter(inlay, Color::srgb(0.60, 0.98, 0.91), key);
-            }
+        } else {
+            let (status_area, bar) = loading_overlay(image);
+            let status = builder.label(status_area, 21.0 * scale, "", Some("loading"));
+            builder.commands.entity(status).insert((
+                TextLayout::justify(Justify::Center),
+                TextColor(Color::srgb(1.0, 0.95, 0.82)),
+                shadow,
+            ));
+            let border = (1.5 * scale).max(1.0);
+            let inset = border + (1.5 * scale).max(1.0);
+            let frame = builder
+                .commands
+                .spawn((
+                    Node {
+                        border: UiRect::all(px(border)),
+                        border_radius: BorderRadius::MAX,
+                        ..bar.node()
+                    },
+                    BackgroundColor(Color::srgba(0.01, 0.10, 0.18, 0.72)),
+                    BorderColor::all(Color::srgb(0.95, 0.78, 0.45)),
+                    BoxShadow::new(
+                        Color::srgba(0.0, 0.0, 0.0, 0.55),
+                        px(0.0),
+                        px(2.0 * scale),
+                        px(0.0),
+                        px(8.0 * scale),
+                    ),
+                ))
+                .id();
+            builder.commands.entity(root).add_child(frame);
+            let fill = builder
+                .commands
+                .spawn((
+                    Node {
+                        position_type: PositionType::Absolute,
+                        left: px(inset - border),
+                        top: px(inset - border),
+                        width: px(0.0),
+                        height: px(bar.h - inset * 2.0),
+                        border_radius: BorderRadius::MAX,
+                        ..default()
+                    },
+                    BackgroundColor(Color::srgb(0.48, 0.97, 0.93)),
+                    BoxShadow::new(
+                        Color::srgba(0.30, 0.95, 1.0, 0.75),
+                        px(0.0),
+                        px(0.0),
+                        px(0.0),
+                        px(7.0 * scale),
+                    ),
+                    Meter("loading", bar.w - inset * 2.0),
+                ))
+                .id();
+            builder.commands.entity(frame).add_child(fill);
         }
-        draw_loading_stats(&mut builder, viewport_width, viewport_height, zoom);
+        let avoid = loading_ready_overlay(image);
+        draw_loading_stats(&mut builder, viewport_width, viewport_height, zoom, avoid);
         focus.count = 0;
         return;
     }
@@ -692,25 +770,36 @@ fn draw_loading_stats(
     viewport_width: f32,
     viewport_height: f32,
     zoom: f32,
+    avoid: Rect,
 ) {
     let stats_scale = (0.8 / zoom).max(1.0);
-    let stats_width = (600.0 * stats_scale).min(viewport_width - 48.0 * stats_scale);
-    let x = (CANVAS_WIDTH + viewport_width) / 2.0 - stats_width - 24.0 * stats_scale;
-    let y = (CANVAS_HEIGHT - viewport_height) / 2.0 + 20.0 * stats_scale;
-    let stats = builder.label(
-        rect(x, y, stats_width, 300.0 * stats_scale),
-        18.0 * stats_scale,
-        "",
-        None,
-    );
+    let margin = 20.0 * stats_scale;
+    let x = (CANVAS_WIDTH - viewport_width) / 2.0 + margin;
+    let stats_width = (430.0 * stats_scale).min(viewport_width - 2.0 * margin);
+    // Diagnostics sit low-left so the localized title owns the open water.
+    let mut bottom = (CANVAS_HEIGHT + viewport_height) / 2.0 - margin;
+    if x + stats_width > avoid.x - margin {
+        bottom = bottom.min(avoid.y - margin);
+    }
+    let stats = builder.label(rect(x, 0.0, stats_width, 0.0), 14.0 * stats_scale, "", None);
     builder.commands.entity(stats).insert((
         LoadingStats,
-        TextColor(Color::srgb(1.0, 0.92, 0.60)),
+        Node {
+            position_type: PositionType::Absolute,
+            left: px(x),
+            bottom: px(CANVAS_HEIGHT - bottom),
+            max_width: px(stats_width),
+            padding: UiRect::axes(px(12.0 * stats_scale), px(8.0 * stats_scale)),
+            border_radius: BorderRadius::all(px(10.0 * stats_scale)),
+            ..default()
+        },
+        BackgroundColor(Color::srgba(0.01, 0.07, 0.13, 0.62)),
+        TextColor(Color::srgb(0.90, 0.96, 1.0).with_alpha(0.86)),
         TextShadow {
-            offset: Vec2::splat(2.0 / zoom),
+            offset: Vec2::splat(1.0 / zoom),
             color: Color::BLACK,
         },
-        TextLayout::justify(Justify::Right),
+        TextLayout::justify(Justify::Left),
     ));
 }
 
@@ -736,6 +825,13 @@ fn continue_from_loading(
         return;
     }
     ui.screen = Screen::Menu;
+}
+
+fn pulse_loading_prompt(time: Res<Time>, mut prompts: Query<&mut TextColor, With<LoadingPrompt>>) {
+    let alpha = loading_prompt_alpha(time.elapsed_secs());
+    for mut color in &mut prompts {
+        color.0.set_alpha(alpha);
+    }
 }
 
 fn any_loading_input_pressed(
@@ -1820,8 +1916,7 @@ fn update(
     }
     for (meter, mut node) in &mut bars {
         let amount = match meter.0 {
-            "loading_left" => loading_bar_fraction(loading.progress, false),
-            "loading_right" => loading_bar_fraction(loading.progress, true),
+            "loading" => loading.progress,
             "health" => sabrina.vitality.health / 100.0,
             "song" => sabrina.song.energy / 100.0,
             "crystal" => 1.0 - sabrina.cooldown / reef_sim::recharge_duration(&simulation.0),
@@ -1968,29 +2063,41 @@ mod tests {
             let image = loading_image_rect(width / zoom, height / zoom);
             let (status, bar) = loading_overlay(image);
             assert!((bar.x + bar.w / 2.0 - CANVAS_WIDTH / 2.0).abs() < 1.0);
+            assert!((status.x + status.w / 2.0 - CANVAS_WIDTH / 2.0).abs() < 1.0);
             assert!(bar.y + bar.h <= (CANVAS_HEIGHT + height / zoom) / 2.0 - 23.99);
             assert!(bar.y > status.y + status.h);
-            assert!((bar.w / image.w - 296.0 / 1365.0).abs() < 0.00001);
+            assert!((bar.w / image.w - 360.0 / LOADING_ART_WIDTH).abs() < 0.00001);
         }
-        let image = loading_image_rect(CANVAS_WIDTH, CANVAS_HEIGHT);
-        let (_, bar) = loading_overlay(image);
-        assert!((bar.y - (image.y + 708.0 * image.w / 1365.0)).abs() < 0.001);
     }
 
     #[test]
-    fn loading_inlays_fill_in_sequence_without_covering_the_shell() {
-        for (progress, left, right) in [
-            (0.0, 0.0, 0.0),
-            (0.25, 0.5, 0.0),
-            (0.5, 1.0, 0.0),
-            (0.75, 1.0, 0.5),
-            (1.0, 1.0, 1.0),
-        ] {
-            assert_eq!(loading_bar_fraction(progress, false), left);
-            assert_eq!(loading_bar_fraction(progress, true), right);
+    fn localized_loading_title_stays_visible_above_mermaid() {
+        for (width, height) in [(1280.0_f32, 720.0_f32), (2560.0, 1080.0), (720.0, 1280.0)] {
+            let zoom = (width / CANVAS_WIDTH).min(height / CANVAS_HEIGHT);
+            let (view_w, view_h) = (width / zoom, height / zoom);
+            let image = loading_image_rect(view_w, view_h);
+            let title = loading_title_rect(image, view_w, view_h);
+            let (status, _) = loading_overlay(image);
+            assert!(title.x >= (CANVAS_WIDTH - view_w) / 2.0 + 15.99);
+            assert!(title.x + title.w <= (CANVAS_WIDTH + view_w) / 2.0 - 15.99);
+            assert!(title.y >= (CANVAS_HEIGHT - view_h) / 2.0 + 7.99);
+            assert!((title.w / title.h - 3.0).abs() < 0.001);
+            assert!(title.y + title.h < status.y);
         }
-        assert_eq!(loading_bar_fraction(-1.0, false), 0.0);
-        assert_eq!(loading_bar_fraction(2.0, true), 1.0);
+        let image = loading_image_rect(CANVAS_WIDTH, CANVAS_HEIGHT);
+        let title = loading_title_rect(image, CANVAS_WIDTH, CANVAS_HEIGHT);
+        let hair_top = image.y + 190.0 * image.w / LOADING_ART_WIDTH;
+        assert!(title.y + title.h < hair_top);
+    }
+
+    #[test]
+    fn ready_prompt_pulses_without_disappearing() {
+        let samples: Vec<_> = (0..240)
+            .map(|i| loading_prompt_alpha(i as f32 / 60.0))
+            .collect();
+        assert!(samples.iter().all(|alpha| (0.62..=1.0).contains(alpha)));
+        assert!(samples.iter().any(|alpha| *alpha < 0.65));
+        assert!(samples.iter().any(|alpha| *alpha > 0.97));
     }
 
     #[test]
