@@ -57,15 +57,6 @@ limited after sampling the material maps, with normal-variation filtering to
 reduce tiny sparkling white reflections without changing the scene lighting.
 Only Magic gives the tail a shinier finish; the rest of Sabrina stays satin.
 
-Fish avoidance uses predictive above/below steering and capsule contacts.
-Cached capsules and axis-aligned bounds reject distant pairs before detailed
-tests; iterative resolution stops once a pass finds no overlap. Steering uses
-squared-distance neighbour checks to avoid unnecessary square roots.
-
-Opaque reef materials do not receive per-frame player-position uploads; only
-the foreground reveal needs them. The depth-caustics shader skips illumination
-sampling on unaffected background pixels, leaving the surface effect unchanged.
-
 The fish swim around during the quieter parts. Every now and then jellyfish show up and try to eat them. Each jellyfish has **100 health** and only retreats after you bring that down to zero. There is no timeout or limit to the number of fish it can eat. If you lose all the fish during a round, or Sabrina loses all her health, it is game over. Jellyfish get bigger as they eat, and Sabrina slowly recovers if she stays safe for a while.
 
 The goal is to protect the reef for **10 rounds**. Round 10 always sends **four jellyfish**, regardless of the visitor limit or whether you selected Gentle or Lively. Defeat all four with Sabrina still alive and at least one fish left, and you win. The end screen shows your score and surviving fish. There is no round 11. Aquarium mode keeps going indefinitely.
