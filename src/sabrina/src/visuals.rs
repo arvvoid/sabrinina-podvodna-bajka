@@ -243,6 +243,8 @@ fn setup(
                 illuminance: 4800.0 * sunlight_weight(shadow_layer, preferences.quality),
                 shadow_maps_enabled: shadow_layer && preferences.quality > 0,
                 contact_shadows_enabled: false,
+                shadow_depth_bias: 0.005,
+                shadow_normal_bias: 0.4,
                 ..default()
             },
             CascadeShadowConfigBuilder {
@@ -900,7 +902,7 @@ fn uses_clock(kind: f32) -> bool {
 // Preserve total sunlight while giving shadows readable contrast.
 
 fn sunlight_weight(shadow_layer: bool, quality: u8) -> f32 {
-    let shadow = if quality == 2 { 0.5 } else { 0.35 };
+    let shadow = if quality == 2 { 0.85 } else { 0.65 };
     if shadow_layer { shadow } else { 1.0 - shadow }
 }
 
@@ -1216,8 +1218,8 @@ mod tests {
         assert_eq!(quality_msaa(0), Msaa::Off);
         assert_eq!(quality_msaa(1), Msaa::Off);
         assert_eq!(quality_msaa(2), Msaa::Sample4);
-        assert_eq!(sunlight_weight(true, 1), 0.35);
-        assert_eq!(sunlight_weight(true, 2), 0.5);
+        assert_eq!(sunlight_weight(true, 1), 0.65);
+        assert_eq!(sunlight_weight(true, 2), 0.85);
         assert_eq!(quality_shadow_map_size(1), 1024);
         assert_eq!(quality_shadow_map_size(2), 2048);
         for quality in 0..=2 {

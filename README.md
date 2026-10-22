@@ -104,9 +104,11 @@ English, Croatian and Italian are available through the main menu's **Language�
 |---|---|---|
 | Light | Off | Off |
 | Balanced | Lightweight FXAA | Soft, single 1024×1024 map |
-| High | 4× MSAA | More defined, soft single 2048×2048 map |
+| High | 4× MSAA | More defined, soft single 2048×2048 map, including fish casters |
 
-Shadow contrast remains restrained, with neutral fill keeping shaded faces readable.
+Shadowed sunlight has visible contrast, with neutral fill keeping shaded faces readable.
+High enables fish-cast shadows; Balanced omits those extra skinned shadow draws.
+The crystal and transparent jellyfish remain shadow-free.
 **V-sync** is on by default. Bevy's `AutoVsync` selects relaxed FIFO when the surface supports it, otherwise standard FIFO. Relaxed FIFO presents late frames without waiting for another refresh, but those frames may tear; neither mode guarantees a frame rate. Turn V-sync off in Settings to request uncapped presentation and potentially reduce input latency (may tear; falls back to supported modes).
 
 ## Build and run

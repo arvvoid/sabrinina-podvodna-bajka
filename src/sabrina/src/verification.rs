@@ -644,6 +644,7 @@ fn check_pose(
             if preferences.quality == 2 { 2048 } else { 1024 }
         );
         let mut excluded = 0;
+        let mut fish_surfaces = 0;
         for (root, actor) in &roots {
             if matches!(actor, Actor::Crystal | Actor::Jelly(_)) {
                 for descendant in children.iter_descendants(root) {
@@ -653,8 +654,18 @@ fn check_pose(
                     }
                 }
             }
+            if matches!(actor, Actor::Fish(_)) {
+                for descendant in children.iter_descendants(root) {
+                    if let Ok((caster, receiver)) = surfaces.get(descendant) {
+                        assert_eq!(caster.is_none(), preferences.quality == 2);
+                        assert!(receiver.is_none());
+                        fish_surfaces += 1;
+                    }
+                }
+            }
         }
         assert!(excluded >= 9);
+        assert!(fish_surfaces > 0);
         println!(
             "BEVY CHECK OK: quality AA, one tier-sized shadow map, shadow-free crystal and jellyfish"
         );

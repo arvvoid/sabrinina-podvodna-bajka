@@ -160,6 +160,25 @@ fn select_lods(
     }
 }
 
+fn fish_shadows(
+    mut commands: Commands,
+    preferences: Res<Preferences>,
+    surfaces: Query<(Entity, &CharacterSurface, Has<bevy::light::NotShadowCaster>)>,
+) {
+    for (entity, surface, excluded) in &surfaces {
+        if !matches!(surface.actor, Actor::Fish(_)) {
+            continue;
+        }
+        if preferences.quality == 2 && excluded {
+            commands
+                .entity(entity)
+                .remove::<bevy::light::NotShadowCaster>();
+        } else if preferences.quality != 2 && !excluded {
+            commands.entity(entity).insert(bevy::light::NotShadowCaster);
+        }
+    }
+}
+
 pub struct CharacterPlugin;
 
 impl Plugin for CharacterPlugin {
@@ -178,6 +197,7 @@ impl Plugin for CharacterPlugin {
                     .after(sync_models),
             )
             .add_systems(Update, select_lods.after(crate::presentation::prepare))
+            .add_systems(Update, fish_shadows.after(crate::presentation::prepare))
             .add_systems(Update, report_assets.after(select_lods))
             .add_systems(PostUpdate, restore_bones.before(AnimationSystems))
             .add_systems(
@@ -547,8 +567,7 @@ fn rig_ready(
                 .insert((bevy::light::NotShadowCaster, bevy::light::NotShadowReceiver));
         }
         if matches!(spec.actor, Actor::Fish(_)) {
-            // Small swimmers retain received reef lighting without adding a
-            // second skinned draw for every fish or dark patches on Sabrina.
+            // High enables fish casters in fish_shadows; cheaper tiers omit the extra draw.
             commands.entity(entity).insert(bevy::light::NotShadowCaster);
         }
         if let Ok(mesh) = mesh_handles.get(entity)
@@ -998,4 +1017,47 @@ fn report_assets(
         triangles
     );
     *reported = true;
+}
+
+#[cfg(test)]
+mod shadow_tests {
+    use super::*;
+    use bevy::light::{NotShadowCaster, NotShadowReceiver};
+
+    #[test]
+    fn fish_cast_only_on_high_and_crystal_exclusions_are_preserved() {
+        let mut app = App::new();
+        app.init_resource::<Preferences>()
+            .add_systems(Update, fish_shadows);
+        let mut entities = Vec::new();
+        for actor in [Actor::Fish(0), Actor::Crystal, Actor::Jelly(0)] {
+            let entity = app
+                .world_mut()
+                .spawn((
+                    CharacterSurface {
+                        actor,
+                        normal: default(),
+                        hurt: default(),
+                    },
+                    NotShadowCaster,
+                ))
+                .id();
+            if actor != Actor::Fish(0) {
+                app.world_mut().entity_mut(entity).insert(NotShadowReceiver);
+            }
+            entities.push(entity);
+        }
+        for quality in [0, 1, 2, 1, 2, 0] {
+            app.world_mut().resource_mut::<Preferences>().quality = quality;
+            app.update();
+            assert_eq!(
+                app.world().get::<NotShadowCaster>(entities[0]).is_none(),
+                quality == 2
+            );
+            for &entity in &entities[1..] {
+                assert!(app.world().get::<NotShadowCaster>(entity).is_some());
+                assert!(app.world().get::<NotShadowReceiver>(entity).is_some());
+            }
+        }
+    }
 }

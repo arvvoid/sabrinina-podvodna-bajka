@@ -276,22 +276,27 @@ pub fn soft_contacts(world: &mut World) {
                 if penetration <= 0.0 {
                     continue;
                 }
-                let normal = if distance > 0.0001 {
-                    delta * (1.0 / distance)
+                let side = if (a.motion.pos.y - b.motion.pos.y).abs() > 0.1 {
+                    (a.motion.pos.y - b.motion.pos.y).signum()
                 } else {
-                    fallback(i, jellyfish)
+                    1.0
                 };
-                let ia = 1.0 / (ca.radius * ca.radius);
-                let ib = 1.0 / (cb.radius * cb.radius);
-                let correction = (penetration + 0.001).min(0.45);
-                a.motion.pos = bounds(a.motion.pos + normal * (correction * ia / (ia + ib)));
-                b.motion.pos = bounds(b.motion.pos - normal * (correction * ib / (ia + ib)));
-                let closing = (a.motion.velocity - b.motion.velocity).dot(normal);
-                if closing < 0.0 {
-                    let force = -(1.0 + 0.16) * closing / (ia + ib);
-                    impulse(&mut a, normal * (force * ia), normal);
-                    impulse(b, normal * (-force * ib), normal * -1.0);
-                }
+                // Clear the full vertical capsule extents without a bouncing impulse.
+                let top = |c: Capsule| c.a.y.max(c.b.y) + c.radius;
+                let bottom = |c: Capsule| c.a.y.min(c.b.y) - c.radius;
+                let gap = if side > 0.0 {
+                    top(cb) - bottom(ca)
+                } else {
+                    top(ca) - bottom(cb)
+                } + 0.02;
+                let old = a.motion.pos;
+                a.motion.pos = bounds(a.motion.pos + v(0.0, side * gap * 0.5));
+                let moved = (a.motion.pos.y - old.y).abs();
+                let old = b.motion.pos;
+                b.motion.pos = bounds(b.motion.pos - v(0.0, side * (gap - moved)));
+                let moved_b = (b.motion.pos.y - old.y).abs();
+                a.motion.pos =
+                    bounds(a.motion.pos + v(0.0, side * (gap - moved - moved_b).max(0.0)));
             }
             for capsule in body {
                 let ca = fish_body(&a);

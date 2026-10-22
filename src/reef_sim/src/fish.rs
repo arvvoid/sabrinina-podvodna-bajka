@@ -74,15 +74,34 @@ pub fn fish_swimming(world: &mut World, dt: f32) {
                 continue;
             }
             let d = (fish.motion.pos - other.motion.pos).length();
-            if d < 0.7 && d > 0.01 {
-                separation = separation + (fish.motion.pos - other.motion.pos).unit() * (0.7 - d)
+            if other.rescue.teleport <= 0.0 && d < 4.0 {
+                let offset = fish.motion.pos - other.motion.pos;
+                let relative = fish.motion.velocity - other.motion.velocity;
+                let speed_squared = relative.dot(relative);
+                let ahead = if speed_squared > 0.001 {
+                    (-offset.dot(relative) / speed_squared).clamp(0.0, 1.2)
+                } else {
+                    0.0
+                };
+                let clearance = (fish.appearance.size + other.appearance.size) * 0.85 + 0.15;
+                let predicted = (offset + relative * ahead).length();
+                if predicted < clearance {
+                    // Both fish choose complementary vertical lanes, even head-on.
+                    let side = if offset.y.abs() > 0.1 {
+                        offset.y.signum()
+                    } else if i < k {
+                        1.0
+                    } else {
+                        -1.0
+                    };
+                    separation.y += side * (clearance - predicted) * 3.0;
+                }
             }
             if other.appearance.species == fish.appearance.species && d < 3.0 {
                 school = school + other.motion.velocity;
                 neighbours += 1;
             }
         }
-        desired_velocity = desired_velocity + separation * 0.8;
         if neighbours > 0 {
             desired_velocity = desired_velocity * 0.8 + school * (0.2 / neighbours as f32)
         }
@@ -166,6 +185,7 @@ pub fn fish_swimming(world: &mut World, dt: f32) {
             award_rescue(world, i);
             fish = world.fish[i];
         }
+        desired_velocity = desired_velocity + separation;
         let mut heading = fish.motion.direction.y.atan2(fish.motion.direction.x);
         let target = desired_velocity.y.atan2(desired_velocity.x);
         let change = (target - heading).sin().atan2((target - heading).cos());
