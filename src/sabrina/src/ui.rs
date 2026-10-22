@@ -1097,15 +1097,13 @@ fn draw_hud(
     materials: &mut Assets<AbilityIcon>,
 ) {
     builder.background_alpha = HUD_BACKGROUND_ALPHA;
-    builder.panel(rect(24.0, 22.0, 490.0, 160.0));
+    builder.panel(rect(24.0, 22.0, 490.0, 190.0));
     builder.label(rect(48.0, 42.0, 450.0, 32.0), 24.0, "", Some("phase"));
     builder.label(rect(48.0, 80.0, 450.0, 28.0), 18.0, "", Some("stats"));
-    builder.label(rect(48.0, 116.0, 450.0, 50.0), 17.0, "", Some("visitors"));
-    builder.panel(rect(600.0, 22.0, 400.0, 92.0));
-    builder.image(rect(610.0, 36.0, 56.0, 56.0), "heart");
-    builder.label(rect(679.0, 37.0, 300.0, 32.0), 20.0, "", Some("health"));
+    builder.image(rect(48.0, 117.0, 28.0, 28.0), "heart");
+    builder.label(rect(86.0, 118.0, 390.0, 28.0), 18.0, "", Some("health"));
     builder.meter(
-        rect(679.0, 73.0, 290.0, 18.0),
+        rect(48.0, 156.0, 440.0, 12.0),
         Color::srgb(1.0, 0.4, 0.48),
         "health",
     );
@@ -1123,10 +1121,25 @@ fn draw_hud(
         None,
     );
     builder.binding_span(swim, Control::Swim, 17.0, false);
-    builder.label(rect(500.0, 130.0, 600.0, 90.0), 21.0, "", Some("score"));
-    builder.label(rect(500.0, 225.0, 600.0, 160.0), 22.0, "", Some("reward"));
-    builder.label(rect(350.0, 635.0, 900.0, 48.0), 23.0, "", Some("notice"));
-    builder.label(rect(350.0, 683.0, 900.0, 36.0), 19.0, "", Some("caption"));
+    for (index, key) in [
+        "reward-crystal",
+        "reward-wave",
+        "reward-rescue",
+        "reward-retreat",
+        "reward-survivors",
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        builder.label(
+            rect(40.0, 690.0 + index as f32 * 30.0, 450.0, 28.0),
+            19.0,
+            "",
+            Some(key),
+        );
+    }
+    builder.label(rect(500.0, 635.0, 600.0, 48.0), 23.0, "", Some("notice"));
+    builder.label(rect(500.0, 683.0, 600.0, 36.0), 19.0, "", Some("caption"));
     if screen == Screen::Playing {
         builder.button(rect(1415.0, 24.0, 160.0, 50.0), "II", Action::Pause, false);
     }
@@ -1899,11 +1912,39 @@ fn actions(
     }
 }
 
+fn reward_line(key: &str) -> Option<(reef_sim::ScoreFeedback, &'static str)> {
+    match key {
+        "reward-crystal" => Some((reef_sim::ScoreFeedback::Crystal, "Crystal hit")),
+        "reward-wave" => Some((reef_sim::ScoreFeedback::Wave, "Wave hit")),
+        "reward-rescue" => Some((reef_sim::ScoreFeedback::Rescue, "Fish rescued")),
+        "reward-retreat" => Some((reef_sim::ScoreFeedback::Retreat, "Visitor repelled")),
+        "reward-survivors" => Some((reef_sim::ScoreFeedback::Survivors, "Survivor bonus")),
+        _ => None,
+    }
+}
+
+fn hud_stats(world: &reef_sim::World, language: usize) -> String {
+    format!(
+        "{}{}{}{}",
+        reef_sim::alive(world),
+        tr(" fish   ·   ", language),
+        tr("Score ", language),
+        reef_sim::current_total_score(world)
+    )
+}
+
+fn reward_opacity(time: f32) -> f32 {
+    (time / 0.6).clamp(0.0, 1.0)
+}
+
 fn update(
     simulation: Res<Simulation>,
     ui: Res<SessionUi>,
     preferences: Res<Preferences>,
-    mut texts: Query<(&Dynamic, &mut Text), Without<ButtonLabel>>,
+    mut texts: Query<
+        (&Dynamic, &mut Text, &mut TextColor, Option<&mut TextShadow>),
+        Without<ButtonLabel>,
+    >,
     mut labels: Query<(&ButtonLabel, &mut TextColor, &mut Text), Without<Dynamic>>,
     mut bars: Query<(&Meter, &mut Node)>,
     focus: Res<Focus>,
@@ -1914,7 +1955,27 @@ fn update(
 ) {
     let sabrina = &simulation.0.sabrina;
     let language = preferences.language;
-    for (key, mut text) in &mut texts {
+    for (key, mut text, mut color, shadow) in &mut texts {
+        if let Some((kind, label)) = reward_line(key.0) {
+            let reward = simulation.0.points.rewards[kind as usize];
+            let value = if reward.time > 0.0 {
+                format!("+{} · {}", reward.points, tr(label, language))
+            } else {
+                String::new()
+            };
+            text.set_if_neq(Text(value));
+            color.set_if_neq(TextColor(
+                Color::srgb(0.87, 0.97, 1.0).with_alpha(reward_opacity(reward.time)),
+            ));
+            if let Some(mut shadow) = shadow {
+                let next = TextShadow {
+                    color: Color::BLACK.with_alpha(0.85 * reward_opacity(reward.time)),
+                    ..*shadow
+                };
+                shadow.set_if_neq(next);
+            }
+            continue;
+        }
         let value = match key.0 {
             "loading" if loading.progress == 1.0 => tr("Press any key to continue", language),
             "loading" => format!(
@@ -1950,45 +2011,6 @@ fn update(
                     tr("A peaceful little sea", language)
                 }
             }
-            "visitors" => {
-                let health: Vec<String> = simulation
-                    .0
-                    .jelly
-                    .iter()
-                    .filter(|j| {
-                        matches!(
-                            j.behaviour.state,
-                            reef_sim::JellyState::Hungry | reef_sim::JellyState::Arriving
-                        )
-                    })
-                    .map(|j| {
-                        format!(
-                            "{:.0}/100{}",
-                            j.behaviour.health,
-                            if j.behaviour.bubble > 0.0 { " ○" } else { "" }
-                        )
-                    })
-                    .collect();
-                if health.is_empty() {
-                    String::new()
-                } else {
-                    format!("{}{}", tr("Visitors · ", language), health.join("   "))
-                }
-            }
-            "reward" => [
-                (reef_sim::ScoreFeedback::Crystal, "Crystal hit"),
-                (reef_sim::ScoreFeedback::Wave, "Close wave hit"),
-                (reef_sim::ScoreFeedback::Rescue, "Fish rescued"),
-                (reef_sim::ScoreFeedback::Retreat, "Visitor repelled"),
-                (reef_sim::ScoreFeedback::Survivors, "Survivor bonus"),
-            ]
-            .into_iter()
-            .filter_map(|(kind, label)| {
-                let reward = simulation.0.points.rewards[kind as usize];
-                (reward.time > 0.0).then(|| format!("+{} · {}", reward.points, tr(label, language)))
-            })
-            .collect::<Vec<_>>()
-            .join("\n"),
             "defeat" => tr(
                 if reef_sim::alive(&simulation.0) == 0 {
                     "All fish were lost. Try again and protect the school!"
@@ -1997,22 +2019,7 @@ fn update(
                 },
                 language,
             ),
-            "stats" => format!(
-                "{}{}{}",
-                reef_sim::alive(&simulation.0),
-                tr(" fish   ·   ", language),
-                if simulation.0.session.water == reef_sim::Water::Visit {
-                    format!("{}{}", tr("Score ", language), simulation.0.points.score)
-                } else if simulation.0.settings.aquarium {
-                    tr("Take your time", language)
-                } else {
-                    format!(
-                        "{}{} s",
-                        tr("Next visit in ", language),
-                        simulation.0.session.rest_remaining as i32 + 1
-                    )
-                }
-            ),
+            "stats" => hud_stats(&simulation.0, language),
             "health" => format!(
                 "{}{} / 100",
                 tr("Health · ", language),
@@ -2038,20 +2045,6 @@ fn update(
             "notice" => {
                 if ui.notice_time > 0.0 {
                     ui.notice.clone()
-                } else {
-                    String::new()
-                }
-            }
-            "score" => {
-                if ui.score_time > 0.0 {
-                    format!(
-                        "{}\n{}{}{}{}",
-                        tr("The sea is peaceful again", language),
-                        simulation.0.points.last_score,
-                        tr(" points · ", language),
-                        simulation.0.points.last_survivors,
-                        tr(" fish safe", language)
-                    )
                 } else {
                     String::new()
                 }
@@ -2185,6 +2178,21 @@ mod tests {
     }
 
     #[test]
+    fn hud_stats_always_show_total_score_without_arrival_countdown() {
+        let mut world = reef_sim::World::default();
+        world.points.total_score = 700;
+        world.points.score = 30;
+        world.session.rest_remaining = 43.0;
+        assert!(hud_stats(&world, 0).ends_with("Score 700"));
+        world.session.water = reef_sim::Water::Visit;
+        assert!(hud_stats(&world, 0).ends_with("Score 730"));
+        assert_eq!(reward_opacity(2.5), 1.0);
+        assert_eq!(reward_opacity(0.6), 1.0);
+        assert_eq!(reward_opacity(0.3), 0.5);
+        assert_eq!(reward_opacity(0.0), 0.0);
+    }
+
+    #[test]
     fn hud_has_one_clickable_icon_per_ability_and_no_duplicate_bars() {
         fn build(
             mut commands: Commands,
@@ -2211,6 +2219,33 @@ mod tests {
             .add_systems(Startup, build);
         app.update();
         let world = app.world_mut();
+        let dynamic: Vec<_> = world
+            .query::<&Dynamic>()
+            .iter(world)
+            .map(|key| key.0)
+            .collect();
+        assert!(
+            !dynamic
+                .iter()
+                .any(|key| ["visitors", "score", "reward"].contains(key))
+        );
+        assert_eq!(
+            dynamic
+                .iter()
+                .filter(|key| reward_line(key).is_some())
+                .count(),
+            5
+        );
+        for (key, node) in world.query::<(&Dynamic, &Node)>().iter(world) {
+            if ["phase", "stats", "health"].contains(&key.0) {
+                assert!(matches!(node.left, Val::Px(x) if x < 500.0));
+                assert!(matches!(node.top, Val::Px(y) if y < 212.0));
+            }
+            if reward_line(key.0).is_some() {
+                assert!(matches!(node.left, Val::Px(x) if x == 40.0));
+                assert!(matches!(node.top, Val::Px(y) if (690.0..840.0).contains(&y)));
+            }
+        }
         assert_eq!(world.query::<&Ability>().iter(world).count(), 3);
         for hit in world.query::<&Hit>().iter(world) {
             let x = match hit.action {

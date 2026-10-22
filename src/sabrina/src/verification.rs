@@ -697,7 +697,7 @@ fn check_pose(
     materials: Res<Assets<StandardMaterial>>,
     ui_checks: (
         Query<&ImageNode>,
-        Query<(&TextColor, Option<&TextShadow>), With<Text>>,
+        Query<(&Text, &TextColor, Option<&TextShadow>)>,
         Query<&BackgroundColor>,
     ),
     render_materials: (
@@ -778,12 +778,15 @@ fn check_pose(
                     (image.color.alpha() - crate::ui::HUD_BACKGROUND_ALPHA).abs() < 0.001
                 })
                 .count()
-                >= 3
+                >= 2
         );
         assert!(
             ui_texts
                 .iter()
-                .all(|(color, shadow)| color.alpha() == 1.0 && shadow.is_some())
+                .all(
+                    |(text, color, shadow)| (text.0.is_empty() || color.alpha() == 1.0)
+                        && shadow.is_some()
+                )
         );
         println!("BEVY CHECK OK: HUD backgrounds translucent; text opaque with contrast shadows");
         assert!(

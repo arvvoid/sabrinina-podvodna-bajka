@@ -3,6 +3,19 @@
 //! Peaceful intervals, visitor scheduling, recovery and scoring.
 use crate::*;
 
+pub fn random_rest_duration(world: &mut World) -> f32 {
+    world.settings.rest_seconds * world.rng.range(0.75, 1.25)
+}
+
+pub fn current_total_score(world: &World) -> i32 {
+    world.points.total_score
+        + if world.session.water == Water::Visit {
+            world.points.score
+        } else {
+            0
+        }
+}
+
 pub fn begin_visit(world: &mut World) {
     if world.settings.aquarium || world.session.finished() || world.session.cycle >= FINAL_ROUND {
         return;
@@ -84,7 +97,7 @@ pub fn finish_visit(world: &mut World, events: &mut Events) {
     world.points.total_score += world.points.score;
     world.points.best_score = world.points.best_score.max(world.points.score);
     world.session.water = Water::Calm;
-    world.session.rest_remaining = world.settings.rest_seconds * world.rng.range(0.85, 1.2);
+    world.session.rest_remaining = random_rest_duration(world);
     events.visit_ended = true;
     if world.session.cycle == FINAL_ROUND {
         world.session.victory = true;

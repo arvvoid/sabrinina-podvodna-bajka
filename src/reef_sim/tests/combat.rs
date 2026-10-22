@@ -24,6 +24,58 @@ fn encounter(gentle: bool) -> World {
 }
 
 #[test]
+fn running_score_accumulates_across_rounds_without_counting_completed_round_twice() {
+    let mut world = encounter(true);
+    world.points.total_score = 750;
+    damage_jelly(&mut world, 0, 100.0, true, &mut Events::default());
+    assert_eq!(current_total_score(&world), 950);
+    finish_visit(&mut world, &mut Events::default());
+    let total = 950 + alive(&world) * SURVIVOR_POINTS;
+    assert_eq!(current_total_score(&world), total);
+    finish_visit(&mut world, &mut Events::default());
+    assert_eq!(current_total_score(&world), total);
+    begin_visit(&mut world);
+    assert_eq!(current_total_score(&world), total);
+    damage_jelly(&mut world, 0, 10.0, false, &mut Events::default());
+    assert_eq!(current_total_score(&world), total + 10);
+}
+
+#[test]
+fn quiet_intervals_are_randomized_within_selected_bounds_including_first_round() {
+    for seconds in [25.0, 55.0, 150.0] {
+        let mut first = Vec::new();
+        let mut subsequent = Vec::new();
+        for seed in 1..50 {
+            let mut world = World::default();
+            reset(
+                &mut world,
+                seed,
+                Settings {
+                    rest_seconds: seconds,
+                    ..Settings::default()
+                },
+            );
+            first.push(world.session.rest_remaining);
+            begin_visit(&mut world);
+            for jelly in &mut world.jelly {
+                jelly.behaviour.state = JellyState::Hidden;
+            }
+            finish_visit(&mut world, &mut Events::default());
+            subsequent.push(world.session.rest_remaining);
+        }
+        for waits in [first, subsequent] {
+            assert!(
+                waits
+                    .iter()
+                    .all(|&wait| wait >= seconds * 0.75 && wait <= seconds * 1.25)
+            );
+            assert!(waits.iter().any(|&wait| wait < seconds));
+            assert!(waits.iter().any(|&wait| wait > seconds));
+        }
+    }
+}
+
+#[test]
 fn song_reliably_lures_all_visitors_only_inside_the_fish_radius() {
     for gentle in [false, true] {
         for energy in [100.0, 25.0, 1.0] {
