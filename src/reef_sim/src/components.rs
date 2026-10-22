@@ -193,7 +193,9 @@ component!(CrystalMagic {
     aim: V2 = v(1.0, 0.0),
     charge_offset: V2 = v(0.0, 0.0),
     charge_depth: f32 = 1.0,
-    depth: f32 = 1.0
+    depth: f32 = 1.0,
+    hits: [Entity; 4] = [Entity::default(); 4],
+    hit_count: usize = 0
 });
 component!(Health {
     health: f32 = 100.0,
@@ -220,8 +222,19 @@ component!(WaterWave {
     active: bool = false,
     cast_id: u64 = 0,
     origin: V2 = v(0.0, 0.0),
-    direction: V2 = v(1.0, 0.0)
+    direction: V2 = v(1.0, 0.0),
+    charging: bool = false,
+    charge_time: f32 = 0.0,
+    scale: f32 = 1.0
 });
+
+impl WaterWave {
+    pub fn cancel_charge(&mut self) {
+        self.charging = false;
+        self.charge_time = 0.0;
+    }
+}
+
 component!(FishEntity {
     id: Entity = Entity::default(),
     motion: Motion = Motion::default(),
@@ -320,6 +333,7 @@ pub struct Input {
     pub cast: bool,
     pub toggle_song: bool,
     pub wave: bool,
+    pub wave_held: bool,
 }
 
 #[derive(Clone, Copy, Debug, Default)]

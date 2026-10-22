@@ -3,8 +3,9 @@
 //! Sabrina movement, ability timers and swimming pose state.
 use crate::*;
 
-pub fn recharge_duration(_world: &World) -> f32 {
-    12.0
+pub fn recharge_duration(world: &World) -> f32 {
+    CRYSTAL_COOLDOWN
+        + CRYSTAL_CHAIN_COOLDOWN * world.crystal.magic.hit_count.saturating_sub(1) as f32
 }
 
 pub fn song_duration(world: &World) -> f32 {
@@ -15,8 +16,12 @@ pub fn song_recharge_duration(world: &World) -> f32 {
     if world.settings.gentle { 20.0 } else { 24.0 }
 }
 
-pub fn wave_recharge_duration(_world: &World) -> f32 {
-    3.0
+pub fn wave_recharge_duration(world: &World) -> f32 {
+    if world.sabrina.wave.scale > 1.0 {
+        CHARGED_WAVE_COOLDOWN
+    } else {
+        WAVE_COOLDOWN
+    }
 }
 
 pub fn song_radius(world: &World) -> f32 {
@@ -178,7 +183,7 @@ pub fn sabrina_pose(sabrina: &SabrinaEntity) -> SabrinaPose {
     if sabrina.throw_time >= 0.0 {
         return SabrinaPose::Throw;
     }
-    if sabrina.wave.active {
+    if sabrina.wave.active || sabrina.wave.charging {
         return SabrinaPose::Wave;
     }
     if sabrina.song.active {
@@ -207,6 +212,7 @@ pub fn sabrina_pose(sabrina: &SabrinaEntity) -> SabrinaPose {
 pub fn sabrina_pose_phase(sabrina: &SabrinaEntity) -> f32 {
     match sabrina_pose(sabrina) {
         SabrinaPose::Throw => (sabrina.throw_time / 1.6).clamp(0.0, 1.0),
+        SabrinaPose::Wave if sabrina.wave.charging => 0.0,
         SabrinaPose::Wave => (sabrina.wave.time / 0.75).clamp(0.0, 1.0),
         _ => (sabrina.swimming.phase % 6.28318530718) / 6.28318530718,
     }

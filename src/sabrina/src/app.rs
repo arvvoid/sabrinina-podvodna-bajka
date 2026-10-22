@@ -351,18 +351,21 @@ pub fn input(
     mut pending: ResMut<PendingInput>,
     mut prefs: ResMut<Preferences>,
     options: Res<Options>,
+    mut simulation: ResMut<Simulation>,
 ) {
     if options.capture.is_some() {
         return;
     }
     if !window.focused && !options.verify {
         pending.0 = sim::Input::default();
+        simulation.0.sabrina.wave.cancel_charge();
         ui.pointer_mode = false;
         return;
     }
     let mut pausing = keys.just_pressed(KeyCode::Escape);
     let mut toggle = keys.just_pressed(KeyCode::KeyQ);
     let mut wave = keys.just_pressed(KeyCode::KeyF) || mouse.just_pressed(MouseButton::Right);
+    let mut wave_held = keys.pressed(KeyCode::KeyF) || mouse.pressed(MouseButton::Right);
     let mut cast = keys.just_pressed(KeyCode::Space);
     let mut movement = Vec2::new(
         (keys.pressed(KeyCode::KeyD) || keys.pressed(KeyCode::ArrowRight)) as u8 as f32
@@ -378,6 +381,7 @@ pub fn input(
         pausing |= pad.just_pressed(GamepadButton::Start);
         toggle |= pad.just_pressed(GamepadButton::East);
         wave |= pad.just_pressed(GamepadButton::South);
+        wave_held |= pad.pressed(GamepadButton::South);
         cast |=
             pad.just_pressed(GamepadButton::West) || pad.just_pressed(GamepadButton::RightTrigger);
     }
@@ -386,6 +390,7 @@ pub fn input(
         pause(&mut ui);
         if ui.screen != screen {
             pending.0 = sim::Input::default();
+            simulation.0.sabrina.wave.cancel_charge();
             prefs.save();
             return;
         }
@@ -401,6 +406,7 @@ pub fn input(
     }
     if ui.screen != Screen::Playing {
         pending.0 = sim::Input::default();
+        simulation.0.sabrina.wave.cancel_charge();
         return;
     }
     if motion.delta.length() > 1.0 {
@@ -422,6 +428,7 @@ pub fn input(
     // UI consumes pointer clicks before tick so a button cannot also cast a crystal.
     pending.0.cast |= cast;
     pending.0.wave |= wave;
+    pending.0.wave_held = wave_held;
     pending.0.toggle_song |= toggle;
 }
 
@@ -707,6 +714,32 @@ mod tests {
                 );
                 assert!(!app.world().resource::<PendingInput>().0.toggle_song);
             }
+            for value in [1.0, 0.0] {
+                app.world_mut().write_message(RawGamepadEvent::Button(
+                    RawGamepadButtonChangedEvent::new(pad, GamepadButton::South, value),
+                ));
+            }
+            for _ in 0..12 {
+                app.update();
+            }
+            let wave = app.world().resource::<Simulation>().0.sabrina.wave;
+            assert_eq!(wave.cast_id, 1, "Quick wave tap at {fps} FPS");
+            assert_eq!(wave.scale, 1.0);
+            {
+                let mut simulation = app.world_mut().resource_mut::<Simulation>();
+                simulation.0.sabrina.wave.cooldown = 0.0;
+                simulation.0.sabrina.wave.active = false;
+            }
+            app.world_mut().write_message(RawGamepadEvent::Button(
+                RawGamepadButtonChangedEvent::new(pad, GamepadButton::South, 1.0),
+            ));
+            for _ in 0..(3.2_f64 * fps).ceil() as usize {
+                app.update();
+            }
+            let wave = app.world().resource::<Simulation>().0.sabrina.wave;
+            assert_eq!(wave.cast_id, 2, "Held wave at {fps} FPS");
+            assert_eq!(wave.scale, 2.0);
+            assert!(!wave.charging);
         }
     }
 }

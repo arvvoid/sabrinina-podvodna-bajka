@@ -220,11 +220,16 @@ impl Ability {
     fn state(self, world: &reef_sim::World) -> Vec4 {
         let sabrina = &world.sabrina;
         let charging = world.crystal.magic.state == reef_sim::Spell::Charging;
+        let chaining = reef_sim::crystal_chain_target(world).is_some();
         let (progress, blocked, active) = match self {
             Self::Crystal => (
-                1.0 - sabrina.cooldown / reef_sim::recharge_duration(world),
-                world.crystal.magic.state != reef_sim::Spell::Resting,
-                charging,
+                if chaining {
+                    1.0 - world.crystal.magic.time / reef_sim::CRYSTAL_CHAIN_SECONDS
+                } else {
+                    1.0 - sabrina.cooldown / reef_sim::recharge_duration(world)
+                },
+                world.crystal.magic.state != reef_sim::Spell::Resting && !chaining,
+                charging || chaining,
             ),
             Self::Song => (
                 sabrina.song.energy / 100.0,
@@ -232,9 +237,13 @@ impl Ability {
                 sabrina.song.active,
             ),
             Self::Wave => (
-                1.0 - sabrina.wave.cooldown / reef_sim::wave_recharge_duration(world),
+                if sabrina.wave.charging {
+                    sabrina.wave.charge_time / reef_sim::WAVE_CHARGE_SECONDS
+                } else {
+                    1.0 - sabrina.wave.cooldown / reef_sim::wave_recharge_duration(world)
+                },
                 charging,
-                sabrina.wave.active,
+                sabrina.wave.active || sabrina.wave.charging,
             ),
         };
         Vec4::new(
@@ -1648,6 +1657,7 @@ fn actions(
     options: Res<Options>,
     mut exit: MessageWriter<AppExit>,
     time: Res<Time<Real>>,
+    mut wave_pointer: Local<bool>,
 ) {
     if options.capture.is_some() {
         return;
@@ -1655,6 +1665,8 @@ fn actions(
     if !window.focused && !options.verify {
         focus.navigation.reset();
         pending.0 = reef_sim::Input::default();
+        simulation.0.sabrina.wave.cancel_charge();
+        *wave_pointer = false;
         return;
     }
     if focus.last_screen != Some(ui.screen) {
@@ -1683,6 +1695,15 @@ fn actions(
             )
     });
     let menu = ui.screen != Screen::Playing;
+    if menu || !mouse.pressed(MouseButton::Left) {
+        *wave_pointer = false;
+    }
+    if !menu && mouse.just_pressed(MouseButton::Left) && mouse.pressed(MouseButton::Left) {
+        *wave_pointer = hits.iter().any(|hit| {
+            matches!(hit.action, Action::Wave) && pointer.is_some_and(|pos| hit.rect.contains(pos))
+        });
+    }
+    pending.0.wave_held |= *wave_pointer;
     let activate = menu
         && (keys.just_pressed(KeyCode::Enter)
             || keys.just_pressed(KeyCode::Space)
@@ -1773,7 +1794,10 @@ fn actions(
             app::home(&mut simulation.0, &mut ui, &preferences);
             audio.stop_voice = true;
         }
-        Action::Pause => app::pause(&mut ui),
+        Action::Pause => {
+            simulation.0.sabrina.wave.cancel_charge();
+            app::pause(&mut ui);
+        }
         Action::Settings | Action::Credits | Action::Help => {
             ui.return_to = if ui.started {
                 Screen::Pause
@@ -1994,10 +2018,21 @@ fn update(
                 tr("Health · ", language),
                 sabrina.vitality.health.ceil() as i32
             ),
+            "crystal" if reef_sim::crystal_chain_target(&simulation.0).is_some() => {
+                format!(
+                    "{} · {:.1}",
+                    tr("Chain", language),
+                    (reef_sim::CRYSTAL_CHAIN_SECONDS - simulation.0.crystal.magic.time).max(0.0)
+                )
+            }
             "crystal" if sabrina.cooldown > 0.0 => format!("{}", sabrina.cooldown.ceil() as i32),
             "song" if sabrina.song.energy < 99.99 || sabrina.song.active => {
                 format!("{}%", sabrina.song.energy as i32)
             }
+            "wave" if sabrina.wave.charging => format!(
+                "{:.1}",
+                (reef_sim::WAVE_CHARGE_SECONDS - sabrina.wave.charge_time).max(0.0)
+            ),
             "wave" if sabrina.wave.cooldown > 0.0 => format!("{:.1}", sabrina.wave.cooldown),
             "caption" => ui.caption.clone(),
             "notice" => {
@@ -2120,6 +2155,33 @@ mod tests {
         world.sabrina.song.locked = false;
         world.sabrina.song.active = true;
         assert_eq!(Ability::Song.state(&world), Vec4::new(0.4, 0.0, 1.0, 0.0));
+    }
+
+    #[test]
+    fn ability_icons_show_charge_and_chain_windows_and_extended_cooldowns() {
+        let mut world = reef_sim::World::default();
+        world.sabrina.wave.charging = true;
+        world.sabrina.wave.charge_time = 1.5;
+        assert_eq!(Ability::Wave.state(&world), Vec4::new(0.5, 0.0, 1.0, 0.0));
+        world.sabrina.wave.charging = false;
+        world.sabrina.wave.scale = 2.0;
+        world.sabrina.wave.cooldown = 4.5;
+        assert_eq!(Ability::Wave.state(&world).x, 0.5);
+        world.crystal.magic.state = reef_sim::Spell::Burst;
+        world.crystal.magic.hit_count = 1;
+        world.crystal.magic.time = 0.75;
+        let id = reef_sim::allocate_entity(&mut world, reef_sim::EntityKind::Jelly, 0);
+        world.jelly[0].id = id;
+        world.jelly[0].behaviour.state = reef_sim::JellyState::Hungry;
+        world.jelly[0].motion.pos = world.crystal.motion.pos;
+        assert_eq!(
+            Ability::Crystal.state(&world),
+            Vec4::new(0.5, 0.0, 1.0, 0.0)
+        );
+        world.crystal.magic.state = reef_sim::Spell::Resting;
+        world.crystal.magic.hit_count = 4;
+        world.sabrina.cooldown = 9.0;
+        assert_eq!(Ability::Crystal.state(&world).x, 0.5);
     }
 
     #[test]
@@ -2449,6 +2511,13 @@ mod tests {
             assert_eq!(input.cast, matches!(action, Action::Crystal));
             assert_eq!(input.toggle_song, matches!(action, Action::Song));
             assert_eq!(input.wave, matches!(action, Action::Wave));
+            assert_eq!(input.wave_held, matches!(action, Action::Wave));
+            app.world_mut()
+                .resource_mut::<ButtonInput<MouseButton>>()
+                .release(MouseButton::Left);
+            app.world_mut().resource_mut::<PendingInput>().0.wave_held = false;
+            app.world_mut().run_system_once(actions).unwrap();
+            assert!(!app.world().resource::<PendingInput>().0.wave_held);
         }
     }
 
@@ -2626,10 +2695,62 @@ mod tests {
     }
 
     #[test]
+    fn pause_cancels_wave_charge_and_first_resumed_wave_still_works() {
+        use bevy::ecs::system::RunSystemOnce;
+
+        let (mut app, _) = input_app();
+        app.world_mut().resource_mut::<SessionUi>().screen = Screen::Playing;
+        app.world_mut()
+            .resource_mut::<Simulation>()
+            .0
+            .sabrina
+            .wave
+            .charging = true;
+        app.world_mut()
+            .resource_mut::<Simulation>()
+            .0
+            .sabrina
+            .wave
+            .charge_time = 2.0;
+        app.world_mut()
+            .resource_mut::<ButtonInput<KeyCode>>()
+            .press(KeyCode::Escape);
+        app.world_mut().run_system_once(app::input).unwrap();
+        assert_eq!(app.world().resource::<SessionUi>().screen, Screen::Pause);
+        assert!(!app.world().resource::<Simulation>().0.sabrina.wave.charging);
+        app.world_mut()
+            .resource_mut::<ButtonInput<KeyCode>>()
+            .reset_all();
+        app.world_mut()
+            .resource_mut::<ButtonInput<KeyCode>>()
+            .press(KeyCode::Escape);
+        app.world_mut().run_system_once(app::input).unwrap();
+        assert_eq!(app.world().resource::<SessionUi>().screen, Screen::Playing);
+        app.world_mut()
+            .resource_mut::<ButtonInput<KeyCode>>()
+            .reset_all();
+        app.world_mut()
+            .resource_mut::<ButtonInput<KeyCode>>()
+            .press(KeyCode::KeyF);
+        app.world_mut().run_system_once(app::input).unwrap();
+        let input = app.world().resource::<PendingInput>().0;
+        let mut simulation = app.world_mut().resource_mut::<Simulation>();
+        reef_sim::step(&mut simulation.0, 1.0 / 60.0, input);
+        assert!(simulation.0.sabrina.wave.charging);
+        assert_eq!(simulation.0.sabrina.wave.cast_id, 0);
+    }
+
+    #[test]
     fn unfocused_window_ignores_controller_actions_and_clears_pending_input() {
         let (mut app, pad) = input_app();
         app.world_mut().resource_mut::<Options>().verify = false;
         app.world_mut().resource_mut::<SessionUi>().pointer_mode = true;
+        app.world_mut()
+            .resource_mut::<Simulation>()
+            .0
+            .sabrina
+            .wave
+            .charging = true;
         for mut window in app
             .world_mut()
             .query::<&mut Window>()
@@ -2643,6 +2764,7 @@ mod tests {
         assert_eq!(app.world().resource::<SessionUi>().screen, Screen::Menu);
         assert!(!app.world().resource::<PendingInput>().0.cast);
         assert!(!app.world().resource::<SessionUi>().pointer_mode);
+        assert!(!app.world().resource::<Simulation>().0.sabrina.wave.charging);
     }
 
     #[test]

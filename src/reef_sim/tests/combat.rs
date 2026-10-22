@@ -151,10 +151,11 @@ fn visitors_never_leave_because_of_time_or_eaten_count() {
 }
 
 #[test]
-fn wave_only_hits_close_visitors_in_front_and_only_once() {
+fn wave_hits_visitors_at_full_range_in_front_and_only_once() {
     for (position, hit) in [
         (v(2.0, 8.5), true),
-        (v(5.0, 8.5), false),
+        (v(5.0, 8.5), true),
+        (v(9.0, 8.5), false),
         (v(-1.0, 8.5), false),
         (v(1.5, 14.0), false),
     ] {
@@ -181,6 +182,372 @@ fn wave_only_hits_close_visitors_in_front_and_only_once() {
         assert_eq!(world.points.score, if hit { 10 } else { 0 });
         assert_eq!(world.jelly[0].behaviour.bubble, 0.0);
     }
+}
+
+#[test]
+fn charged_wave_requires_three_seconds_and_doubles_reach_and_width() {
+    for hz in [30, 60, 120] {
+        let mut world = encounter(true);
+        let mut events = Events::default();
+        for tick in 0..(3 * hz) {
+            water_wave(
+                &mut world,
+                1.0 / hz as f32,
+                Input {
+                    wave: tick == 0,
+                    wave_held: true,
+                    ..Input::default()
+                },
+                &mut events,
+            );
+            if tick < 3 * hz - 1 {
+                assert!(world.sabrina.wave.charging, "{hz} Hz, tick {tick}");
+                assert!(!events.wave_cast);
+                assert_eq!(world.sabrina.wave.cooldown, 0.0);
+            }
+        }
+        assert!(events.wave_cast);
+        assert!(!world.sabrina.wave.charging);
+        assert_eq!(world.sabrina.wave.scale, 2.0);
+        assert_eq!(world.sabrina.wave.cooldown, 9.0);
+        assert_eq!(wave_recharge_duration(&world), 9.0);
+    }
+}
+
+#[test]
+fn releasing_wave_early_casts_normal_and_cancellation_or_stun_does_not_cast() {
+    for cancel in [false, true] {
+        let mut world = encounter(true);
+        let mut events = Events::default();
+        water_wave(
+            &mut world,
+            0.01,
+            Input {
+                wave: true,
+                wave_held: true,
+                ..Input::default()
+            },
+            &mut events,
+        );
+        for _ in 0..298 {
+            water_wave(
+                &mut world,
+                0.01,
+                Input {
+                    wave_held: true,
+                    ..Input::default()
+                },
+                &mut events,
+            );
+        }
+        if cancel {
+            world.sabrina.wave.cancel_charge();
+        }
+        water_wave(&mut world, 0.01, Input::default(), &mut events);
+        assert_eq!(events.wave_cast, !cancel);
+        assert!(!world.sabrina.wave.charging);
+        assert_eq!(world.sabrina.wave.scale, 1.0);
+        assert_eq!(world.sabrina.wave.cooldown, if cancel { 0.0 } else { 3.0 });
+    }
+    let mut world = encounter(true);
+    let mut events = Events::default();
+    water_wave(
+        &mut world,
+        0.01,
+        Input {
+            wave: true,
+            wave_held: true,
+            ..Input::default()
+        },
+        &mut events,
+    );
+    world.sabrina.vitality.stunned = 1.0;
+    water_wave(&mut world, 0.01, Input::default(), &mut events);
+    assert!(!world.sabrina.wave.charging && !events.wave_cast);
+}
+
+#[test]
+fn holding_after_auto_release_never_repeats_and_new_tap_returns_to_normal() {
+    let mut world = World::default();
+    reset(
+        &mut world,
+        27,
+        Settings {
+            aquarium: true,
+            ..Settings::default()
+        },
+    );
+    for tick in 0..1000 {
+        step(
+            &mut world,
+            1.0 / 60.0,
+            Input {
+                wave: tick == 0,
+                wave_held: true,
+                ..Input::default()
+            },
+        );
+    }
+    assert_eq!(world.sabrina.wave.cast_id, 1);
+    assert_eq!(world.sabrina.wave.cooldown, 0.0);
+    let events = step(
+        &mut world,
+        1.0 / 60.0,
+        Input {
+            wave: true,
+            ..Input::default()
+        },
+    );
+    assert!(events.wave_cast);
+    assert_eq!(world.sabrina.wave.scale, 1.0);
+    assert_eq!(world.sabrina.wave.cooldown, 3.0);
+}
+
+#[test]
+fn charged_wave_doubles_width_and_crystal_cannot_interrupt_its_charge() {
+    for scale in [1.0, 2.0] {
+        let mut world = encounter(true);
+        world.sabrina.motion.pos = v(0.0, 8.0);
+        world.sabrina.wave.active = true;
+        world.sabrina.wave.cast_id = 1;
+        world.sabrina.wave.origin = v(0.0, 8.0);
+        world.sabrina.wave.scale = scale;
+        world.fish[0].life.active = true;
+        world.fish[0].motion.pos = v(4.0 * scale, 8.0 + 2.0 * scale);
+        world.fish[1].life.active = true;
+        world.fish[1].motion.pos = v(4.0 * scale, 8.0 + 3.0 * scale);
+        for _ in 0..75 {
+            water_wave(&mut world, 0.01, Input::default(), &mut Events::default());
+        }
+        assert_eq!(world.fish[0].rescue.wave_hit, 1);
+        assert_eq!(world.fish[1].rescue.wave_hit, 0);
+    }
+    let mut world = encounter(true);
+    world.sabrina.wave.charging = true;
+    crystal(
+        &mut world,
+        0.01,
+        Input {
+            cast: true,
+            ..Input::default()
+        },
+        &mut Events::default(),
+    );
+    assert_eq!(world.crystal.magic.state, Spell::Resting);
+    assert!(world.sabrina.wave.charging);
+}
+
+fn four_visitors() -> World {
+    let mut world = encounter(true);
+    for index in 0..JELLY_COUNT {
+        let id = allocate_entity(&mut world, EntityKind::Jelly, index as i32);
+        world.jelly[index] = JellyEntity {
+            id,
+            motion: Motion {
+                pos: v(index as f32 * 4.0, 8.0),
+                ..Motion::default()
+            },
+            behaviour: JellyBehaviour {
+                state: JellyState::Hungry,
+                ..JellyBehaviour::default()
+            },
+        };
+    }
+    world
+}
+
+#[test]
+fn wave_sweeps_multiple_visitors_once_with_the_same_range_as_fish() {
+    for charged in [false, true] {
+        let mut world = four_visitors();
+        world.sabrina.motion.pos = v(0.0, 8.0);
+        let scale = if charged { 2.0 } else { 1.0 };
+        for (index, jelly) in world.jelly.iter_mut().enumerate() {
+            jelly.motion.pos = v((3.0 + index as f32 * 0.5) * scale, 8.5);
+        }
+        world.fish[0].motion.pos = v(5.5 * scale, 8.5);
+        world.fish[0].life.active = true;
+        world.fish[1].motion.pos = v(9.0 * scale, 8.5);
+        world.fish[1].life.active = true;
+        let mut events = Events::default();
+        water_wave(
+            &mut world,
+            0.01,
+            Input {
+                wave: true,
+                wave_held: charged,
+                ..Input::default()
+            },
+            &mut events,
+        );
+        if charged {
+            for _ in 0..299 {
+                water_wave(
+                    &mut world,
+                    0.01,
+                    Input {
+                        wave_held: true,
+                        ..Input::default()
+                    },
+                    &mut events,
+                );
+            }
+        }
+        for _ in 0..100 {
+            water_wave(&mut world, 0.01, Input::default(), &mut events);
+        }
+        for jelly in world.jelly {
+            assert_eq!(jelly.behaviour.health, 90.0);
+            assert!(jelly.behaviour.knockback.x > 0.0);
+        }
+        assert_eq!(world.fish[0].rescue.wave_hit, world.sabrina.wave.cast_id);
+        assert_ne!(world.fish[1].rescue.wave_hit, world.sabrina.wave.cast_id);
+        assert_eq!(world.points.score, 40);
+    }
+}
+
+#[test]
+fn crystal_chains_four_distinct_targets_with_halved_damage_and_full_bubbles() {
+    for gentle in [false, true] {
+        let mut world = four_visitors();
+        world.settings.gentle = gentle;
+        world.crystal.magic.state = Spell::Flying;
+        world.crystal.motion.pos = v(-2.0, 8.0);
+        world.crystal.motion.direction = v(1.0, 0.0);
+        world.sabrina.cooldown = 12.0;
+        let mut events = Events::default();
+        for count in 1..=4 {
+            for _ in 0..100 {
+                crystal(&mut world, 0.01, Input::default(), &mut events);
+                if world.crystal.magic.state == Spell::Burst {
+                    break;
+                }
+            }
+            assert_eq!(world.crystal.magic.hit_count, count);
+            assert_eq!(world.crystal.magic.state, Spell::Burst);
+            assert_eq!(
+                world.jelly[count - 1].behaviour.health,
+                100.0 - 40.0 * 0.5_f32.powi(count as i32 - 1)
+            );
+            assert_eq!(world.jelly[count - 1].behaviour.bubble, 3.0);
+            assert_eq!(world.sabrina.cooldown, 12.0 + 2.0 * (count - 1) as f32);
+            assert_eq!(recharge_duration(&world), world.sabrina.cooldown);
+            if count < 4 {
+                crystal(&mut world, 1.4, Input::default(), &mut events);
+                assert!(crystal_chain_target(&world).is_some());
+                crystal(
+                    &mut world,
+                    0.01,
+                    Input {
+                        cast: true,
+                        ..Input::default()
+                    },
+                    &mut events,
+                );
+                assert_eq!(world.crystal.magic.state, Spell::Flying);
+            }
+        }
+        assert!(crystal_chain_target(&world).is_none());
+        crystal(
+            &mut world,
+            0.21,
+            Input {
+                cast: true,
+                ..Input::default()
+            },
+            &mut events,
+        );
+        assert_eq!(world.crystal.magic.state, Spell::Returning);
+        assert_eq!(world.points.score, 75);
+        world.crystal.magic.state = Spell::Resting;
+        world.sabrina.cooldown = 0.0;
+        crystal(
+            &mut world,
+            0.01,
+            Input {
+                cast: true,
+                ..Input::default()
+            },
+            &mut events,
+        );
+        assert_eq!(world.crystal.magic.state, Spell::Charging);
+        assert_eq!(world.crystal.magic.hit_count, 0);
+        assert_eq!(recharge_duration(&world), 12.0);
+    }
+}
+
+#[test]
+fn crystal_chain_window_expires_and_never_queues_early_presses() {
+    for delay in [1.49, 1.5, 1.51] {
+        let mut world = four_visitors();
+        world.crystal.magic.state = Spell::Burst;
+        world.crystal.magic.hits[0] = world.jelly[0].id;
+        world.crystal.magic.hit_count = 1;
+        world.crystal.motion.pos = world.jelly[0].motion.pos;
+        world.sabrina.cooldown = 10.0;
+        let mut events = Events::default();
+        crystal(
+            &mut world,
+            delay,
+            Input {
+                cast: true,
+                ..Input::default()
+            },
+            &mut events,
+        );
+        assert_eq!(
+            world.crystal.magic.state,
+            if delay <= 1.5 {
+                Spell::Flying
+            } else {
+                Spell::Returning
+            }
+        );
+        assert_eq!(world.sabrina.cooldown, 10.0);
+    }
+    let mut world = four_visitors();
+    world.crystal.magic.state = Spell::Flying;
+    world.crystal.motion.pos = v(-2.0, 8.0);
+    world.crystal.motion.direction = v(1.0, 0.0);
+    let mut events = Events::default();
+    crystal(
+        &mut world,
+        0.1,
+        Input {
+            cast: true,
+            ..Input::default()
+        },
+        &mut events,
+    );
+    assert_eq!(world.crystal.magic.state, Spell::Burst);
+    crystal(&mut world, 0.01, Input::default(), &mut events);
+    assert_eq!(world.crystal.magic.state, Spell::Burst);
+}
+
+#[test]
+fn crystal_followups_ignore_previous_hidden_defeated_and_distant_targets() {
+    let mut world = four_visitors();
+    world.crystal.magic.state = Spell::Burst;
+    world.crystal.magic.hit_count = 1;
+    world.crystal.magic.hits[0] = world.jelly[0].id;
+    world.crystal.motion.pos = world.jelly[0].motion.pos;
+    world.jelly[1].behaviour.state = JellyState::Hidden;
+    world.jelly[2].behaviour.health = 0.0;
+    world.jelly[3].motion.pos.x = 13.0;
+    assert!(crystal_chain_target(&world).is_none());
+    world.jelly[3].motion.pos.x = 12.0;
+    assert_eq!(crystal_chain_target(&world), Some(world.jelly[3].id));
+    world.sabrina.vitality.stunned = 1.0;
+    crystal(
+        &mut world,
+        0.01,
+        Input {
+            cast: true,
+            ..Input::default()
+        },
+        &mut Events::default(),
+    );
+    assert_eq!(world.crystal.magic.state, Spell::Burst);
 }
 
 #[test]
@@ -567,6 +934,7 @@ fn tenth_round_always_spawns_four_and_finishes_in_victory_once() {
                         cast: true,
                         wave: true,
                         toggle_song: true,
+                        ..Input::default()
                     },
                 );
                 assert!(!events.victory && !events.visit_ended && !events.game_over);

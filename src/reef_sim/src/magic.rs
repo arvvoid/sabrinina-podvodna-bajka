@@ -35,15 +35,44 @@ fn touch_fish(world: &mut World, i: usize, events: &mut Events) {
     }
 }
 
+pub fn crystal_chain_target(world: &World) -> Option<Entity> {
+    let magic = &world.crystal.magic;
+    if magic.state != Spell::Burst
+        || magic.hit_count == 0
+        || magic.hit_count >= magic.hits.len()
+        || magic.time > CRYSTAL_CHAIN_SECONDS
+    {
+        return None;
+    }
+    world
+        .jelly
+        .iter()
+        .filter(|j| {
+            matches!(j.behaviour.state, JellyState::Hungry | JellyState::Arriving)
+                && j.behaviour.health > 0.0
+                && !magic.hits[..magic.hit_count].contains(&j.id)
+                && (j.motion.pos - world.crystal.motion.pos).length() <= CRYSTAL_CHAIN_REACH
+        })
+        .min_by(|a, b| {
+            (a.motion.pos - world.crystal.motion.pos)
+                .length()
+                .total_cmp(&(b.motion.pos - world.crystal.motion.pos).length())
+        })
+        .map(|j| j.id)
+}
+
 pub fn crystal(world: &mut World, dt: f32, input: Input, events: &mut Events) {
     if input.cast
         && world.sabrina.cooldown <= 0.0
         && world.sabrina.vitality.stunned <= 0.0
         && world.crystal.magic.state == Spell::Resting
         && !world.sabrina.wave.active
+        && !world.sabrina.wave.charging
     {
         world.crystal.magic.state = Spell::Charging;
         world.crystal.magic.time = 0.0;
+        world.crystal.magic.hit_count = 0;
+        world.crystal.magic.hits = [Entity::default(); 4];
         world.sabrina.throw_time = 0.0;
         let orbit = crystal_orbit(world, 0.0);
         world.crystal.magic.charge_offset = orbit.offset;
@@ -141,7 +170,9 @@ pub fn crystal(world: &mut World, dt: f32, input: Input, events: &mut Events) {
                 if !matches!(
                     jellyfish.behaviour.state,
                     JellyState::Hungry | JellyState::Arriving
-                ) {
+                ) || world.crystal.magic.hits[..world.crystal.magic.hit_count]
+                    .contains(&jellyfish.id)
+                {
                     continue;
                 }
                 let hit = jelly_body(jellyfish).iter().any(|&surface| {
@@ -155,23 +186,46 @@ pub fn crystal(world: &mut World, dt: f32, input: Input, events: &mut Events) {
                     ) <= 0.0
                 });
                 if hit {
-                    damage_jelly(world, index, CRYSTAL_DAMAGE, true, events);
+                    let count = world.crystal.magic.hit_count;
+                    world.crystal.magic.hits[count] = jellyfish.id;
+                    world.crystal.magic.hit_count += 1;
+                    damage_jelly(
+                        world,
+                        index,
+                        CRYSTAL_DAMAGE * 0.5_f32.powi(count as i32),
+                        true,
+                        events,
+                    );
+                    if count > 0 {
+                        world.sabrina.cooldown += CRYSTAL_CHAIN_COOLDOWN;
+                    }
                     world.crystal.magic.state = Spell::Burst;
                     world.crystal.magic.time = 0.0;
                     break;
                 }
             }
-            if world.crystal.motion.pos.x.abs() > 17.0
-                || world.crystal.motion.pos.y < 0.5
-                || world.crystal.motion.pos.y > 18.0
-                || world.crystal.magic.time > 1.5
+            if world.crystal.magic.state == Spell::Flying
+                && (world.crystal.motion.pos.x.abs() > 17.0
+                    || world.crystal.motion.pos.y < 0.5
+                    || world.crystal.motion.pos.y > 18.0
+                    || world.crystal.magic.time > 1.5)
             {
                 world.crystal.magic.state = Spell::Returning;
                 world.crystal.magic.time = 0.0;
             }
         }
         Spell::Burst => {
-            if world.crystal.magic.time > 0.2 {
+            if input.cast
+                && world.sabrina.vitality.stunned <= 0.0
+                && let Some(target) = crystal_chain_target(world)
+            {
+                world.crystal.magic.target = target;
+                world.crystal.magic.state = Spell::Flying;
+                world.crystal.magic.time = 0.0;
+                events.launch = true;
+            } else if world.crystal.magic.time > CRYSTAL_CHAIN_SECONDS
+                || (world.crystal.magic.time > 0.2 && crystal_chain_target(world).is_none())
+            {
                 world.crystal.magic.state = Spell::Returning;
                 world.crystal.magic.time = 0.0
             }
@@ -194,15 +248,55 @@ pub fn crystal(world: &mut World, dt: f32, input: Input, events: &mut Events) {
     }
 }
 
+fn wave_hits_surface(wave: WaterWave, previous: f32, front: f32, surface: Capsule) -> bool {
+    let local = |point: V2| {
+        let offset = point - wave.origin;
+        v(
+            offset.dot(wave.direction),
+            offset.x * wave.direction.y - offset.y * wave.direction.x,
+        )
+    };
+    let a = local(surface.a);
+    let b = local(surface.b);
+    let low = (previous - 0.35).max(0.0) - surface.radius;
+    let high = front + 0.35 + surface.radius;
+    if a.x.max(b.x) < low || a.x.min(b.x) > high {
+        return false;
+    }
+    let delta = b - a;
+    let (start, end) = if delta.x.abs() > 0.00001 {
+        let t0 = (low - a.x) / delta.x;
+        let t1 = (high - a.x) / delta.x;
+        (t0.min(t1).clamp(0.0, 1.0), t0.max(t1).clamp(0.0, 1.0))
+    } else {
+        (0.0, 1.0)
+    };
+    let a = a + delta * start;
+    let b = a + delta * (end - start);
+    let inside = |p: V2| p.y.abs() <= 0.65 * wave.scale + 0.38 * p.x.max(0.0) + surface.radius;
+    inside(a) || inside(b) || a.y * b.y <= 0.0
+}
+
 pub fn water_wave(world: &mut World, dt: f32, input: Input, events: &mut Events) {
-    let recharge = wave_recharge_duration(world);
     let sabrina = &mut world.sabrina;
     let wave = &mut sabrina.wave;
+    if sabrina.vitality.stunned > 0.0 {
+        wave.cancel_charge();
+    }
     if input.wave
         && wave.cooldown <= 0.0
+        && !wave.charging
+        && !wave.active
         && sabrina.vitality.stunned <= 0.0
         && sabrina.throw_time < 0.0
     {
+        wave.charging = true;
+        wave.charge_time = 0.0;
+    }
+    if wave.charging {
+        if input.wave_held {
+            wave.charge_time += dt;
+        }
         let pitch = if sabrina.motion.velocity.length() > 0.6 {
             sabrina.swimming.pitch
         } else {
@@ -218,18 +312,31 @@ pub fn water_wave(world: &mut World, dt: f32, input: Input, events: &mut Events)
         };
         wave.direction = v(side * pitch.cos(), pitch.sin()).unit();
         wave.origin = sabrina.motion.pos + v(0.0, 0.5) + wave.direction * 0.75;
+        if input.wave_held && wave.charge_time + 0.00001 < WAVE_CHARGE_SECONDS {
+            return;
+        }
+        wave.charging = false;
+        wave.scale = if wave.charge_time + 0.00001 >= WAVE_CHARGE_SECONDS {
+            2.0
+        } else {
+            1.0
+        };
         wave.active = true;
         wave.time = 0.0;
         wave.cast_id += 1;
-        wave.cooldown = recharge;
+        wave.cooldown = if wave.scale > 1.0 {
+            CHARGED_WAVE_COOLDOWN
+        } else {
+            WAVE_COOLDOWN
+        };
         events.wave_cast = true;
     }
     if !wave.active {
         return;
     }
-    let previous = wave.time * 8.0;
+    let previous = wave.time * 8.0 * wave.scale;
     wave.time += dt;
-    let front = (wave.time * 8.0).min(5.5);
+    let front = (wave.time * 8.0 * wave.scale).min(WAVE_REACH * wave.scale);
     let wave = *wave;
     // A jellyfish touching her head, torso or arms during the cast is hit even
     // outside the forward sweep; the margin covers water pushed off her skin.
@@ -241,15 +348,17 @@ pub fn water_wave(world: &mut World, dt: f32, input: Input, events: &mut Events)
         if !fish.life.active || fish.rescue.teleport > 0.0 || fish.rescue.wave_hit == wave.cast_id {
             continue;
         }
-        let offset = fish.motion.pos - wave.origin;
-        let ahead = offset.dot(wave.direction);
-        let sideways = (offset.x * wave.direction.y - offset.y * wave.direction.x).abs();
-        let radius = fish.appearance.size * 0.45;
-        if ahead < 0.0
-            || ahead < previous - 0.35 - radius
-            || ahead > front + 0.35 + radius
-            || sideways > 0.65 + 0.38 * ahead + radius
-        {
+        let ahead = (fish.motion.pos - wave.origin).dot(wave.direction);
+        if !wave_hits_surface(
+            wave,
+            previous,
+            front,
+            Capsule {
+                a: fish.motion.pos,
+                b: fish.motion.pos,
+                radius: fish.appearance.size * 0.45,
+            },
+        ) {
             continue;
         }
         // A fish can receive only one impulse from this cast, across all ticks.
@@ -286,20 +395,6 @@ pub fn water_wave(world: &mut World, dt: f32, input: Input, events: &mut Events)
             continue;
         }
         let chest = wave.origin - wave.direction * 0.75;
-        // Test the bell and tentacles, not just the visitor's centre. The wave
-        // starts at the chest so a very close visitor is not behind its hitbox.
-        let from = (previous - 0.75).max(0.0);
-        let to = (front + 0.75).min(WAVE_REACH);
-        let sweep = Capsule {
-            a: chest + wave.direction * from,
-            b: chest + wave.direction * to,
-            radius: 0.65 + 0.38 * front.min(WAVE_REACH),
-        };
-        let reach = Capsule {
-            a: chest,
-            b: chest,
-            radius: WAVE_REACH,
-        };
         // A visitor touching Sabrina often has its centre level with or just
         // behind her chest, so judge "in front" by its leading visible edge.
         let in_front = |surface: Capsule| {
@@ -310,9 +405,7 @@ pub fn water_wave(world: &mut World, dt: f32, input: Input, events: &mut Events)
                 > 0.0
         };
         let hit = jelly_body(jellyfish).iter().any(|&surface| {
-            let swept = from <= to
-                && contact_gap(reach, surface) <= 0.0
-                && contact_gap(sweep, surface) <= 0.0;
+            let swept = wave_hits_surface(wave, previous, front, surface);
             let touching = pushing
                 .iter()
                 .any(|&part| contact_gap(part, surface) <= 0.0);

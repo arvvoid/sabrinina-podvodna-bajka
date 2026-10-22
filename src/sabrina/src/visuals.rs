@@ -577,7 +577,7 @@ fn actors(
                     sim::Spell::Flying | sim::Spell::Returning
                 );
                 let charging = crystal.magic.state == sim::Spell::Charging;
-                show = crystal.magic.state != sim::Spell::Burst;
+                show = true;
                 next.translation = Vec3::new(
                     crystal.motion.pos.x,
                     crystal.motion.pos.y,
@@ -738,13 +738,24 @@ fn effects(
             }
             Effect::Wave => {
                 let wave = &s.wave;
-                show = wave.active;
-                let travel = (wave.time * 8.0).min(5.5);
+                show = wave.active || wave.charging;
+                let travel = (wave.time * 8.0 * wave.scale).min(sim::WAVE_REACH * wave.scale);
                 let wave_position = wave.origin + wave.direction * travel;
                 next.translation = Vec3::new(wave_position.x, wave_position.y, 1.6);
                 next.rotation = Quat::from_rotation_z(wave.direction.y.atan2(wave.direction.x));
-                next.scale = Vec3::new(1.2, 2.0 * (0.65 + 0.38 * travel), 1.0);
+                next.scale = Vec3::new(
+                    1.2 * wave.scale,
+                    2.0 * (0.65 * wave.scale + 0.38 * travel),
+                    1.0,
+                );
                 amount = wave.time / 0.75;
+                if wave.charging {
+                    let progress = (wave.charge_time / sim::WAVE_CHARGE_SECONDS).clamp(0.0, 1.0);
+                    let palm = sim::sabrina_palm(s);
+                    next.translation = Vec3::new(palm.offset.x, palm.offset.y, 1.6);
+                    next.scale = Vec3::new(0.5 + progress * 0.7, 0.8 + progress * 1.6, 1.0);
+                    amount = 0.15 + progress * 0.35;
+                }
             }
             Effect::Song(i) => {
                 show = s.song.active && s.song.strength > 0.05;
@@ -843,7 +854,7 @@ fn effects(
                 next.rotation = Quat::from_rotation_z(a.sin() * 0.2);
             }
             Effect::Burst => {
-                show = charging || burst;
+                show = charging || (burst && crystal.magic.time < 0.35);
                 let r = if burst {
                     1.0 + crystal.magic.time * 6.0
                 } else {
@@ -851,7 +862,11 @@ fn effects(
                 };
                 next.translation = cp;
                 next.scale = Vec3::new(r * 2.0, r * 2.0, 1.0);
-                amount = 0.5;
+                amount = if burst {
+                    0.5 * (1.0 - crystal.magic.time / 0.35).max(0.0)
+                } else {
+                    0.5
+                };
             }
         }
         if !ui.loaded && !show {

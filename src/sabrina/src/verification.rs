@@ -22,6 +22,8 @@ struct Check {
     vsync: bool,
     reduced_motion: bool,
     rumble: u8,
+    ability_stage: u8,
+    ability_time: f32,
 }
 
 #[derive(Component)]
@@ -580,8 +582,98 @@ fn drive(
         }
         670 => {
             println!("BEVY CHECK OK: localized rumble settings cycle through all three levels");
-            println!("BEVY INPUT INTEGRATION COMPLETE");
-            exit.write(AppExit::Success);
+            crate::app::begin(
+                &mut simulation.0,
+                &mut ui,
+                &crate::settings::Preferences::default(),
+                true,
+            );
+            check.ability_time = simulation.0.session.time;
+        }
+        671.. => {
+            assert!(
+                simulation.0.session.time - check.ability_time < 8.0,
+                "Ability input verification timed out"
+            );
+            match check.ability_stage {
+                0 => {
+                    if simulation.0.sabrina.wave.cast_id == 0 {
+                        keys.press(KeyCode::KeyF);
+                    } else {
+                        assert!(simulation.0.session.time - check.ability_time >= 3.0);
+                        assert_eq!(simulation.0.sabrina.wave.scale, 2.0);
+                        assert!(simulation.0.sabrina.wave.cooldown > 8.0);
+                        println!(
+                            "BEVY CHECK OK: held keyboard Wave auto-releases charged after 3 seconds"
+                        );
+                        simulation.0.sabrina.wave.cooldown = 0.0;
+                        simulation.0.sabrina.wave.active = false;
+                        check.ability_time = simulation.0.session.time;
+                        check.ability_stage = 1;
+                    }
+                }
+                1 => {
+                    if simulation.0.sabrina.wave.cast_id == 1 {
+                        let position = pixel(&window, Vec2::new(656.0, 800.0));
+                        window.set_cursor_position(Some(position));
+                        mouse.press(MouseButton::Left);
+                    } else {
+                        assert!(simulation.0.session.time - check.ability_time >= 3.0);
+                        assert_eq!(simulation.0.sabrina.wave.scale, 2.0);
+                        println!(
+                            "BEVY CHECK OK: held HUD Wave auto-releases charged after 3 seconds"
+                        );
+                        simulation.0.sabrina.wave.active = false;
+                        simulation.0.sabrina.motion.pos = reef_sim::v(-8.0, 8.0);
+                        simulation.0.sabrina.vitality.invulnerable = 10.0;
+                        for index in 0..reef_sim::JELLY_COUNT {
+                            let id = reef_sim::allocate_entity(
+                                &mut simulation.0,
+                                reef_sim::EntityKind::Jelly,
+                                index as i32,
+                            );
+                            simulation.0.jelly[index] = reef_sim::JellyEntity {
+                                id,
+                                motion: reef_sim::Motion {
+                                    pos: reef_sim::v(index as f32 * 4.0, 8.0),
+                                    ..default()
+                                },
+                                behaviour: reef_sim::JellyBehaviour {
+                                    state: if index < 2 {
+                                        reef_sim::JellyState::Hungry
+                                    } else {
+                                        reef_sim::JellyState::Hidden
+                                    },
+                                    bubble: 3.0,
+                                    ..default()
+                                },
+                            };
+                        }
+                        simulation.0.crystal.magic.state = reef_sim::Spell::Burst;
+                        simulation.0.crystal.magic.time = 0.0;
+                        simulation.0.crystal.magic.hit_count = 1;
+                        simulation.0.crystal.magic.hits[0] = simulation.0.jelly[0].id;
+                        simulation.0.crystal.motion.pos = reef_sim::v(0.0, 8.0);
+                        simulation.0.sabrina.cooldown = 12.0;
+                        check.ability_stage = 2;
+                        check.ability_time = simulation.0.session.time;
+                    }
+                }
+                _ => {
+                    if simulation.0.crystal.magic.hit_count == 1 {
+                        keys.press(KeyCode::Space);
+                    } else {
+                        assert_eq!(simulation.0.jelly[1].behaviour.health, 80.0);
+                        assert!(simulation.0.jelly[1].behaviour.bubble > 2.8);
+                        assert!(simulation.0.sabrina.cooldown > 12.0);
+                        println!(
+                            "BEVY CHECK OK: Crystal follow-up input hits a different target for half damage"
+                        );
+                        println!("BEVY INPUT INTEGRATION COMPLETE");
+                        exit.write(AppExit::Success);
+                    }
+                }
+            }
         }
         _ => {}
     }
