@@ -66,6 +66,9 @@ Only Magic gives the tail a shinier finish; the rest of Sabrina stays satin.
 
 The fish swim around during the quieter parts. Every now and then jellyfish show up and try to eat them. Each jellyfish has **100 health** and only retreats after you bring that down to zero. There is no timeout or limit to the number of fish it can eat. If you lose all the fish during a round, or Sabrina loses all her health, it is game over. Jellyfish get bigger as they eat, and Sabrina slowly recovers if she stays safe for a while.
 
+Retreating jellyfish still sting Sabrina and harm unprotected fish on accidental
+contact until they disappear. They keep leaving rather than chasing.
+
 The goal is to protect the reef for **10 rounds**. Round 10 always sends **four jellyfish**, regardless of the visitor limit or whether you selected Gentle or Lively. Defeat all four with Sabrina still alive and at least one fish left, and you win. The end screen shows your score and surviving fish. There is no round 11. Aquarium mode keeps going indefinitely.
 
 - **Crystal:** 40 damage and a 3-second air bubble. After a hit, press Crystal again within **1.5 seconds** to fly to the nearest unhit jellyfish anywhere in the scene. Each hit opens a fresh follow-up window, up to **four different targets**: **40 → 20 → 10 → 5 damage**, each surviving target bubbled for the full 3 seconds. Follow-ups home continuously across the scene in both difficulties; no repeated hits on the same target. The HUD shows the follow-up window. Without a follow-up, it returns like a boomerang. Recharge starts at launch: **12 seconds**, plus **2 seconds per additional successful hit** (maximum 18 seconds from the original launch). Missed or unavailable follow-ups add no penalty. Once returned, it resumes orbiting without glow or particles until ready. Gentle auto-aims the first throw; Lively starts with a straight skillshot aimed by swimming (horizontal while stationary).

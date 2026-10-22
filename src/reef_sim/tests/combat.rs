@@ -259,6 +259,67 @@ fn missed_skillshot_returns_and_cannot_collect_points() {
 }
 
 #[test]
+fn departing_jellyfish_sting_sabrina_and_harm_unprotected_fish_without_chasing() {
+    for gentle in [false, true] {
+        let mut world = encounter(gentle);
+        world.jelly[0].behaviour.state = JellyState::Leaving;
+        world.jelly[0].behaviour.health = 0.0;
+        world.jelly[0].behaviour.exit_side = 1;
+        world.sabrina.motion.pos = world.jelly[0].motion.pos;
+        world.sabrina.song.active = true;
+        world.fish[0].motion.pos = world.jelly[0].motion.pos;
+        world.fish[0].rescue.shield = 0.0;
+        world.points.score = 200;
+        let before = world.jelly[0].motion.pos.x;
+        let mut events = Events::default();
+        jellyfish::jellyfish_and_contacts(&mut world, 0.01, &mut events);
+        assert!(events.hit);
+        assert_eq!(
+            world.sabrina.vitality.health,
+            if gentle { 72.0 } else { 65.0 }
+        );
+        assert!(!world.sabrina.song.active);
+        assert_eq!(world.points.score, 100);
+        assert!(!world.fish[0].life.active);
+        assert_eq!(events.eaten, 1);
+        assert_eq!(events.repelled, 0);
+        assert_eq!(world.jelly[0].behaviour.state, JellyState::Leaving);
+        assert!(world.jelly[0].motion.pos.x > before);
+    }
+}
+
+#[test]
+fn departing_contact_respects_invulnerability_shields_bubbles_and_despawning() {
+    for state in [JellyState::Leaving, JellyState::Hidden] {
+        for bubbled in [false, true] {
+            let mut world = encounter(true);
+            world.jelly[0].behaviour.state = state;
+            world.jelly[0].behaviour.bubble = if bubbled { 1.0 } else { 0.0 };
+            world.sabrina.motion.pos = world.jelly[0].motion.pos;
+            world.sabrina.vitality.invulnerable = 1.0;
+            world.fish[0].motion.pos = world.jelly[0].motion.pos;
+            world.fish[0].rescue.shield = 1.0;
+            let mut events = Events::default();
+            jellyfish::jellyfish_and_contacts(&mut world, 0.01, &mut events);
+            assert!(!events.hit);
+            assert_eq!(world.sabrina.vitality.health, 100.0);
+            assert!(world.fish[0].life.active);
+            assert_eq!(events.eaten, 0);
+        }
+    }
+    let mut world = encounter(true);
+    world.jelly[0].behaviour.state = JellyState::Leaving;
+    world.jelly[0].behaviour.time = 9.0;
+    world.sabrina.motion.pos = world.jelly[0].motion.pos;
+    world.fish[0].motion.pos = world.jelly[0].motion.pos;
+    let mut events = Events::default();
+    jellyfish::jellyfish_and_contacts(&mut world, 0.01, &mut events);
+    assert_eq!(world.jelly[0].behaviour.state, JellyState::Hidden);
+    assert!(!events.hit);
+    assert_eq!(events.eaten, 0);
+}
+
+#[test]
 fn bubble_stops_movement_stings_and_feeding_then_expires() {
     let mut world = encounter(true);
     world.sabrina.motion.pos = world.jelly[0].motion.pos;

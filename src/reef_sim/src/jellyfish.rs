@@ -95,7 +95,7 @@ pub fn jellyfish_and_contacts(world: &mut World, dt: f32, events: &mut Events) {
         }
         if matches!(
             jellyfish.behaviour.state,
-            JellyState::Hungry | JellyState::Arriving
+            JellyState::Hungry | JellyState::Arriving | JellyState::Leaving
         ) {
             let stinging = jelly_body(&jellyfish).iter().any(|&surface| {
                 sabrina_body(&world.sabrina)
