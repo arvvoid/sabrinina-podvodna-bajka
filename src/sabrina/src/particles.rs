@@ -54,7 +54,7 @@ pub(crate) struct ParticlePlugin;
 impl Plugin for ParticlePlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(MaterialPlugin::<ParticleMaterial>::default())
-            .add_systems(Startup, setup)
+            .add_systems(Update, setup.in_set(crate::loading::LoadResources))
             .add_systems(Update, update.after(crate::presentation::prepare));
     }
 }

@@ -7,7 +7,7 @@ use bevy::{
     image::{ImageAddressMode, ImageSampler, ImageSamplerDescriptor},
     prelude::*,
     render::{
-        RenderApp, RenderStartup,
+        Render, RenderApp, RenderSystems,
         diagnostic::RecordDiagnostics,
         extract_component::{
             ComponentUniforms, DynamicUniformIndex, ExtractComponent, ExtractComponentPlugin,
@@ -48,10 +48,16 @@ impl Plugin for CausticsPlugin {
             UniformComponentPlugin::<CausticsSettings>::default(),
             ExtractResourcePlugin::<CausticsTexture>::default(),
         ))
-        .add_systems(Startup, create_texture)
+        .add_systems(Update, create_texture.in_set(crate::loading::LoadResources))
         .add_systems(Update, settings);
         app.sub_app_mut(RenderApp)
-            .add_systems(RenderStartup, pipeline)
+            .add_systems(
+                Render,
+                pipeline.in_set(RenderSystems::PrepareResources).run_if(
+                    bevy::ecs::schedule::common_conditions::resource_exists::<CausticsTexture>
+                        .and_then(bevy::ecs::schedule::common_conditions::run_once),
+                ),
+            )
             .add_systems(
                 Core3d,
                 render

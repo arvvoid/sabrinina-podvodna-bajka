@@ -163,11 +163,13 @@ impl Plugin for ReefPlugin {
             time: 0.0,
             flying: false,
         })
-        .add_systems(Startup, setup)
+        .add_systems(Update, setup.in_set(crate::loading::LoadResources))
         .add_systems(
             Update,
             (bind_reef, actors, effects, lighting, crystal_light, capture)
                 .chain()
+                .after(crate::loading::LoadResources)
+                .run_if(crate::loading::resources_allowed)
                 .after(crate::presentation::prepare),
         );
     }

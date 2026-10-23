@@ -151,7 +151,7 @@ fn input_backend(windows: bool, wgi: bool) -> &'static str {
     }
 }
 
-fn title_path(language: usize) -> &'static str {
+pub(crate) fn title_path(language: usize) -> &'static str {
     ["ui/title_eng.png", "ui/title_hr.png", "ui/title_it.png"][language % 3]
 }
 
@@ -883,10 +883,11 @@ fn draw(
         background_alpha: 1.0,
         controls: hints.style,
     };
-    if options
-        .capture
-        .as_deref()
-        .is_some_and(|k| k.starts_with("graphics-") || k.starts_with("pose-") || k == "rig")
+    if ui.screen != Screen::Loading
+        && options
+            .capture
+            .as_deref()
+            .is_some_and(|k| k.starts_with("graphics-") || k.starts_with("pose-") || k == "rig")
     {
         focus.count = 0;
         return;
@@ -915,51 +916,36 @@ fn draw(
             .id();
         builder.commands.entity(root).add_child(title);
         let scale = image.w / LOADING_ART_WIDTH;
-        if update_check.status != crate::updates::Status::Continue {
+        if let crate::updates::Status::Available { tag, .. } = &update_check.status {
             builder.panel(rect(370.0, 510.0, 860.0, 265.0));
-            let (title, message) = match &update_check.status {
-                crate::updates::Status::Available { tag, .. } => (
-                    tr("A new underwater adventure awaits!", preferences.language),
-                    format!(
-                        "{} {}\n{}",
-                        tr("New version available:", preferences.language),
-                        tag,
-                        tr(
-                            if update_check.browser_error {
-                                "Could not open your browser. Try again or skip for now."
-                            } else {
-                                "View the GitHub release to download it, or keep playing this version."
-                            },
-                            preferences.language
-                        )
-                    ),
-                ),
-                _ => (
-                    tr("Checking for updates…", preferences.language),
-                    tr("Just a moment before we dive in.", preferences.language),
-                ),
-            };
+            let title = tr("A new underwater adventure awaits!", preferences.language);
+            let message = format!(
+                "{} {}\n{}",
+                tr("New version available:", preferences.language),
+                tag,
+                tr(
+                    if update_check.browser_error {
+                        "Could not open your browser. Try again or skip for now."
+                    } else {
+                        "View the GitHub release to download it, or keep playing this version."
+                    },
+                    preferences.language
+                )
+            );
             builder.label(rect(410.0, 538.0, 780.0, 42.0), 29.0, title, None);
             builder.label(rect(410.0, 590.0, 780.0, 75.0), 21.0, message, None);
-            if matches!(
-                update_check.status,
-                crate::updates::Status::Available { .. }
-            ) {
-                builder.button(
-                    rect(410.0, 687.0, 370.0, 58.0),
-                    "View release and exit",
-                    Action::ViewRelease,
-                    true,
-                );
-                builder.button(
-                    rect(810.0, 687.0, 370.0, 58.0),
-                    "Skip for now",
-                    Action::SkipUpdate,
-                    false,
-                );
-            }
-            focus.count = builder.index;
-            return;
+            builder.button(
+                rect(410.0, 687.0, 370.0, 58.0),
+                "View release and exit",
+                Action::ViewRelease,
+                true,
+            );
+            builder.button(
+                rect(810.0, 687.0, 370.0, 58.0),
+                "Skip for now",
+                Action::SkipUpdate,
+                false,
+            );
         }
         let halo = loading_ready_overlay(image);
         let halo = builder
@@ -1060,7 +1046,7 @@ fn draw(
         }
         let avoid = loading_ready_overlay(image);
         draw_loading_stats(&mut builder, viewport_width, viewport_height, zoom, avoid);
-        focus.count = 0;
+        focus.count = builder.index;
         return;
     }
     if ui.started && !matches!(ui.screen, Screen::Victory | Screen::GameOver) {
@@ -2156,6 +2142,7 @@ fn update(
     library: Res<crate::assets::Library>,
     loading: Res<crate::loading::Loading>,
     server: Res<AssetServer>,
+    update_check: Res<crate::updates::UpdateCheck>,
     mut button_images: Local<Option<ButtonImages>>,
 ) {
     let sabrina = &simulation.0.sabrina;
@@ -2215,7 +2202,18 @@ fn update(
             "loading" => format!(
                 "{}  {:.0}%",
                 tr(
-                    if loading.warming {
+                    if !loading.splash_presented {
+                        "Preparing the loading screen…"
+                    } else if update_check.status == crate::updates::Status::Checking {
+                        "Checking for updates…"
+                    } else if loading.warming
+                        && matches!(
+                            update_check.status,
+                            crate::updates::Status::Available { .. }
+                        )
+                    {
+                        "Choose whether to update or continue"
+                    } else if loading.warming {
                         "Preparing graphics…"
                     } else if library.ready {
                         "Preparing the characters…"

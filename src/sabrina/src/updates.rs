@@ -94,7 +94,7 @@ pub struct UpdatePlugin;
 impl Plugin for UpdatePlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<UpdateCheck>()
-            .add_systems(Startup, start)
+            .add_systems(Update, start.in_set(crate::loading::LoadResources))
             .add_systems(PreUpdate, poll);
     }
 }
@@ -154,10 +154,6 @@ fn poll(mut check: ResMut<UpdateCheck>) {
         }
     }
     check.receiver = None;
-}
-
-pub fn loading_allowed(check: Option<Res<UpdateCheck>>) -> bool {
-    check.is_none_or(|check| check.status == Status::Continue)
 }
 
 pub fn open_release(check: &mut UpdateCheck) -> Result<(), String> {
@@ -239,7 +235,7 @@ mod tests {
     }
 
     #[test]
-    fn polling_waits_then_presents_a_new_release_without_allowing_loading() {
+    fn polling_waits_then_preserves_a_new_release_for_user_choice() {
         let (mut app, sender) = checking();
         for _ in 0..3 {
             app.update();
@@ -285,7 +281,7 @@ mod tests {
     }
 
     #[test]
-    fn loading_gate_does_not_consume_once_until_skip_and_only_loads_once() {
+    fn resource_loading_waits_for_splash_not_for_update_check_or_choice() {
         #[derive(Resource, Default)]
         struct Loads(usize);
         let mut app = App::new();
@@ -294,11 +290,25 @@ mod tests {
             ..default()
         })
         .init_resource::<Loads>()
+        .init_resource::<crate::loading::Loading>()
+        .configure_sets(
+            Update,
+            crate::loading::LoadResources.run_if(
+                crate::loading::resources_allowed
+                    .and_then(bevy::ecs::schedule::common_conditions::run_once),
+            ),
+        )
         .add_systems(
             Update,
-            (|mut loads: ResMut<Loads>| loads.0 += 1)
-                .run_if(loading_allowed.and_then(bevy::ecs::schedule::common_conditions::run_once)),
+            (|mut loads: ResMut<Loads>| loads.0 += 1).in_set(crate::loading::LoadResources),
         );
+        for _ in 0..3 {
+            app.update();
+            assert_eq!(app.world().resource::<Loads>().0, 0);
+        }
+        app.world_mut()
+            .resource_mut::<crate::loading::Loading>()
+            .splash_presented = true;
         for status in [
             Status::Checking,
             Status::Checking,
@@ -309,7 +319,7 @@ mod tests {
         ] {
             app.world_mut().resource_mut::<UpdateCheck>().status = status;
             app.update();
-            assert_eq!(app.world().resource::<Loads>().0, 0);
+            assert_eq!(app.world().resource::<Loads>().0, 1);
         }
         app.world_mut().resource_mut::<UpdateCheck>().status = Status::Continue;
         for _ in 0..3 {

@@ -34,7 +34,18 @@ pub struct VerificationPlugin;
 impl Plugin for VerificationPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Check>()
-            .add_systems(Startup, prepare_update_prompt.after(crate::updates::start))
+            .add_systems(
+                Update,
+                verify_splash
+                    .after(crate::loading::bootstrap)
+                    .before(crate::loading::LoadResources),
+            )
+            .add_systems(
+                Update,
+                prepare_update_prompt
+                    .in_set(crate::loading::LoadResources)
+                    .after(crate::updates::start),
+            )
             .add_systems(
                 PreUpdate,
                 verify_update_prompt
@@ -55,6 +66,35 @@ impl Plugin for VerificationPlugin {
     }
 }
 
+fn verify_splash(
+    mut commands: Commands,
+    options: Res<Options>,
+    loading: Res<crate::loading::Loading>,
+    library: Res<crate::assets::Library>,
+    scene_cameras: Query<&Camera3d>,
+    ui_cameras: Query<&Camera2d>,
+    audio: Query<&Channel>,
+    texts: Query<&Text>,
+    mut checked: Local<bool>,
+) {
+    if !options.verify || !loading.splash_presented || *checked {
+        return;
+    }
+    assert!(library.handles.is_empty());
+    assert_eq!(loading.assets_total, 0);
+    assert!(scene_cameras.is_empty());
+    assert!(audio.is_empty());
+    assert_eq!(ui_cameras.iter().count(), 1);
+    assert!(texts.iter().any(|text| text.0.contains("0%")));
+    commands
+        .spawn(bevy::render::view::screenshot::Screenshot::primary_window())
+        .observe(bevy::render::view::screenshot::save_to_disk(
+            std::env::temp_dir().join("sabrina-bevy-startup.png"),
+        ));
+    println!("BEVY CHECK OK: splash rendered at 0% before models, audio or the 3D scene start");
+    *checked = true;
+}
+
 fn prepare_update_prompt(options: Res<Options>, mut check: ResMut<crate::updates::UpdateCheck>) {
     if options.verify {
         check.status = crate::updates::Status::Available {
@@ -70,12 +110,12 @@ fn verify_update_prompt(
     check: Res<crate::updates::UpdateCheck>,
     loading: Res<crate::loading::Loading>,
     ui: Res<SessionUi>,
-    rigs: Query<&RigPlayer>,
+    library: Res<crate::assets::Library>,
     texts: Query<&Text>,
     mut keys: ResMut<ButtonInput<KeyCode>>,
     mut frame: Local<u8>,
 ) {
-    if !options.verify || *frame >= 5 {
+    if !options.verify || *frame >= 5 || !loading.splash_presented {
         return;
     }
     *frame += 1;
@@ -85,8 +125,9 @@ fn verify_update_prompt(
             crate::updates::Status::Available { .. }
         ));
         assert!(!ui.loaded);
-        assert_eq!(loading.assets_total, 0);
-        assert!(rigs.is_empty());
+        assert!(loading.assets_total > 0);
+        assert!(!library.handles.is_empty());
+        assert!(loading.progress >= 0.05 && loading.progress < 1.0);
     }
     match *frame {
         3 => {
@@ -100,7 +141,9 @@ fn verify_update_prompt(
         5 => {
             keys.release(KeyCode::Enter);
             assert_eq!(check.status, crate::updates::Status::Continue);
-            println!("BEVY CHECK OK: update prompt blocks asset loading; keyboard skip resumes it");
+            println!(
+                "BEVY CHECK OK: update prompt shares loading progress; resources load behind it; keyboard skip continues"
+            );
         }
         _ => {}
     }

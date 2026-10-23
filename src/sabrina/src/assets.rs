@@ -187,17 +187,15 @@ impl Plugin for CharacterPlugin {
             .init_resource::<RigCache>()
             .add_systems(
                 Update,
-                load.run_if(
-                    crate::updates::loading_allowed
-                        .and_then(bevy::ecs::schedule::common_conditions::run_once),
-                )
-                .before(crate::loading::ready),
+                load.in_set(crate::loading::LoadResources)
+                    .before(crate::loading::ready),
             )
             .add_systems(
                 Update,
                 (crate::loading::ready, finish_load, sync_models)
                     .chain()
-                    .run_if(crate::updates::loading_allowed),
+                    .after(crate::loading::LoadResources)
+                    .run_if(crate::loading::resources_allowed),
             )
             .add_systems(
                 Update,
