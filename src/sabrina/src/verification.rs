@@ -800,7 +800,7 @@ struct ReadingCheck {
     saved: Option<reef_sim::World>,
     pose: reef_sim::V2,
     offset: f32,
-    bones: Vec<(Entity, Transform)>,
+    transforms: Vec<(Entity, Transform)>,
     reduced_motion: bool,
 }
 
@@ -818,7 +818,10 @@ fn verify_reading(
     mut window: Single<&mut Window, With<PrimaryWindow>>,
     content: Query<(&Node, &ComputedNode, &TextFont), With<crate::ui::CrawlText>>,
     viewport: Query<(&Node, &ComputedNode), With<crate::ui::CrawlViewport>>,
-    bones: Query<(Entity, &Transform, Option<&Name>), With<bevy::animation::AnimationTargetId>>,
+    transforms: Query<
+        (Entity, &Transform, Option<&Name>),
+        Or<(With<bevy::animation::AnimationTargetId>, With<Actor>)>,
+    >,
     mut exit: MessageWriter<AppExit>,
 ) {
     if !options.verify || check.ability_stage != 3 {
@@ -837,7 +840,7 @@ fn verify_reading(
             reading.saved = Some(simulation.0.clone());
             reading.pose = rendered.0.sabrina.motion.pos;
             reading.reduced_motion = preferences.reduced_motion;
-            reading.bones = bones
+            reading.transforms = transforms
                 .iter()
                 .map(|(entity, transform, _)| (entity, *transform))
                 .collect();
@@ -914,12 +917,12 @@ fn verify_reading(
                 saved.sabrina.vitality.health
             );
             assert_eq!(rendered.0.sabrina.motion.pos, reading.pose);
-            for &(entity, before) in &reading.bones {
-                let (_, after, name) = bones.get(entity).unwrap();
+            for &(entity, before) in &reading.transforms {
+                let (_, after, name) = transforms.get(entity).unwrap();
                 assert!(before.translation.distance(after.translation) < 0.00001);
                 assert!(
                     before.rotation.dot(after.rotation).abs() > 0.99999,
-                    "Reading screen changed paused bone {entity:?} {name:?}: {:?} -> {:?}",
+                    "Reading screen changed paused actor or bone {entity:?} {name:?}: {:?} -> {:?}",
                     before.rotation,
                     after.rotation
                 );

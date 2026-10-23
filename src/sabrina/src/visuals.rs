@@ -138,7 +138,7 @@ struct Sun {
     shadow_layer: bool,
 }
 
-#[derive(Resource)]
+#[derive(Resource, Clone)]
 struct Trail {
     points: [Vec3; 24],
     previous: Vec3,
@@ -505,9 +505,35 @@ fn actors(
     ui: Res<SessionUi>,
     preferences: Res<Preferences>,
     time: Res<Time>,
-    mut actors: Query<(&Actor, &mut ActorVisual, &mut Transform, &mut Visibility)>,
+    mut actors: Query<(
+        Entity,
+        &Actor,
+        &mut ActorVisual,
+        &mut Transform,
+        &mut Visibility,
+    )>,
     mut surfaces: Query<(&CharacterSurface, &mut MeshMaterial3d<StandardMaterial>)>,
+    mut reading: Local<Option<Vec<(Entity, f32, Transform)>>>,
 ) {
+    if ui.loaded && ui.screen.is_reading() {
+        if reading.is_none() {
+            *reading = Some(
+                actors
+                    .iter()
+                    .filter(|(_, actor, _, _, _)| matches!(actor, Actor::Fish(_)))
+                    .map(|(entity, _, view, transform, _)| (entity, view.yaw, *transform))
+                    .collect(),
+            );
+        }
+    } else if let Some(saved) = reading.take() {
+        for (entity, yaw, transform) in saved {
+            if let Ok((_, _, mut view, mut root, _)) = actors.get_mut(entity) {
+                view.yaw = yaw;
+                // Hidden pooled roots are not updated by the normal actor pass.
+                *root = transform;
+            }
+        }
+    }
     let dt = if ui.scene_paused() {
         0.0
     } else {
@@ -519,7 +545,7 @@ fn actors(
     } else {
         1.0
     };
-    for (actor, mut view, mut transform, mut visibility) in &mut actors {
+    for (_, actor, mut view, mut transform, mut visibility) in &mut actors {
         let mut show = true;
         let mut next = *transform;
         match *actor {
@@ -674,7 +700,15 @@ fn effects(
         Without<crate::particles::ParticleEmitter>,
     >,
     mut water: ResMut<Assets<WaterMaterial>>,
+    mut reading: Local<Option<Trail>>,
 ) {
+    if ui.loaded && ui.screen.is_reading() {
+        if reading.is_none() {
+            *reading = Some(trail.clone());
+        }
+    } else if let Some(saved) = reading.take() {
+        *trail = saved;
+    }
     let t = rendered.0.session.time;
     let dt = if ui.scene_paused() {
         0.0
@@ -1187,6 +1221,143 @@ fn crystal_light(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn reading_restores_fish_roots_and_flying_crystal_trails() {
+        use crate::{
+            app::{Screen, Simulation},
+            presentation::{Previous, prepare},
+        };
+
+        for reduced_motion in [false, true] {
+            for spell in [sim::Spell::Flying, sim::Spell::Returning] {
+                let preferences = Preferences {
+                    reduced_motion,
+                    ..default()
+                };
+                let mut world = sim::World::default();
+                sim::reset(&mut world, 27, preferences.simulation(false));
+                world.session.time = 123.0;
+                world.fish[0].life.active = true;
+                world.fish[1].life.active = false;
+                world.fish[1].life.pop_time = 0.0;
+                world.crystal.magic.state = spell;
+                world.crystal.motion.pos = sim::v(4.0, 8.0);
+                let cp = Vec3::new(4.0, 8.0, world.crystal.magic.depth);
+                let mut previous = world.clone();
+                previous.session.time -= 1.0 / 60.0;
+                let mut app = App::new();
+                app.insert_resource(Simulation(world.clone()))
+                    .insert_resource(Presentation(world))
+                    .insert_resource(Previous(Some(previous)))
+                    .insert_resource(preferences)
+                    .init_resource::<Time>()
+                    .insert_resource(Time::<Fixed>::from_hz(60.0))
+                    .init_resource::<Assets<WaterMaterial>>()
+                    .insert_resource(SessionUi {
+                        loaded: true,
+                        screen: Screen::Pause,
+                        return_to: Screen::Pause,
+                        ..default()
+                    })
+                    .insert_resource(Trail {
+                        points: std::array::from_fn(|i| cp - Vec3::X * i as f32 * 0.1),
+                        previous: cp,
+                        time: 0.007,
+                        flying: true,
+                    })
+                    .add_systems(Update, (prepare, actors, effects).chain());
+                let fish: Vec<_> = (0..2)
+                    .map(|i| {
+                        app.world_mut()
+                            .spawn((
+                                Actor::Fish(i),
+                                ActorVisual {
+                                    model: None,
+                                    variant: 0,
+                                    yaw: 1.2 + i as f32,
+                                },
+                                Transform::from_rotation(Quat::from_rotation_y(0.7)),
+                                Visibility::default(),
+                            ))
+                            .id()
+                    })
+                    .collect();
+                let trail_entities: Vec<_> = (0..24)
+                    .map(|i| {
+                        app.world_mut()
+                            .spawn((
+                                Effect::Trail(i),
+                                Transform::default(),
+                                Visibility::default(),
+                            ))
+                            .id()
+                    })
+                    .collect();
+                app.update();
+                let saved_fish: Vec<_> = fish
+                    .iter()
+                    .map(|&entity| {
+                        (
+                            entity,
+                            app.world().get::<ActorVisual>(entity).unwrap().yaw,
+                            *app.world().get::<Transform>(entity).unwrap(),
+                            *app.world().get::<Visibility>(entity).unwrap(),
+                        )
+                    })
+                    .collect();
+                let saved_trail = app.world().resource::<Trail>().points;
+                let saved_transforms: Vec<_> = trail_entities
+                    .iter()
+                    .map(|&entity| *app.world().get::<Transform>(entity).unwrap())
+                    .collect();
+                // Reopening must take a fresh snapshot; switching pages must not.
+                for pages in [
+                    [Screen::Credits, Screen::Help],
+                    [Screen::Help, Screen::Credits],
+                ] {
+                    for page in pages {
+                        app.world_mut().resource_mut::<SessionUi>().screen = page;
+                        for _ in 0..90 {
+                            app.world_mut()
+                                .resource_mut::<Time>()
+                                .advance_by(std::time::Duration::from_secs_f32(1.0 / 60.0));
+                            app.update();
+                        }
+                    }
+                    assert_ne!(
+                        app.world().get::<ActorVisual>(fish[0]).unwrap().yaw,
+                        saved_fish[0].1
+                    );
+                    assert!(!app.world().resource::<Trail>().flying);
+                    app.world_mut().resource_mut::<SessionUi>().screen = Screen::Pause;
+                    for _ in 0..3 {
+                        app.update();
+                        for &(entity, yaw, transform, visibility) in &saved_fish {
+                            assert_eq!(app.world().get::<ActorVisual>(entity).unwrap().yaw, yaw);
+                            assert_eq!(*app.world().get::<Transform>(entity).unwrap(), transform);
+                            assert_eq!(*app.world().get::<Visibility>(entity).unwrap(), visibility);
+                        }
+                        let trail = app.world().resource::<Trail>();
+                        assert_eq!(trail.points, saved_trail);
+                        assert_eq!(trail.previous, cp);
+                        assert_eq!(trail.time, 0.007);
+                        assert!(trail.flying);
+                        for (&entity, transform) in trail_entities.iter().zip(&saved_transforms) {
+                            assert_eq!(app.world().get::<Transform>(entity).unwrap(), transform);
+                        }
+                    }
+                }
+                app.world_mut().resource_mut::<SessionUi>().screen = Screen::Playing;
+                app.update();
+                assert_ne!(app.world().resource::<Trail>().points, saved_trail);
+                assert_ne!(
+                    app.world().get::<ActorVisual>(fish[0]).unwrap().yaw,
+                    saved_fish[0].1
+                );
+            }
+        }
+    }
 
     #[test]
     fn frozen_crystal_does_not_dirty_lights_transforms_or_materials() {

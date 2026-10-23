@@ -27,6 +27,8 @@ Jellyfish switch from arriving to normal hungry steering after 4.5 seconds wheth
 
 Actors use persistent entity roots and pooled visuals. Animated instances have separate skeletons but share meshes, textures and animation resources. Hidden fish and jellyfish stop animating; screen-size LODs use hysteresis.
 
+Help and Credits run a separate presentation aquarium without advancing gameplay. Returning restores the presented world, animation and hair state, fish-root facing and transforms, and crystal trail history. Switching between reading pages retains the original snapshot so returning to Pause preserves the pre-reading pose and effects.
+
 Sabrina combines authored clips with runtime pose corrections, facial morphs and spring-driven hair. Collision samples are exported from the same Blender poses, keeping gameplay independent of render frame rate.
 
 Textures receive mipmaps during loading. Water, reef and crystal effects use embedded WESL shaders. Quality settings control shadows, antialiasing and effect detail. Pooled effects avoid unnecessary transform and material updates.
