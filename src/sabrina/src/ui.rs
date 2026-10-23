@@ -1150,13 +1150,13 @@ fn draw_hud(
     materials: &mut Assets<AbilityIcon>,
 ) {
     builder.background_alpha = HUD_BACKGROUND_ALPHA;
-    builder.panel(rect(24.0, 22.0, 490.0, 190.0));
-    builder.label(rect(48.0, 42.0, 450.0, 32.0), 24.0, "", Some("phase"));
-    builder.label(rect(48.0, 80.0, 450.0, 28.0), 18.0, "", Some("stats"));
-    builder.image(rect(48.0, 117.0, 28.0, 28.0), "heart");
-    builder.label(rect(86.0, 118.0, 390.0, 28.0), 18.0, "", Some("health"));
+    builder.panel(rect(18.0, 18.0, 330.0, 112.0));
+    builder.label(rect(36.0, 30.0, 294.0, 26.0), 20.0, "", Some("phase"));
+    builder.label(rect(36.0, 59.0, 294.0, 23.0), 17.0, "", Some("stats"));
+    builder.image(rect(36.0, 88.0, 22.0, 22.0), "heart");
+    builder.label(rect(65.0, 89.0, 90.0, 22.0), 16.0, "", Some("health"));
     builder.meter(
-        rect(48.0, 156.0, 440.0, 12.0),
+        rect(163.0, 95.0, 167.0, 9.0),
         Color::srgb(1.0, 0.4, 0.48),
         "health",
     );
@@ -2098,11 +2098,7 @@ fn update(
                 language,
             ),
             "stats" => hud_stats(&simulation.0, language),
-            "health" => format!(
-                "{}{} / 100",
-                tr("Health · ", language),
-                sabrina.vitality.health.ceil() as i32
-            ),
+            "health" => format!("{} / 100", sabrina.vitality.health.ceil() as i32),
             "crystal" if reef_sim::crystal_chain_target(&simulation.0).is_some() => {
                 format!(
                     "{} · {:.1}",
@@ -2316,8 +2312,10 @@ mod tests {
         );
         for (key, node) in world.query::<(&Dynamic, &Node)>().iter(world) {
             if ["phase", "stats", "health"].contains(&key.0) {
-                assert!(matches!(node.left, Val::Px(x) if x < 500.0));
-                assert!(matches!(node.top, Val::Px(y) if y < 212.0));
+                assert!(matches!(node.left, Val::Px(x) if (36.0..=65.0).contains(&x)));
+                assert!(matches!(node.top, Val::Px(y) if (30.0..=89.0).contains(&y)));
+                assert!(matches!(node.width, Val::Px(w) if w <= 294.0));
+                assert!(matches!(node.height, Val::Px(h) if h <= 26.0));
             }
             if reward_line(key.0).is_some() {
                 assert!(matches!(node.left, Val::Px(x) if x == 40.0));
@@ -2354,6 +2352,24 @@ mod tests {
                 .iter(world)
                 .all(|meter| meter.0 == "health")
         );
+        let compact_panels: Vec<_> = world
+            .query::<(&ImageNode, &Node)>()
+            .iter(world)
+            .filter(|(_, node)| node.left == px(18.0) && node.top == px(18.0))
+            .collect();
+        assert_eq!(compact_panels.len(), 1);
+        let panel = compact_panels[0].1;
+        assert_eq!(panel.width, px(330.0));
+        assert_eq!(panel.height, px(112.0));
+        let (Val::Px(width), Val::Px(height)) = (panel.width, panel.height) else {
+            panic!("HUD panel must have fixed logical dimensions");
+        };
+        assert!(width * height < 490.0 * 190.0 * 0.4);
+        for (_, node) in world.query::<(&Meter, &Node)>().iter(world) {
+            assert_eq!(node.left, px(163.0));
+            assert_eq!(node.top, px(95.0));
+            assert_eq!(node.height, px(9.0));
+        }
         assert!(
             world
                 .query::<&Hit>()

@@ -57,6 +57,9 @@ abilities are muted; cooldowns reveal the icon's color clockwise, with remaining
 time shown over it. Song uses the same sweep for its remaining/recharging energy.
 The sweep is shader-rendered: only small progress uniforms change, not textures.
 
+The compact top-left status panel groups phase, fish count and cumulative score,
+with a heart, numeric health and a slim health bar on one row.
+
 **Tail color:** open Settings → Tail color and choose **None**, **Natural green**,
 **Violet**, **Pink**, **Lagoon blue**, **Coral**, **Gold**, or **Magic** using the
 mouse, keyboard or controller. **None** keeps the original texture colors and
