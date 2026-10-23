@@ -205,6 +205,16 @@ struct ButtonLabel {
     action: Action,
 }
 
+const FOCUS_COLOR: Color = Color::srgb(1.0, 0.86, 0.35);
+const SLIDER_COLOR: Color = Color::srgb(0.25, 0.87, 0.87);
+const LABEL_COLOR: Color = Color::srgb(0.87, 0.97, 1.0);
+
+#[derive(Component)]
+struct SliderFill(usize);
+
+#[derive(Component)]
+struct SliderLabel(usize);
+
 #[derive(Component)]
 struct Dynamic(&'static str);
 
@@ -355,8 +365,44 @@ impl Plugin for ReefUiPlugin {
             .add_systems(PreUpdate, actions.after(crate::app::input))
             .add_systems(
                 Update,
-                (draw, update).chain().before(crate::presentation::prepare),
+                (draw, update, update_focus)
+                    .chain()
+                    .before(crate::presentation::prepare),
             );
+    }
+}
+
+fn update_focus(
+    ui: Res<SessionUi>,
+    focus: Res<Focus>,
+    mut outlines: Query<(&Hit, &mut Outline)>,
+    mut fills: Query<(&SliderFill, &mut BackgroundColor)>,
+    mut labels: Query<(&SliderLabel, &mut TextColor)>,
+) {
+    let focused = |index| ui.screen != Screen::Playing && index == focus.index;
+    for (hit, mut outline) in &mut outlines {
+        let color = if focused(hit.index) {
+            FOCUS_COLOR
+        } else {
+            Color::NONE
+        };
+        if outline.color != color {
+            outline.color = color;
+        }
+    }
+    for (fill, mut color) in &mut fills {
+        color.set_if_neq(BackgroundColor(if focused(fill.0) {
+            FOCUS_COLOR
+        } else {
+            SLIDER_COLOR
+        }));
+    }
+    for (label, mut color) in &mut labels {
+        color.set_if_neq(TextColor(if focused(label.0) {
+            FOCUS_COLOR
+        } else {
+            LABEL_COLOR
+        }));
     }
 }
 
@@ -499,7 +545,7 @@ impl Builder<'_, '_, '_> {
                     font_size: FontSize::Px(size),
                     ..default()
                 },
-                TextColor(Color::srgb(0.87, 0.97, 1.0)),
+                TextColor(LABEL_COLOR),
                 r.node(),
             ))
             .id();
@@ -537,12 +583,15 @@ impl Builder<'_, '_, '_> {
             20.0
         };
         let e = self.image(r, if primary { "button" } else { "button_teal" });
-        self.commands.entity(e).insert(Hit {
-            rect: r,
-            action,
-            index: self.index,
-            slider: false,
-        });
+        self.commands.entity(e).insert((
+            Hit {
+                rect: r,
+                action,
+                index: self.index,
+                slider: false,
+            },
+            Outline::new(px(3.0), px(3.0), Color::NONE),
+        ));
         self.index += 1;
         let label = self.label(
             rect(r.x + 12.0, r.y + 12.0, r.w - 24.0, r.h - 16.0),
@@ -721,12 +770,15 @@ impl Builder<'_, '_, '_> {
         self.commands.entity(self.root).add_child(e);
     }
 
-    fn slider(&mut self, r: Rect, amount: f32, action: Action) {
+    fn slider(&mut self, r: Rect, amount: f32, action: Action, label: Entity) {
+        let index = self.index;
+        self.commands.entity(label).insert(SliderLabel(index));
         let e = self
             .commands
             .spawn((
                 r.node(),
                 BackgroundColor(Color::srgb(0.05, 0.25, 0.30)),
+                Outline::new(px(3.0), px(3.0), Color::NONE),
                 Hit {
                     rect: r,
                     action,
@@ -741,7 +793,8 @@ impl Builder<'_, '_, '_> {
             .commands
             .spawn((
                 rect(r.x, r.y, r.w * amount, r.h).node(),
-                BackgroundColor(Color::srgb(0.25, 0.87, 0.87)),
+                BackgroundColor(SLIDER_COLOR),
+                SliderFill(index),
             ))
             .id();
         self.commands.entity(self.root).add_child(f);
@@ -1451,10 +1504,10 @@ fn draw_settings(builder: &mut Builder<'_, '_, '_>, preferences: &Preferences) {
         ),
         (545.0, "Original voices", preferences.voice, Action::Voice),
     ] {
-        builder.label(rect(315.0, y, 450.0, 35.0), 22.0, tr(key, lang), None);
-        builder.slider(rect(315.0, y + 48.0, 400.0, 24.0), value, action);
+        let label = builder.label(rect(315.0, y, 450.0, 35.0), 22.0, tr(key, lang), None);
+        builder.slider(rect(315.0, y + 48.0, 400.0, 24.0), value, action, label);
     }
-    builder.label(
+    let label = builder.label(
         rect(815.0, 345.0, 465.0, 35.0),
         22.0,
         format!("{}{:.0} s", tr("Quiet time: ", lang), preferences.rest),
@@ -1464,6 +1517,7 @@ fn draw_settings(builder: &mut Builder<'_, '_, '_>, preferences: &Preferences) {
         rect(815.0, 393.0, 400.0, 24.0),
         (preferences.rest - 25.0) / 125.0,
         Action::Rest,
+        label,
     );
     builder.button(
         rect(815.0, 465.0, 465.0, 58.0),
@@ -2737,6 +2791,175 @@ mod tests {
         });
         app.update();
         (app, pad)
+    }
+
+    fn build_settings_for_focus_test(
+        mut commands: Commands,
+        server: Res<AssetServer>,
+        preferences: Res<Preferences>,
+        roots: Query<Entity, With<UiRoot>>,
+        mut focus: ResMut<Focus>,
+    ) {
+        for root in &roots {
+            commands.entity(root).despawn();
+        }
+        let root = commands.spawn(UiRoot).id();
+        let mut builder = Builder {
+            commands: &mut commands,
+            server: &server,
+            root,
+            lang: 0,
+            index: 0,
+            font: default(),
+            background_alpha: 1.0,
+            controls: Style::Keyboard,
+        };
+        draw_settings(&mut builder, &preferences);
+        focus.count = builder.index;
+    }
+
+    fn assert_focus_visuals(app: &mut App, focused: Option<usize>) {
+        let world = app.world_mut();
+        for (hit, outline, node) in world.query::<(&Hit, &Outline, &Node)>().iter(world) {
+            assert_eq!(
+                outline.color,
+                if Some(hit.index) == focused {
+                    FOCUS_COLOR
+                } else {
+                    Color::NONE
+                }
+            );
+            assert_eq!(outline.width, px(3.0));
+            assert_eq!(outline.offset, px(3.0));
+            assert_eq!(node.width, px(hit.rect.w));
+        }
+        for (fill, color) in world.query::<(&SliderFill, &BackgroundColor)>().iter(world) {
+            assert_eq!(
+                color.0,
+                if Some(fill.0) == focused {
+                    FOCUS_COLOR
+                } else {
+                    SLIDER_COLOR
+                }
+            );
+        }
+        for (label, color) in world.query::<(&SliderLabel, &TextColor)>().iter(world) {
+            assert_eq!(
+                color.0,
+                if Some(label.0) == focused {
+                    FOCUS_COLOR
+                } else {
+                    LABEL_COLOR
+                }
+            );
+        }
+    }
+
+    #[test]
+    fn settings_focus_highlights_all_sliders_at_empty_half_and_full_values() {
+        use bevy::ecs::system::RunSystemOnce;
+
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, AssetPlugin::default()))
+            .init_asset::<Image>()
+            .init_resource::<Focus>()
+            .init_resource::<Preferences>()
+            .insert_resource(SessionUi {
+                screen: Screen::Settings,
+                ..default()
+            });
+        for amount in [0.0, 0.5, 1.0] {
+            {
+                let mut prefs = app.world_mut().resource_mut::<Preferences>();
+                prefs.music = amount;
+                prefs.effects = amount;
+                prefs.voice = amount;
+                prefs.rest = 25.0 + amount * 125.0;
+            }
+            app.world_mut()
+                .run_system_once(build_settings_for_focus_test)
+                .unwrap();
+            let world = app.world_mut();
+            assert_eq!(world.query::<&SliderLabel>().iter(world).count(), 4);
+            assert_eq!(world.query::<&SliderFill>().iter(world).count(), 4);
+            for (_, node) in world.query::<(&SliderFill, &Node)>().iter(world) {
+                assert_eq!(node.width, px(400.0 * amount));
+            }
+            let indices: Vec<_> = world
+                .query::<&Hit>()
+                .iter(world)
+                .map(|hit| hit.index)
+                .collect();
+            for index in indices {
+                app.world_mut().resource_mut::<Focus>().index = index;
+                app.world_mut().run_system_once(update_focus).unwrap();
+                assert_focus_visuals(&mut app, Some(index));
+            }
+            // Settings adjustments rebuild the controls without losing their focus.
+            let index = app.world().resource::<Focus>().index;
+            app.world_mut()
+                .run_system_once(build_settings_for_focus_test)
+                .unwrap();
+            app.world_mut().run_system_once(update_focus).unwrap();
+            assert_focus_visuals(&mut app, Some(index));
+        }
+        app.world_mut().resource_mut::<SessionUi>().screen = Screen::Playing;
+        app.world_mut().run_system_once(update_focus).unwrap();
+        assert_focus_visuals(&mut app, None);
+    }
+
+    #[test]
+    fn focus_visuals_follow_keyboard_and_controller_navigation() {
+        use bevy::ecs::system::RunSystemOnce;
+
+        let (mut app, pad) = input_app();
+        let world = app.world_mut();
+        let old_hits: Vec<_> = world
+            .query_filtered::<Entity, With<Hit>>()
+            .iter(world)
+            .collect();
+        for entity in old_hits {
+            world.despawn(entity);
+        }
+        app.add_plugins(AssetPlugin::default())
+            .init_asset::<Image>()
+            .add_systems(Update, update_focus);
+        app.world_mut().resource_mut::<SessionUi>().screen = Screen::Settings;
+        app.world_mut().resource_mut::<Focus>().last_screen = Some(Screen::Settings);
+        app.world_mut()
+            .run_system_once(build_settings_for_focus_test)
+            .unwrap();
+        let world = app.world_mut();
+        let music = world
+            .query::<&Hit>()
+            .iter(world)
+            .find(|hit| matches!(hit.action, Action::Music))
+            .unwrap()
+            .index;
+        world.resource_mut::<Focus>().index = music - 1;
+        world
+            .resource_mut::<ButtonInput<KeyCode>>()
+            .press(KeyCode::Tab);
+        world.run_system_once(actions).unwrap();
+        world.run_system_once(update_focus).unwrap();
+        assert_eq!(world.resource::<Focus>().index, music);
+        assert_focus_visuals(&mut app, Some(music));
+        app.world_mut()
+            .resource_mut::<ButtonInput<KeyCode>>()
+            .reset_all();
+
+        button(&mut app, pad, GamepadButton::DPadRight, 1.0);
+        button(&mut app, pad, GamepadButton::DPadRight, 0.0);
+        app.update();
+        assert_eq!(app.world().resource::<Focus>().index, music);
+        assert!((app.world().resource::<Preferences>().music - 0.35).abs() < 0.001);
+        assert_focus_visuals(&mut app, Some(music));
+
+        button(&mut app, pad, GamepadButton::DPadDown, 1.0);
+        button(&mut app, pad, GamepadButton::DPadDown, 0.0);
+        app.update();
+        assert_eq!(app.world().resource::<Focus>().index, music + 1);
+        assert_focus_visuals(&mut app, Some(music + 1));
     }
 
     #[test]
