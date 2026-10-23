@@ -64,7 +64,10 @@ fn main() {
         warn!("Ignoring --x11/--wayland: window-system overrides are only available on Linux");
     }
     let mut prefs = if options.verify {
-        settings::Preferences::default()
+        settings::Preferences {
+            vsync: false,
+            ..Default::default()
+        }
     } else {
         settings::Preferences::load()
     };

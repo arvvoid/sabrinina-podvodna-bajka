@@ -1,12 +1,26 @@
-La fiaba sottomarina di Sabrina — un remake 3D
+La fiaba sottomarina di Sabrina
+Un piccolo mare, da Scratch al 3D
 
-Sviluppo e remake
+Sviluppo e rifacimento
 Luka Dežulović
 
 Idea originale
 Sabrina Dežulović
 
-Il gioco è nato in Scratch da un’idea di Sabrina Dežulović. Luka Dežulović sta ricreando quel piccolo mondo sottomarino in 3D, conservando la magia della sirena, i pesci tropicali e i momenti tranquilli nell’acquario.
+Tutto è cominciato da un’idea di Sabrina: una sirena, pesci tropicali, un cristallo magico e un piccolo mondo sottomarino di cui prendersi cura.
 
-Gioca al progetto originale su Scratch:
+La prima versione ha trovato casa in Scratch. Questo rifacimento dà un po’ più di spazio allo stesso piccolo mare, con scogliere da esplorare e pesci che ti tengono compagnia.
+
+Luka lo sta ricostruendo in 3D, conservando ciò che rendeva l’originale il mondo di Sabrina. C’è ancora una canzone da cantare, un banco di pesci da proteggere e tempo per una nuotata tranquilla quando le meduse se ne vanno.
+
+È un piccolo gioco che sta ancora crescendo. Il nuoto, le creature e i loro piccoli dettagli sono ancora in lavorazione. Grazie per aver trascorso un po’ di tempo qui.
+
+Caratteri
+Alegreya — Juan Pablo del Peral / Huerta Tipográfica
+SIL Open Font License 1.1
+DejaVu Sans — progetto DejaVu fonts
+
+Prova il progetto originale su Scratch:
 https://scratch.mit.edu/projects/1203591608/
+
+E ora, torniamo dai pesci.

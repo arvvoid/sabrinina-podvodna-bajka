@@ -33,6 +33,9 @@ pub struct VerificationPlugin;
 
 impl Plugin for VerificationPlugin {
     fn build(&self, app: &mut App) {
+        if app.world().resource::<Options>().verify {
+            app.insert_resource(bevy::winit::WinitSettings::continuous());
+        }
         app.init_resource::<Check>()
             .add_systems(
                 Update,
@@ -56,6 +59,13 @@ impl Plugin for VerificationPlugin {
                 PreUpdate,
                 drive
                     .after(bevy::input::InputSystems)
+                    .before(crate::controls::update)
+                    .before(crate::app::input),
+            )
+            .add_systems(
+                PreUpdate,
+                verify_reading
+                    .after(drive)
                     .before(crate::controls::update)
                     .before(crate::app::input),
             )
@@ -158,7 +168,6 @@ fn drive(
     rigs: Query<&RigPlayer>,
     audio: Query<(Entity, &Channel, Option<&AudioSink>)>,
     mut events: ResMut<FrameEvents>,
-    mut exit: MessageWriter<AppExit>,
     texts: Query<&Text>,
     controller_checks: (
         Query<(&TextSpan, &TextColor)>,
@@ -184,6 +193,9 @@ fn drive(
         gamepad.digital_mut().reset_all();
         gamepad.analog_mut().set(GamepadAxis::LeftStickX, 0.0);
         gamepad.analog_mut().set(GamepadAxis::LeftStickY, 0.0);
+    }
+    if check.ability_stage == 3 {
+        return;
     }
     match frame {
         1 => {
@@ -765,11 +777,165 @@ fn drive(
                         println!(
                             "BEVY CHECK OK: Crystal homes across opposite sides of the scene for half damage"
                         );
-                        println!("BEVY INPUT INTEGRATION COMPLETE");
-                        exit.write(AppExit::Success);
+                        check.ability_stage = 3;
                     }
                 }
             }
+        }
+        _ => {}
+    }
+}
+
+#[derive(Default)]
+struct ReadingCheck {
+    frame: u32,
+    saved: Option<reef_sim::World>,
+    pose: reef_sim::V2,
+    offset: f32,
+}
+
+fn verify_reading(
+    mut commands: Commands,
+    options: Res<Options>,
+    check: Res<Check>,
+    mut reading: Local<ReadingCheck>,
+    mut ui: ResMut<SessionUi>,
+    simulation: Res<Simulation>,
+    rendered: Res<crate::presentation::Presentation>,
+    mut preferences: ResMut<crate::settings::Preferences>,
+    mut keys: ResMut<ButtonInput<KeyCode>>,
+    mut pads: Query<&mut Gamepad, With<TestPad>>,
+    mut window: Single<&mut Window, With<PrimaryWindow>>,
+    content: Query<(&Node, &ComputedNode, &TextFont), With<crate::ui::CrawlText>>,
+    viewport: Query<(&Node, &ComputedNode), With<crate::ui::CrawlViewport>>,
+    mut exit: MessageWriter<AppExit>,
+) {
+    if !options.verify || check.ability_stage != 3 {
+        return;
+    }
+    reading.frame += 1;
+    let offset = || {
+        let (node, _, _) = content.single().unwrap();
+        let Val::Px(top) = node.top else {
+            panic!("Crawl offset must use logical pixels")
+        };
+        -top
+    };
+    match reading.frame {
+        1 => {
+            reading.saved = Some(simulation.0.clone());
+            reading.pose = rendered.0.sabrina.motion.pos;
+            preferences.reduced_motion = false;
+            preferences.language = 1;
+            ui.screen = Screen::Credits;
+            ui.return_to = Screen::Pause;
+            window.resolution.set(960.0, 540.0);
+        }
+        8 | 380 => {
+            let (_, measured, font) = content.single().unwrap();
+            let (node, viewport) = viewport.single().unwrap();
+            assert_eq!(node.overflow, Overflow::clip());
+            assert!(measured.size().y > viewport.size().y);
+            assert!(viewport.size().x <= window.physical_width() as f32);
+            assert!(viewport.size().y < window.physical_height() as f32);
+            assert_eq!(font.font_size, FontSize::Px(38.0));
+            assert_eq!(offset(), 0.0);
+            commands
+                .spawn(bevy::render::view::screenshot::Screenshot::primary_window())
+                .observe(bevy::render::view::screenshot::save_to_disk(
+                    std::env::temp_dir().join(if reading.frame == 8 {
+                        "sabrina-bevy-hr-credits-small.png"
+                    } else {
+                        "sabrina-bevy-it-help.png"
+                    }),
+                ));
+        }
+        340 => {
+            assert!(
+                offset() > 0.0,
+                "Crawl must advance after the initial reading pause"
+            );
+            keys.press(KeyCode::KeyP);
+        }
+        342 => {
+            reading.offset = offset();
+            window.resolution.set(1280.0, 720.0);
+        }
+        360 => {
+            assert!(
+                (offset() - reading.offset).abs() < 0.01,
+                "Pause and resize must preserve the reading position"
+            );
+            keys.press(KeyCode::End);
+        }
+        363 => {
+            let (_, text, _) = content.single().unwrap();
+            let (_, viewport) = viewport.single().unwrap();
+            let limit = (text.size().y - viewport.size().y) * text.inverse_scale_factor();
+            assert!(
+                (offset() - limit).abs() < 0.1,
+                "The final paragraph must be reachable"
+            );
+            commands
+                .spawn(bevy::render::view::screenshot::Screenshot::primary_window())
+                .observe(bevy::render::view::screenshot::save_to_disk(
+                    std::env::temp_dir().join("sabrina-bevy-credits-end.png"),
+                ));
+        }
+        364 => keys.press(KeyCode::Home),
+        365 => {
+            assert_eq!(offset(), 0.0);
+            keys.press(KeyCode::Escape);
+        }
+        368 | 505 => {
+            assert_eq!(ui.screen, Screen::Pause);
+            let saved = reading.saved.as_ref().unwrap();
+            assert_eq!(simulation.0.session.time, saved.session.time);
+            assert_eq!(simulation.0.sabrina.motion.pos, saved.sabrina.motion.pos);
+            assert_eq!(
+                simulation.0.sabrina.vitality.health,
+                saved.sabrina.vitality.health
+            );
+            assert_eq!(rendered.0.sabrina.motion.pos, reading.pose);
+            for i in 0..reef_sim::FISH_COUNT {
+                assert_eq!(simulation.0.fish[i].motion.pos, saved.fish[i].motion.pos);
+            }
+            if reading.frame == 505 {
+                println!(
+                    "BEVY CHECK OK: clipped reading screens, resize, keyboard/controller scrolling, reduced motion, and paused-game restoration"
+                );
+                println!("BEVY INPUT INTEGRATION COMPLETE");
+                exit.write(AppExit::Success);
+            }
+        }
+        375 => {
+            preferences.reduced_motion = true;
+            preferences.language = 2;
+            ui.screen = Screen::Help;
+        }
+        390..=420 => {
+            pads.single_mut()
+                .unwrap()
+                .digital_mut()
+                .press(GamepadButton::DPadDown);
+        }
+        422 => {
+            assert!(
+                offset() > 50.0,
+                "Controller must scroll even with reduced motion"
+            );
+            reading.offset = offset();
+        }
+        500 => {
+            assert_eq!(
+                offset(),
+                reading.offset,
+                "Reduced motion must not auto-scroll"
+            );
+            pads.single_mut()
+                .unwrap()
+                .digital_mut()
+                .press(GamepadButton::East);
         }
         _ => {}
     }

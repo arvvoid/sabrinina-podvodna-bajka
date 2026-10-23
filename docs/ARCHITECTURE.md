@@ -37,6 +37,17 @@ One active controller supplies gameplay input and button hints. Windows uses nat
 
 Gameplay actions remain buffered until a fixed tick consumes them. Menu navigation has separate repeat and dead-zone handling. Rumble follows confirmed gameplay events and stops on focus loss, menu entry or controller changes.
 
+Credits and help use a clipped, auto-height text crawl with measured scroll bounds,
+large Alegreya type and pinned controls. Manual scrolling pauses the crawl;
+reduced motion disables automatic scrolling. Technical text and binding symbols
+keep DejaVu Sans. Both fonts and their licenses are embedded and packaged.
+
+Reading screens keep gameplay paused. `presentation.rs` runs a separate aquarium
+and smooth, looping Sabrina route, saving and restoring the last presented pose
+on entry/exit. The route includes rear-reef passes, offscreen returns and scaled
+foreground approaches for the orthographic camera. It never modifies simulation
+snapshots, gameplay RNG or scoring; reduced motion freezes the route.
+
 Music is rendered offline from MIDI through FluidSynth and shipped as Ogg audio. Runtime playback crossfades calm and combat loops, plays an arrival stinger and ducks music under voices and song.
 
 ## Assets and packaging

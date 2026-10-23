@@ -55,6 +55,8 @@ mod tests {
             "shaders/surface_caustics.wesl",
             "shaders/particles.wesl",
             "fonts/LICENSE-DejaVu.txt",
+            "fonts/Alegreya.ttf",
+            "fonts/LICENSE-Alegreya.txt",
             "audio/LICENSE-FluidR3.txt",
         ] {
             assert!(

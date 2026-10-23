@@ -8,6 +8,7 @@ use crate::{
     settings::{Preferences, TailColor},
 };
 use bevy::{
+    input::mouse::{MouseScrollUnit, MouseWheel},
     prelude::*,
     render::render_resource::AsBindGroup,
     render::renderer::RenderAdapterInfo,
@@ -164,6 +165,8 @@ enum Action {
     Settings,
     Credits,
     Help,
+    ToggleCrawl,
+    RestartCrawl,
     Language,
     SelectLanguage(usize),
     Quit,
@@ -317,7 +320,47 @@ struct Focus {
     count: usize,
     navigation: MenuNavigation,
     controller: Option<Entity>,
+    crawl: Crawl,
 }
+
+#[derive(Default)]
+struct Crawl {
+    offset: f32,
+    limit: f32,
+    paused: bool,
+    wait: f32,
+}
+
+impl Crawl {
+    fn restart(&mut self, reduced_motion: bool) {
+        self.offset = 0.0;
+        self.paused = reduced_motion;
+        self.wait = 5.0;
+    }
+
+    fn scroll(&mut self, amount: f32) {
+        self.offset = (self.offset + amount).clamp(0.0, self.limit);
+        self.paused = true;
+    }
+
+    fn advance(&mut self, dt: f32, reduced_motion: bool) {
+        if self.paused || reduced_motion {
+            return;
+        }
+        let moving = (dt - self.wait).max(0.0);
+        self.wait = (self.wait - dt).max(0.0);
+        self.offset = (self.offset + moving * 18.0).min(self.limit);
+        if self.limit > 0.0 && self.offset == self.limit {
+            self.paused = true;
+        }
+    }
+}
+
+#[derive(Component)]
+pub(crate) struct CrawlText;
+
+#[derive(Component)]
+pub(crate) struct CrawlViewport;
 
 #[derive(Debug, PartialEq)]
 struct LayoutKey {
@@ -349,6 +392,7 @@ impl Plugin for ReefUiPlugin {
             .init_resource::<Hints>()
             .add_systems(Startup, setup_fps)
             .add_systems(Update, update_fps)
+            .add_systems(Update, advance_crawl.after(draw).after(update))
             .add_systems(Update, update_abilities.after(draw))
             .add_systems(
                 Update,
@@ -653,6 +697,16 @@ impl Builder<'_, '_, '_> {
                 action,
             },
         ));
+        if matches!(action, Action::Fps) {
+            self.commands.entity(label).insert(TextFont {
+                font: bevy::text::FontSource::List(vec![
+                    self.font.clone().into(),
+                    self.server.load::<Font>("fonts/DejaVuSans.ttf").into(),
+                ]),
+                font_size: FontSize::Px(size),
+                ..default()
+            });
+        }
         if primary {
             self.commands
                 .entity(label)
@@ -683,7 +737,7 @@ impl Builder<'_, '_, '_> {
                 TextSpan::new(format!(" · {}", tr(binding.label, self.lang))),
                 TextColor(binding.color),
                 TextFont {
-                    font: self.font.clone().into(),
+                    font: self.server.load("fonts/DejaVuSans.ttf").into(),
                     font_size: FontSize::Px(size),
                     ..default()
                 },
@@ -709,7 +763,25 @@ impl Builder<'_, '_, '_> {
                 tr(title, self.lang),
                 None,
             );
-            self.binding_span(label, control, size, false);
+            self.commands
+                .entity(label)
+                .insert(TextLayout::justify(Justify::Center));
+            let binding = self.controls.binding(control);
+            let label = self.label(
+                rect(r.x + index as f32 * width, r.y + 38.0, width, r.h - 38.0),
+                size - 2.0,
+                tr(binding.label, self.lang),
+                None,
+            );
+            self.commands.entity(label).insert((
+                TextLayout::justify(Justify::Center),
+                TextColor(binding.color),
+                TextFont {
+                    font: self.server.load("fonts/DejaVuSans.ttf").into(),
+                    font_size: FontSize::Px(size - 2.0),
+                    ..default()
+                },
+            ));
         }
     }
 
@@ -938,6 +1010,7 @@ fn draw(
         focus.index = 0;
         focus.last_screen = Some(ui.screen);
         focus.navigation.reset();
+        focus.crawl.restart(preferences.reduced_motion);
     }
     for root in &roots {
         commands.entity(root).despawn();
@@ -961,7 +1034,11 @@ fn draw(
         root,
         lang: preferences.language,
         index: 0,
-        font: server.load("fonts/DejaVuSans.ttf"),
+        font: server.load(if ui.screen == Screen::Loading {
+            "fonts/DejaVuSans.ttf"
+        } else {
+            "fonts/Alegreya.ttf"
+        }),
         background_alpha: 1.0,
         controls: hints.style,
     };
@@ -1103,7 +1180,12 @@ fn draw(
         focus.count = builder.index;
         return;
     }
-    if ui.started && !matches!(ui.screen, Screen::Victory | Screen::GameOver) {
+    if ui.started
+        && !matches!(
+            ui.screen,
+            Screen::Victory | Screen::GameOver | Screen::Help | Screen::Credits
+        )
+    {
         draw_hud(&mut builder, ui.screen, &mut ability_materials);
     }
     match ui.screen {
@@ -1111,7 +1193,12 @@ fn draw(
         Screen::Pause => draw_pause(&mut builder),
         Screen::Settings => draw_settings(&mut builder, &preferences),
         Screen::TailColor => draw_tail_color(&mut builder, &preferences),
-        Screen::Credits | Screen::Help => draw_help_or_credits(&mut builder, ui.screen),
+        Screen::Credits | Screen::Help => draw_help_or_credits(
+            &mut builder,
+            ui.screen,
+            window.width() / zoom,
+            window.height() / zoom,
+        ),
         Screen::GameOver => draw_game_over(&mut builder),
         Screen::Victory => draw_victory(&mut builder),
         Screen::Language => draw_language(&mut builder),
@@ -1466,6 +1553,7 @@ fn draw_menu(builder: &mut Builder<'_, '_, '_>, preferences: &Preferences, rende
         format!("{}{}", tr("Best visit: ", lang), preferences.best),
         None,
     );
+    builder.font = builder.server.load("fonts/DejaVuSans.ttf");
     builder.label(
         rect(100.0, 782.0, 270.0, 22.0),
         13.5,
@@ -1725,13 +1813,65 @@ fn draw_tail_color(builder: &mut Builder<'_, '_, '_>, preferences: &Preferences)
     builder.button(rect(840.0, 675.0, 340.0, 58.0), "Done", Action::Done, true);
 }
 
-fn draw_help_or_credits(builder: &mut Builder<'_, '_, '_>, screen: Screen) {
+fn crawl_viewport(help: bool) -> Rect {
+    rect(
+        300.0,
+        if help { 270.0 } else { 170.0 },
+        1000.0,
+        if help { 435.0 } else { 535.0 },
+    )
+}
+
+fn reading_text(help: bool, controls: Style, lang: usize) -> String {
+    if help {
+        format!(
+            "{}\n\n{}\n\n{}",
+            tr(
+                if controls == Style::Keyboard {
+                    "Keyboard help extras"
+                } else {
+                    "Controller help extras"
+                },
+                lang
+            ),
+            tr("Combat rules", lang),
+            tr("Final round guide", lang),
+        )
+    } else {
+        [
+            include_str!("../../../assets/credits/credits_en.txt"),
+            include_str!("../../../assets/credits/credits_hr.txt"),
+            include_str!("../../../assets/credits/credits_it.txt"),
+        ][lang % 3]
+            .into()
+    }
+}
+
+fn draw_help_or_credits(
+    builder: &mut Builder<'_, '_, '_>,
+    screen: Screen,
+    width: f32,
+    height: f32,
+) {
     let lang = builder.lang;
-    builder.panel(rect(230.0, 60.0, 1140.0, 780.0));
     let help = screen == Screen::Help;
-    builder.label(
-        rect(280.0, 93.0, 1040.0, 65.0),
-        38.0,
+    let shade = builder
+        .commands
+        .spawn((
+            rect(
+                (CANVAS_WIDTH - width) / 2.0,
+                (CANVAS_HEIGHT - height) / 2.0,
+                width,
+                height,
+            )
+            .node(),
+            BackgroundColor(Color::srgba(0.0, 0.025, 0.055, 0.62)),
+        ))
+        .id();
+    builder.commands.entity(builder.root).add_child(shade);
+    let heading = builder.label(
+        rect(120.0, 45.0, 1360.0, 85.0),
+        52.0,
         tr(
             if help {
                 "Swim, sing, and look after the fish"
@@ -1742,52 +1882,191 @@ fn draw_help_or_credits(builder: &mut Builder<'_, '_, '_>, screen: Screen) {
         ),
         None,
     );
-    let text = if help {
-        format!(
-            "{}\n\n{}",
-            tr(
-                if builder.controls == Style::Keyboard {
-                    "Keyboard help extras"
-                } else {
-                    "Controller help extras"
-                },
-                lang
-            ),
-            tr("Combat rules", lang)
-        )
-    } else {
-        [
-            include_str!("../../../assets/credits/credits_en.txt"),
-            include_str!("../../../assets/credits/credits_hr.txt"),
-            include_str!("../../../assets/credits/credits_it.txt"),
-        ][lang]
-            .into()
-    };
+    builder.commands.entity(heading).insert((
+        TextLayout::justify(Justify::Center),
+        TextColor(FOCUS_COLOR),
+        TextShadow::default(),
+    ));
     if help {
-        builder.control_hints(rect(280.0, 173.0, 1040.0, 52.0), 15.0);
+        builder.control_hints(rect(120.0, 150.0, 1360.0, 90.0), 30.0);
     }
-    builder.label(
-        rect(280.0, if help { 235.0 } else { 180.0 }, 1040.0, 440.0),
-        if help { 17.0 } else { 23.0 },
-        text,
+    let viewport = builder
+        .commands
+        .spawn((
+            CrawlViewport,
+            Node {
+                overflow: Overflow::clip(),
+                ..crawl_viewport(help).node()
+            },
+        ))
+        .id();
+    let text = builder
+        .commands
+        .spawn((
+            CrawlText,
+            Text::new(reading_text(help, builder.controls, lang)),
+            TextFont {
+                font: builder.font.clone().into(),
+                font_size: FontSize::Px(38.0),
+                ..default()
+            },
+            bevy::text::LineHeight::RelativeToFont(1.35),
+            TextLayout::justify(Justify::Center),
+            TextColor(LABEL_COLOR),
+            TextShadow {
+                offset: Vec2::new(1.0, 2.0),
+                color: Color::BLACK.with_alpha(0.85),
+            },
+            Node {
+                position_type: PositionType::Absolute,
+                width: percent(100.0),
+                top: px(0.0),
+                ..default()
+            },
+        ))
+        .id();
+    builder.commands.entity(viewport).add_child(text);
+    builder.commands.entity(builder.root).add_child(viewport);
+    let hint = builder.label(
+        rect(100.0, 728.0, 1400.0, 42.0),
+        24.0,
+        tr(
+            if builder.controls == Style::Keyboard {
+                "Crawl keyboard"
+            } else {
+                "Crawl controller"
+            },
+            lang,
+        ),
         None,
     );
-    if help {
-        builder.label(
-            rect(280.0, 680.0, 1040.0, 60.0),
-            18.0,
-            tr("Final round guide", lang),
-            None,
-        );
+    builder
+        .commands
+        .entity(hint)
+        .insert(TextLayout::justify(Justify::Center));
+    let buttons: &[(&str, Action)] = if help {
+        &[
+            ("Pause scroll", Action::ToggleCrawl),
+            ("Read again", Action::RestartCrawl),
+            ("Back", Action::Done),
+        ]
     } else {
+        &[
+            ("Pause scroll", Action::ToggleCrawl),
+            ("Read again", Action::RestartCrawl),
+            ("Original on Scratch ↗", Action::Original),
+            ("Back", Action::Done),
+        ]
+    };
+    let slot = 1360.0 / buttons.len() as f32;
+    for (i, (label, action)) in buttons.iter().enumerate() {
         builder.button(
-            rect(280.0, 745.0, 640.0, 52.0),
-            "Play the original on Scratch ↗",
-            Action::Original,
-            false,
+            rect(120.0 + i as f32 * slot, 790.0, slot - 18.0, 60.0),
+            label,
+            *action,
+            matches!(action, Action::Done),
         );
     }
-    builder.button(rect(940.0, 745.0, 380.0, 52.0), "Back", Action::Done, true);
+}
+
+fn advance_crawl(
+    ui: Res<SessionUi>,
+    preferences: Res<Preferences>,
+    options: Res<Options>,
+    time: Res<Time<Real>>,
+    keys: Res<ButtonInput<KeyCode>>,
+    pads: Query<&Gamepad>,
+    hints: Res<Hints>,
+    window: Single<&Window, With<PrimaryWindow>>,
+    mut wheel: MessageReader<MouseWheel>,
+    mut focus: ResMut<Focus>,
+    viewport: Query<&ComputedNode, With<CrawlViewport>>,
+    mut content: Query<(&ComputedNode, &mut Node), With<CrawlText>>,
+    mut buttons: Query<(&ButtonLabel, &mut Text)>,
+) {
+    if !ui.screen.is_reading() {
+        wheel.clear();
+        return;
+    }
+    let (Ok(viewport), Ok((computed, mut node))) = (viewport.single(), content.single_mut()) else {
+        wheel.clear();
+        return;
+    };
+    // Newly rebuilt nodes have no measured size until the next layout pass.
+    if viewport.size().y <= 0.0 || computed.size().y <= 0.0 {
+        node.top = px(-focus.crawl.offset);
+        wheel.clear();
+        return;
+    }
+    let height = viewport.size().y * viewport.inverse_scale_factor();
+    let crawl = &mut focus.crawl;
+    crawl.limit = (computed.size().y * computed.inverse_scale_factor() - height).max(0.0);
+    if window.focused || options.verify || options.capture.is_some() {
+        let pad = hints.active.and_then(|entity| pads.get(entity).ok());
+        let mut direction =
+            f32::from(keys.pressed(KeyCode::ArrowDown)) - f32::from(keys.pressed(KeyCode::ArrowUp));
+        if let Some(pad) = pad {
+            direction += f32::from(pad.pressed(GamepadButton::DPadDown))
+                - f32::from(pad.pressed(GamepadButton::DPadUp));
+            if pad.left_stick().y.abs() > 0.25 {
+                direction -= pad.left_stick().y;
+            }
+        }
+        let dt = time.delta_secs().min(0.1);
+        if direction != 0.0 {
+            crawl.scroll(direction.clamp(-1.0, 1.0) * 220.0 * dt);
+        }
+        for event in wheel.read() {
+            let scale = if event.unit == MouseScrollUnit::Line {
+                64.0
+            } else {
+                computed.inverse_scale_factor()
+            };
+            crawl.scroll(-event.y * scale);
+        }
+        if keys.just_pressed(KeyCode::PageDown) {
+            crawl.scroll(height * 0.8);
+        }
+        if keys.just_pressed(KeyCode::PageUp) {
+            crawl.scroll(-height * 0.8);
+        }
+        if keys.just_pressed(KeyCode::Home) {
+            crawl.scroll(-crawl.limit);
+        }
+        if keys.just_pressed(KeyCode::End) {
+            crawl.scroll(crawl.limit);
+        }
+        if keys.just_pressed(KeyCode::KeyP)
+            || pad.is_some_and(|pad| pad.just_pressed(GamepadButton::North))
+        {
+            crawl.paused = !crawl.paused;
+        }
+        if computed.size().y > 0.0 {
+            crawl.advance(dt, preferences.reduced_motion);
+        }
+    } else {
+        wheel.clear();
+    }
+    crawl.offset = crawl.offset.clamp(0.0, crawl.limit);
+    node.top = px(-crawl.offset);
+    for (button, mut text) in &mut buttons {
+        if matches!(button.action, Action::ToggleCrawl) {
+            text.set_if_neq(Text(tr(
+                if preferences.reduced_motion {
+                    if crawl.offset >= crawl.limit {
+                        "Read again"
+                    } else {
+                        "Next page"
+                    }
+                } else if crawl.paused {
+                    "Resume scroll"
+                } else {
+                    "Pause scroll"
+                },
+                preferences.language,
+            )));
+        }
+    }
 }
 
 fn draw_game_over(builder: &mut Builder<'_, '_, '_>) {
@@ -1992,7 +2271,10 @@ fn actions(
     .into_iter()
     .find_map(|(key, dir)| keys.just_pressed(key).then_some(dir))
     .or(controller_direction)
-    .filter(|_| menu && !activate);
+    .filter(|direction| {
+        menu && !activate
+            && !(ui.screen.is_reading() && matches!(direction, Direction::Up | Direction::Down))
+    });
     let adjusting = hits
         .iter()
         .any(|hit| hit.index == focus.index && hit.slider)
@@ -2094,6 +2376,18 @@ fn actions(
             audio.stop_voice = true;
             preferences.save();
         }
+        Action::ToggleCrawl => {
+            if preferences.reduced_motion {
+                if focus.crawl.offset >= focus.crawl.limit {
+                    focus.crawl.restart(true);
+                } else {
+                    focus.crawl.scroll(300.0);
+                }
+            } else {
+                focus.crawl.paused = !focus.crawl.paused;
+            }
+        }
+        Action::RestartCrawl => focus.crawl.restart(preferences.reduced_motion),
         Action::Language => {
             ui.return_to = ui.screen;
             ui.screen = Screen::Language;
@@ -2433,6 +2727,87 @@ mod tests {
     };
 
     #[test]
+    fn crawl_waits_pauses_clamps_and_never_autoscrolls_with_reduced_motion() {
+        let mut crawl = Crawl {
+            limit: 1000.0,
+            ..default()
+        };
+        crawl.restart(false);
+        crawl.advance(4.0, false);
+        assert_eq!(crawl.offset, 0.0);
+        crawl.advance(2.0, false);
+        assert_eq!(crawl.offset, 18.0);
+        crawl.scroll(150.0);
+        crawl.advance(60.0, false);
+        assert_eq!(crawl.offset, 168.0);
+        crawl.scroll(2000.0);
+        assert_eq!(crawl.offset, 1000.0);
+        crawl.scroll(-2000.0);
+        assert_eq!(crawl.offset, 0.0);
+        crawl.restart(true);
+        crawl.paused = false;
+        crawl.advance(60.0, true);
+        assert_eq!(crawl.offset, 0.0);
+        crawl.restart(false);
+        crawl.advance(100.0, false);
+        assert_eq!(crawl.offset, crawl.limit);
+        assert!(crawl.paused);
+    }
+
+    #[test]
+    fn reading_screens_clip_large_text_and_keep_controls_outside_the_crawl() {
+        for screen in [Screen::Help, Screen::Credits] {
+            for language in 0..3 {
+                let mut app = App::new();
+                app.add_plugins((MinimalPlugins, AssetPlugin::default()))
+                    .init_asset::<Image>()
+                    .init_asset::<Font>();
+                app.add_systems(
+                    Startup,
+                    move |mut commands: Commands, server: Res<AssetServer>| {
+                        let root = commands.spawn_empty().id();
+                        let mut builder = Builder {
+                            commands: &mut commands,
+                            server: &server,
+                            root,
+                            lang: language,
+                            index: 0,
+                            font: server.load("fonts/Alegreya.ttf"),
+                            background_alpha: 1.0,
+                            controls: Style::Keyboard,
+                        };
+                        draw_help_or_credits(&mut builder, screen, 1600.0, 900.0);
+                    },
+                );
+                app.update();
+                let world = app.world_mut();
+                let viewport = world
+                    .query_filtered::<&Node, With<CrawlViewport>>()
+                    .single(world)
+                    .unwrap();
+                assert_eq!(viewport.overflow, Overflow::clip());
+                let (text, font, node) = world
+                    .query_filtered::<(&Text, &TextFont, &Node), With<CrawlText>>()
+                    .single(world)
+                    .unwrap();
+                assert_eq!(node.height, Val::Auto);
+                assert_eq!(font.font_size, FontSize::Px(38.0));
+                assert!(text.0.len() > 800);
+                if screen == Screen::Help {
+                    assert!(text.0.contains(&tr("Final round guide", language)));
+                }
+                let viewport = crawl_viewport(screen == Screen::Help);
+                for hit in world.query::<&Hit>().iter(world) {
+                    assert!(hit.rect.y > viewport.y + viewport.h);
+                    assert!(hit.rect.x >= 0.0 && hit.rect.x + hit.rect.w <= CANVAS_WIDTH);
+                    assert!(hit.rect.y + hit.rect.h <= CANVAS_HEIGHT);
+                }
+                assert_eq!(world.query::<&Meter>().iter(world).count(), 0);
+            }
+        }
+    }
+
+    #[test]
     fn ability_icons_track_cooldowns_energy_and_charging() {
         let mut world = reef_sim::World::default();
         assert_eq!(Ability::Crystal.state(&world), Vec4::X);
@@ -2551,6 +2926,7 @@ mod tests {
         app.add_plugins((MinimalPlugins, AssetPlugin::default()))
             .init_asset::<Image>()
             .init_asset::<AbilityIcon>()
+            .init_asset::<Font>()
             .add_systems(Startup, build);
         app.update();
         let world = app.world_mut();
@@ -2960,6 +3336,7 @@ mod tests {
         let mut app = App::new();
         app.add_plugins((MinimalPlugins, AssetPlugin::default()))
             .init_asset::<Image>()
+            .init_asset::<Font>()
             .init_resource::<Focus>()
             .init_resource::<Preferences>()
             .insert_resource(SessionUi {
@@ -3044,6 +3421,7 @@ mod tests {
         }
         app.add_plugins(AssetPlugin::default())
             .init_asset::<Image>()
+            .init_asset::<Font>()
             .add_systems(Update, update_focus);
         app.world_mut().resource_mut::<SessionUi>().screen = Screen::Settings;
         app.world_mut().resource_mut::<Focus>().last_screen = Some(Screen::Settings);

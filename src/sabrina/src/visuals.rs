@@ -508,7 +508,11 @@ fn actors(
     mut actors: Query<(&Actor, &mut ActorVisual, &mut Transform, &mut Visibility)>,
     mut surfaces: Query<(&CharacterSurface, &mut MeshMaterial3d<StandardMaterial>)>,
 ) {
-    let dt = if ui.paused() { 0.0 } else { time.delta_secs() };
+    let dt = if ui.scene_paused() {
+        0.0
+    } else {
+        time.delta_secs()
+    };
     let t = rendered.0.session.time;
     let motion = if preferences.reduced_motion {
         0.15
@@ -534,6 +538,12 @@ fn actors(
                     1.0
                 };
                 next.scale = Vec3::splat(pulse);
+                if ui.screen.is_reading() {
+                    let depth = crate::presentation::reading_position(t).z;
+                    next.translation.z = depth;
+                    // The camera is orthographic, so depth alone does not change apparent size.
+                    next.scale = Vec3::splat(1.0 + depth * 0.065);
+                }
             }
             Actor::Fish(i) => {
                 let f = &rendered.0.fish[i];
@@ -661,7 +671,11 @@ fn effects(
     mut water: ResMut<Assets<WaterMaterial>>,
 ) {
     let t = rendered.0.session.time;
-    let dt = if ui.paused() { 0.0 } else { time.delta_secs() };
+    let dt = if ui.scene_paused() {
+        0.0
+    } else {
+        time.delta_secs()
+    };
     let motion = if preferences.reduced_motion {
         0.15
     } else {

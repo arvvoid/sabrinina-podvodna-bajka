@@ -14,6 +14,7 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[1]
 ASSET_NOTICES = (
     "fonts/LICENSE-DejaVu.txt",
+    "fonts/LICENSE-Alegreya.txt",
     "audio/LICENSE-FluidR3.txt",
 )
 

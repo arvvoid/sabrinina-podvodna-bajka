@@ -44,6 +44,7 @@ class PackageReleaseTests(unittest.TestCase):
         files = {
             "LICENSE", "NOTICE", "licenses/ASSET_LICENSE.txt",
             "licenses/LICENSE-DejaVu.txt", "licenses/LICENSE-FluidR3.txt",
+            "licenses/LICENSE-Alegreya.txt",
         }
         if platform == "macos":
             files.update({

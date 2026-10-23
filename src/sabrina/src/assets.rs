@@ -724,7 +724,7 @@ fn animate(
     time: Res<Time>,
     mut players: Query<(&mut AnimationPlayer, &mut RigPlayer)>,
 ) {
-    let dt = if ui.paused() {
+    let dt = if ui.scene_paused() {
         0.0
     } else {
         time.delta_secs()

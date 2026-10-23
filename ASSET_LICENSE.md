@@ -54,10 +54,16 @@ from the code, like the other audio assets above. FluidR3 instrument samples
 are MIT licensed; their notice is included at `assets/audio/LICENSE-FluidR3.txt`.
 Neither the soundfont nor FluidSynth is bundled or required at runtime.
 DejaVu Sans has its own license, included at `assets/fonts/LICENSE-DejaVu.txt`.
+Alegreya, by Juan Pablo del Peral and Huerta Tipográfica, is used for player-facing
+text. It is distributed unmodified from [Google Fonts](https://github.com/google/fonts/tree/main/ofl/alegreya)
+under the SIL Open Font License 1.1, included at `assets/fonts/LICENSE-Alegreya.txt`.
+The license permits commercial use, embedding and redistribution with the game;
+the font itself may not be sold on its own. Its Latin Extended glyphs include
+Croatian Č Ć Đ Š Ž and č ć đ š ž.
 
 Include applicable third-party license notices with distributed releases.
 Runtime assets and their notices are embedded in the executable. Desktop
-packages also place the DejaVu and FluidR3 notices in `licenses/`; retain these
+packages also place the Alegreya, DejaVu and FluidR3 notices in `licenses/`; retain these
 and the root `LICENSE`, `NOTICE` and asset-license notice (packaged unchanged as
 `licenses/ASSET_LICENSE.txt` from `ASSET_LICENSE.md`) when distributing an
 authorized package. Keeping notices alone does not grant permission to

@@ -223,6 +223,12 @@ pub enum Screen {
     Language,
 }
 
+impl Screen {
+    pub fn is_reading(self) -> bool {
+        matches!(self, Self::Help | Self::Credits)
+    }
+}
+
 #[derive(Resource)]
 pub struct SessionUi {
     pub screen: Screen,
@@ -257,6 +263,10 @@ impl Default for SessionUi {
 impl SessionUi {
     pub fn paused(&self) -> bool {
         !matches!(self.screen, Screen::Menu | Screen::Playing)
+    }
+
+    pub fn scene_paused(&self) -> bool {
+        self.paused() && !self.screen.is_reading()
     }
 }
 

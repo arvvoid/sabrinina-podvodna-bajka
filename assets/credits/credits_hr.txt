@@ -1,4 +1,5 @@
-Sabrinina podvodna bajka — 3D prerada
+Sabrinina podvodna bajka
+Malo more, od Scratcha do 3D-a
 
 Razvoj i prerada
 Luka Dežulović
@@ -6,7 +7,20 @@ Luka Dežulović
 Izvorna ideja
 Sabrina Dežulović
 
-Igra je nastala u Scratchu prema ideji Sabrine Dežulović. Luka Dežulović taj mali podvodni svijet pretvara u 3D igru, čuvajući sirensku čaroliju, tropske ribice i mirne trenutke u akvariju.
+Sve je počelo Sabrininom idejom: sirena, tropske ribice, čarobni kristal i mali podvodni svijet o kojem se treba brinuti.
 
-Zaigraj izvornu igru na Scratchu:
+Prva je verzija nastala u Scratchu. Ova prerada istom malom moru daje malo više prostora, s grebenima za istraživanje i ribicama koje ti prave društvo.
+
+Luka ga ponovno gradi u 3D-u, čuvajući ono zbog čega je izvorna igra bila baš Sabrinin svijet. I dalje postoji pjesma za pjevanje, jato ribica za čuvanje i vrijeme za mirno plivanje kad meduze odu.
+
+Ovo je mala igra koja još raste. Plivanje, morska stvorenja i njihovi sitni detalji još se dorađuju. Hvala ti što si proveo malo vremena ovdje.
+
+Pisma
+Alegreya — Juan Pablo del Peral / Huerta Tipográfica
+SIL Open Font License 1.1
+DejaVu Sans — projekt DejaVu fonts
+
+Isprobaj izvorni projekt na Scratchu:
 https://scratch.mit.edu/projects/1203591608/
+
+A sada, natrag ribicama.
