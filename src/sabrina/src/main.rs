@@ -63,7 +63,11 @@ fn main() {
     if options.window_system.is_some() {
         warn!("Ignoring --x11/--wayland: window-system overrides are only available on Linux");
     }
-    let mut prefs = settings::Preferences::load();
+    let mut prefs = if options.verify {
+        settings::Preferences::default()
+    } else {
+        settings::Preferences::load()
+    };
     if let Some(kind) = &options.capture {
         if kind.starts_with("hr-") {
             prefs.language = 1;
