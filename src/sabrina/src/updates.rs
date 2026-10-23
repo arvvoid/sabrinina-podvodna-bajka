@@ -234,6 +234,9 @@ fn poll(mut check: ResMut<UpdateCheck>) {
 mod tests {
     use super::*;
 
+    // Windows SystemTime has 100-nanosecond precision.
+    const CLOCK_TICK: Duration = Duration::from_nanos(100);
+
     fn history_path(name: &str) -> std::path::PathBuf {
         let stamp = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
@@ -294,7 +297,7 @@ mod tests {
             let next = now + delay;
             assert_eq!(read(&path).next_check, Some(next));
             assert_eq!(read(&path).last_attempt, None);
-            check(&path, next - Duration::from_nanos(1), "0.2.6", || {
+            check(&path, next - CLOCK_TICK, "0.2.6", || {
                 panic!("Restart must not reset the deadline")
             })
             .unwrap();
@@ -312,19 +315,16 @@ mod tests {
         check(&path, now, "0.2.6", || panic!()).unwrap();
         let attempt = read(&path).next_check.unwrap();
         assert_eq!(
-            check(&path, attempt, "0.2.6", || {
-                assert_eq!(read(&path).last_attempt, Some(attempt));
-                Ok(Some("v0.3.0".into()))
-            })
-            .unwrap(),
+            check(&path, attempt, "0.2.6", || Ok(Some("v0.3.0".into()))).unwrap(),
             [None, Some("v0.3.0".into())]
         );
+        assert_eq!(read(&path).last_attempt, Some(attempt));
         let next = attempt + CHECK_INTERVAL + Duration::from_secs(DAY);
         assert_eq!(read(&path).next_check, Some(next));
         for elapsed in [
             Duration::ZERO,
             CHECK_INTERVAL,
-            next.duration_since(attempt).unwrap() - Duration::from_nanos(1),
+            next.duration_since(attempt).unwrap() - CLOCK_TICK,
         ] {
             assert_eq!(
                 check(&path, attempt + elapsed, "0.2.6", || panic!("Too early")).unwrap(),
