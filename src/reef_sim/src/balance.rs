@@ -45,11 +45,12 @@ pub fn award_rescue(world: &mut World, index: usize) {
 }
 
 pub fn dangerous(jellyfish: &JellyEntity) -> bool {
-    matches!(
-        jellyfish.behaviour.state,
-        JellyState::Arriving | JellyState::Hungry
-    ) && jellyfish.behaviour.bubble <= 0.0
-        && jellyfish.behaviour.health > 0.0
+    jellyfish.behaviour.bubble <= 0.0
+        && (jellyfish.behaviour.state == JellyState::Leaving
+            || (matches!(
+                jellyfish.behaviour.state,
+                JellyState::Arriving | JellyState::Hungry
+            ) && jellyfish.behaviour.health > 0.0))
 }
 
 pub fn threat_distance(world: &World, position: V2) -> f32 {

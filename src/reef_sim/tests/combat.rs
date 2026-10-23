@@ -1027,6 +1027,155 @@ fn safe_crystal_collection_and_empty_casts_award_nothing() {
 }
 
 #[test]
+fn departing_threats_ignore_health_but_respect_bubbles() {
+    for health in [0.0, 100.0] {
+        for bubbled in [false, true] {
+            let mut world = encounter(true);
+            world.jelly[0].behaviour.state = JellyState::Leaving;
+            world.jelly[0].behaviour.health = health;
+            world.jelly[0].behaviour.bubble = if bubbled { 1.0 } else { 0.0 };
+            assert_eq!(dangerous(&world.jelly[0]), !bubbled);
+            assert_eq!(
+                threat_distance(&world, v(2.0, 8.0)),
+                if bubbled { f32::INFINITY } else { 2.0 }
+            );
+        }
+    }
+}
+
+#[test]
+fn fish_avoid_defeated_departing_visitors() {
+    let speed = |state| {
+        let mut world = encounter(true);
+        for fish in &mut world.fish {
+            fish.life.active = false;
+        }
+        world.fish[0].life.active = true;
+        world.fish[0].motion.pos = v(2.0, 8.0);
+        world.fish[0].motion.direction = v(1.0, 0.0);
+        world.fish[0].swimming.cruise_heading = 0.0;
+        world.fish[0].swimming.turn_in = 10.0;
+        world.jelly[0].behaviour.state = state;
+        world.jelly[0].behaviour.health = 0.0;
+        fish::fish_swimming(&mut world, 0.1);
+        world.fish[0].motion.velocity.x
+    };
+    assert!(speed(JellyState::Leaving) > speed(JellyState::Hidden));
+}
+
+#[test]
+fn crystal_rescues_fish_from_departing_visitors_without_damaging_them() {
+    for health in [0.0, 100.0] {
+        let mut world = encounter(true);
+        world.jelly[0].behaviour.state = JellyState::Leaving;
+        world.jelly[0].behaviour.health = health;
+        world.sabrina.motion.pos = v(-2.0, 8.0);
+        world.fish[0].motion.pos = world.sabrina.motion.pos + crystal_orbit(&world, 0.0).offset;
+        let mut events = Events::default();
+        crystal(
+            &mut world,
+            0.01,
+            Input {
+                cast: true,
+                ..Input::default()
+            },
+            &mut events,
+        );
+        assert_eq!(events.teleported, 1);
+        assert_eq!(world.points.score, RESCUE_POINTS);
+        assert_eq!(world.points.visit_rescues, 1);
+        damage_jelly(&mut world, 0, CRYSTAL_DAMAGE, true, &mut events);
+        damage_jelly(&mut world, 0, WAVE_DAMAGE, false, &mut events);
+        assert_eq!(world.jelly[0].behaviour.health, health);
+        assert_eq!(world.points.score, RESCUE_POINTS);
+        assert_eq!(events.repelled, 0);
+        assert!(!events.jelly_hit);
+        world.crystal.magic.state = Spell::Burst;
+        world.crystal.magic.hit_count = 1;
+        world.crystal.magic.time = 0.0;
+        assert_eq!(crystal_chain_target(&world), None);
+    }
+}
+
+#[test]
+fn song_rescue_requires_clearance_from_departing_visitors() {
+    for health in [0.0, 100.0] {
+        let mut world = encounter(true);
+        world.jelly[0].behaviour.state = JellyState::Leaving;
+        world.jelly[0].behaviour.health = health;
+        world.sabrina.motion.pos = v(2.0, 8.0);
+        world.sabrina.song.active = true;
+        world.sabrina.song.strength = 1.0;
+        world.fish[0].motion.pos = v(2.0, 8.0);
+        fish::fish_swimming(&mut world, 0.5);
+        assert_eq!(world.fish[0].rescue.song_risk_cycle, world.session.cycle);
+        world.fish[0].motion.pos = v(5.99, 8.0);
+        world.sabrina.motion.pos = world.fish[0].motion.pos;
+        fish::fish_swimming(&mut world, 0.5);
+        assert_eq!(world.points.visit_rescues, 0);
+        world.fish[0].motion.pos = v(6.0, 8.0);
+        world.sabrina.motion.pos = world.fish[0].motion.pos;
+        fish::fish_swimming(&mut world, 0.01);
+        assert_eq!(world.points.score, RESCUE_POINTS);
+        assert_eq!(world.points.visit_rescues, 1);
+    }
+}
+
+#[test]
+fn pending_rescue_clearance_includes_bubbled_departures() {
+    for song in [false, true] {
+        let mut world = encounter(true);
+        world.jelly[0].behaviour.state = JellyState::Leaving;
+        world.jelly[0].behaviour.health = 0.0;
+        world.jelly[0].behaviour.bubble = 1.0;
+        world.fish[0].motion.pos = v(5.99, 8.0);
+        if song {
+            world.sabrina.motion.pos = world.fish[0].motion.pos;
+            world.sabrina.song.active = true;
+            world.sabrina.song.strength = 1.0;
+            world.fish[0].rescue.song_risk_cycle = world.session.cycle;
+            world.fish[0].rescue.song_escort = 1.0;
+            fish::fish_swimming(&mut world, 0.01);
+        } else {
+            world.fish[0].rescue.wave_escape = 0.01;
+            recovery_and_scoring(&mut world, 0.02, &mut Events::default());
+        }
+        assert_eq!(world.points.visit_rescues, 0);
+    }
+}
+
+#[test]
+fn wave_rescues_fish_from_departures_only_when_clear_at_escape_time() {
+    for health in [0.0, 100.0] {
+        for distance in [5.99, 6.0] {
+            let mut world = encounter(true);
+            world.sabrina.motion.pos = v(0.0, 8.0);
+            world.jelly[0].behaviour.state = JellyState::Leaving;
+            world.jelly[0].behaviour.health = health;
+            world.jelly[0].motion.pos = v(-1.5, 8.5);
+            world.fish[0].motion.pos = v(2.0, 8.5);
+            let mut events = Events::default();
+            water_wave(
+                &mut world,
+                0.5,
+                Input {
+                    wave: true,
+                    ..Input::default()
+                },
+                &mut events,
+            );
+            assert!(world.fish[0].rescue.wave_escape > 0.0);
+            assert_eq!(world.points.score, 0);
+            world.fish[0].motion.pos = world.jelly[0].motion.pos + v(distance, 0.0);
+            recovery_and_scoring(&mut world, 1.1, &mut events);
+            let escaped = distance >= 6.0;
+            assert_eq!(world.points.visit_rescues, i32::from(escaped));
+            assert_eq!(world.points.score, if escaped { RESCUE_POINTS } else { 0 });
+        }
+    }
+}
+
+#[test]
 fn threatened_crystal_collection_earns_one_shared_rescue_reward() {
     let mut world = encounter(true);
     world.sabrina.motion.pos = v(-2.0, 8.0);

@@ -19,6 +19,8 @@ The player's score accumulates across all rounds and does not reset between them
 
 Rounds stay active until all departing jellyfish disappear. Only then is the survivor bonus awarded and the round subtotal banked into the running total, the peaceful interval started, and final-round victory awarded. Stings and fish losses during departure still count toward the active round; a wipeout or fatal sting takes priority over completion.
 
+Unbubbled departing jellyfish remain threats for fish avoidance and rescue eligibility even at zero health, but cannot take further damage or become Crystal chain targets. Song and Wave rescue rewards require at least six units of clearance from every arriving, hungry or departing visitor, including bubbled visitors.
+
 Jellyfish switch from arriving to normal hungry steering after 4.5 seconds whether or not they hear Sabrina's song. Bubbles still immobilize them; an overdue arrival transition happens when the bubble releases. Opposing visitors must not remain locked in inward arrival movement at the center.
 
 ## Rendering and animation

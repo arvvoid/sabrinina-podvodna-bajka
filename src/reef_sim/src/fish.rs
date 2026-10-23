@@ -167,7 +167,7 @@ fn swim(world: &mut World, dt: f32, interact_with_sabrina: bool) {
         for jellyfish in &world.jelly {
             if matches!(
                 jellyfish.behaviour.state,
-                JellyState::Hungry | JellyState::Arriving
+                JellyState::Hungry | JellyState::Arriving | JellyState::Leaving
             ) {
                 danger = danger.min((fish.motion.pos - jellyfish.motion.pos).length())
             }

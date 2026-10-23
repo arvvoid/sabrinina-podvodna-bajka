@@ -182,7 +182,10 @@ pub fn recovery_and_scoring(world: &mut World, dt: f32, events: &mut Events) {
                     .jelly
                     .iter()
                     .filter(|j| {
-                        matches!(j.behaviour.state, JellyState::Hungry | JellyState::Arriving)
+                        matches!(
+                            j.behaviour.state,
+                            JellyState::Hungry | JellyState::Arriving | JellyState::Leaving
+                        )
                     })
                     .all(|j| (j.motion.pos - world.fish[index].motion.pos).length() >= 6.0)
             {
