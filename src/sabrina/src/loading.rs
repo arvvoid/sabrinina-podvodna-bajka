@@ -42,7 +42,15 @@ impl Plugin for LoadingPlugin {
         let feedback = RenderFeedback::default();
         app.insert_resource(feedback.clone())
             .init_resource::<Loading>()
-            .add_systems(Startup, preload);
+            .add_systems(
+                Update,
+                preload
+                    .run_if(
+                        crate::updates::loading_allowed
+                            .and_then(bevy::ecs::schedule::common_conditions::run_once),
+                    )
+                    .before(crate::loading::ready),
+            );
         app.sub_app_mut(RenderApp)
             .insert_resource(feedback)
             .add_systems(Render, report.in_set(RenderSystems::Cleanup));

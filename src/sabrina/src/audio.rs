@@ -39,8 +39,21 @@ impl Plugin for ReefAudioPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<AudioRequests>()
             .init_resource::<MusicState>()
-            .add_systems(Startup, setup)
-            .add_systems(Update, update.in_set(ConsumeEvents));
+            .add_systems(
+                Update,
+                setup
+                    .run_if(
+                        crate::updates::loading_allowed
+                            .and_then(bevy::ecs::schedule::common_conditions::run_once),
+                    )
+                    .before(update),
+            )
+            .add_systems(
+                Update,
+                update
+                    .in_set(ConsumeEvents)
+                    .run_if(crate::updates::loading_allowed),
+            );
     }
 }
 

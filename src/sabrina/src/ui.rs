@@ -186,6 +186,8 @@ enum Action {
     Effects,
     Voice,
     Rest,
+    ViewRelease,
+    SkipUpdate,
 }
 
 #[derive(Component)]
@@ -713,11 +715,12 @@ fn draw(
     hints: Res<Hints>,
     adapter: Res<RenderAdapterInfo>,
     mut ability_materials: ResMut<Assets<AbilityIcon>>,
+    update_check: Res<crate::updates::UpdateCheck>,
 ) {
     let zoom = (window.width() / CANVAS_WIDTH).min(window.height() / CANVAS_HEIGHT);
     scale.0 = zoom;
     // Rebuild only when layout or settings change; HUD values update separately.
-    let key = format!(
+    let mut key = format!(
         "{:?}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{:?}:{}:{}:{}:{:?}",
         ui.screen,
         preferences.language,
@@ -740,6 +743,10 @@ fn draw(
         ui.loaded && options.capture.is_none(),
         preferences.tail_color
     );
+    key.push_str(&format!(
+        "{:?}:{}",
+        update_check.status, update_check.browser_error
+    ));
     if key == focus.key {
         return;
     }
@@ -807,6 +814,52 @@ fn draw(
             .id();
         builder.commands.entity(root).add_child(title);
         let scale = image.w / LOADING_ART_WIDTH;
+        if update_check.status != crate::updates::Status::Continue {
+            builder.panel(rect(370.0, 510.0, 860.0, 265.0));
+            let (title, message) = match &update_check.status {
+                crate::updates::Status::Available { tag, .. } => (
+                    tr("A new underwater adventure awaits!", preferences.language),
+                    format!(
+                        "{} {}\n{}",
+                        tr("New version available:", preferences.language),
+                        tag,
+                        tr(
+                            if update_check.browser_error {
+                                "Could not open your browser. Try again or skip for now."
+                            } else {
+                                "View the GitHub release to download it, or keep playing this version."
+                            },
+                            preferences.language
+                        )
+                    ),
+                ),
+                _ => (
+                    tr("Checking for updates…", preferences.language),
+                    tr("Just a moment before we dive in.", preferences.language),
+                ),
+            };
+            builder.label(rect(410.0, 538.0, 780.0, 42.0), 29.0, title, None);
+            builder.label(rect(410.0, 590.0, 780.0, 75.0), 21.0, message, None);
+            if matches!(
+                update_check.status,
+                crate::updates::Status::Available { .. }
+            ) {
+                builder.button(
+                    rect(410.0, 687.0, 370.0, 58.0),
+                    "View release and exit",
+                    Action::ViewRelease,
+                    true,
+                );
+                builder.button(
+                    rect(810.0, 687.0, 370.0, 58.0),
+                    "Skip for now",
+                    Action::SkipUpdate,
+                    false,
+                );
+            }
+            focus.count = builder.index;
+            return;
+        }
         let halo = loading_ready_overlay(image);
         let halo = builder
             .commands
@@ -1670,8 +1723,9 @@ fn actions(
     options: Res<Options>,
     mut exit: MessageWriter<AppExit>,
     time: Res<Time<Real>>,
-    mut wave_pointer: Local<bool>,
+    startup: (Local<bool>, Option<ResMut<crate::updates::UpdateCheck>>),
 ) {
+    let (mut wave_pointer, update_check) = startup;
     if options.capture.is_some() {
         return;
     }
@@ -1882,6 +1936,25 @@ fn actions(
                 .args(["/C", "start", "", url])
                 .spawn();
         }
+        Action::SkipUpdate => {
+            if let Some(mut check) = update_check {
+                check.status = crate::updates::Status::Continue;
+                check.browser_error = false;
+            }
+        }
+        Action::ViewRelease => {
+            if let Some(mut check) = update_check {
+                match crate::updates::open_release(&mut check) {
+                    Ok(()) => {
+                        exit.write(AppExit::Success);
+                    }
+                    Err(error) => {
+                        error!("{error}");
+                        check.browser_error = true;
+                    }
+                }
+            }
+        }
         Action::Music => {
             if let Some(f) = fraction {
                 preferences.music = f
@@ -1906,7 +1979,12 @@ fn actions(
     }
     if !matches!(
         action,
-        Action::Crystal | Action::Song | Action::Wave | Action::Pause
+        Action::Crystal
+            | Action::Song
+            | Action::Wave
+            | Action::Pause
+            | Action::SkipUpdate
+            | Action::ViewRelease
     ) {
         preferences.save();
     }
@@ -2561,6 +2639,65 @@ mod tests {
             .write_message(RawGamepadEvent::Button(RawGamepadButtonChangedEvent::new(
                 pad, button, value,
             )));
+    }
+
+    #[test]
+    fn controller_can_skip_update_without_starting_gameplay() {
+        let (mut app, pad) = input_app();
+        let mut check = crate::updates::UpdateCheck::default();
+        check.status = crate::updates::Status::Available {
+            tag: "v0.3.0".into(),
+            url: "https://github.com/arvvoid/sabrinina-podvodna-bajka/releases/tag/v0.3.0".into(),
+        };
+        check.browser_error = true;
+        app.insert_resource(check);
+        app.world_mut().resource_mut::<SessionUi>().screen = Screen::Loading;
+        app.world_mut().resource_mut::<Focus>().last_screen = Some(Screen::Loading);
+        for mut hit in app
+            .world_mut()
+            .query::<&mut Hit>()
+            .iter_mut(app.world_mut())
+        {
+            hit.action = if hit.index == 0 {
+                Action::ViewRelease
+            } else {
+                Action::SkipUpdate
+            };
+        }
+        button(&mut app, pad, GamepadButton::DPadRight, 1.0);
+        button(&mut app, pad, GamepadButton::DPadRight, 0.0);
+        app.update();
+        assert_eq!(app.world().resource::<Focus>().index, 1);
+        button(&mut app, pad, GamepadButton::South, 1.0);
+        button(&mut app, pad, GamepadButton::South, 0.0);
+        app.update();
+        let check = app.world().resource::<crate::updates::UpdateCheck>();
+        assert_eq!(check.status, crate::updates::Status::Continue);
+        assert!(!check.browser_error);
+        let ui = app.world().resource::<SessionUi>();
+        assert_eq!(ui.screen, Screen::Loading);
+        assert!(!ui.loaded);
+        assert!(!app.world().resource::<PendingInput>().0.cast);
+        assert!(app.world().resource::<Messages<AppExit>>().is_empty());
+    }
+
+    #[test]
+    fn update_prompt_has_all_three_translations() {
+        for key in [
+            "Checking for updates…",
+            "Just a moment before we dive in.",
+            "A new underwater adventure awaits!",
+            "New version available:",
+            "View the GitHub release to download it, or keep playing this version.",
+            "Could not open your browser. Try again or skip for now.",
+            "View release and exit",
+            "Skip for now",
+        ] {
+            assert!(table().contains_key(key));
+            for language in 0..3 {
+                assert!(!tr(key, language).is_empty());
+            }
+        }
     }
 
     #[test]

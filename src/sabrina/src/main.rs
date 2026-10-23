@@ -35,6 +35,7 @@ mod settings;
 mod tail;
 
 mod ui;
+mod updates;
 
 mod verification;
 
@@ -185,6 +186,7 @@ fn main() {
         .add_plugins((
             bevy::diagnostic::FrameTimeDiagnosticsPlugin::default(),
             app::GamePlugin,
+            updates::UpdatePlugin,
             assets::CharacterPlugin,
             loading::LoadingPlugin,
             hair::HairPlugin,

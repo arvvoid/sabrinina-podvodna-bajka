@@ -38,6 +38,18 @@ The game is playable already, but I am still working on it. There are animations
 
 ## Playing
 
+**Startup update check:** before loading game models, audio and the full asset
+set, the splash checks this repository's latest public GitHub release over HTTPS.
+A newer stable version offers **View release and exit** or **Skip for now**, using
+mouse, keyboard or controller. Viewing opens the release page in the OS default
+browser and exits the game normally; nothing is downloaded or installed by the
+game. If the browser cannot open, the prompt stays available to retry or skip.
+Offline, rate-limited or invalid responses are logged and startup continues;
+the check has a short timeout and never blocks play indefinitely. Release tags
+are compared as semantic versions, with an optional `v` prefix. Development
+builds compare against the package version. Capture and input-verification runs
+skip the network check.
+
 **Ability HUD:** three clickable square icons at the bottom center activate
 Wave, Song and Crystal, from left to right. Keyboard/mouse bindings appear below
 each icon, switching to the active controller's labels and colors. Unavailable

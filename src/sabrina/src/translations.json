@@ -1,4 +1,12 @@
 {
+  "Checking for updates…": ["Checking for updates…", "Provjeravamo ažuriranja…", "Ricerca aggiornamenti…"],
+  "Just a moment before we dive in.": ["Just a moment before we dive in.", "Još trenutak prije nego zaronimo.", "Un momento prima di immergerci."],
+  "A new underwater adventure awaits!": ["A new underwater adventure awaits!", "Čeka te nova podvodna pustolovina!", "Una nuova avventura sottomarina ti aspetta!"],
+  "New version available:": ["New version available:", "Dostupna je nova verzija:", "Nuova versione disponibile:"],
+  "View the GitHub release to download it, or keep playing this version.": ["View the GitHub release to download it, or keep playing this version.", "Otvori izdanje na GitHubu za preuzimanje ili nastavi igrati ovu verziju.", "Apri la versione su GitHub per scaricarla, oppure continua a giocare con questa."],
+  "Could not open your browser. Try again or skip for now.": ["Could not open your browser. Try again or skip for now.", "Preglednik se nije otvorio. Pokušaj ponovno ili zasad preskoči.", "Impossibile aprire il browser. Riprova oppure salta per ora."],
+  "View release and exit": ["View release and exit", "Otvori izdanje i izađi", "Apri versione ed esci"],
+  "Skip for now": ["Skip for now", "Zasad preskoči", "Salta per ora"],
   "Tail color": ["Tail color", "Boja repa", "Colore della coda"],
   "None keeps the original. Magic flows with rainbow colors.": ["None keeps the original. Magic flows with rainbow colors.", "Bez efekta čuva izvorni izgled. Čarobni rep prelijeva se duginim bojama.", "Nessun effetto mantiene l'originale. Magia scorre con i colori dell'arcobaleno."],
   "None": ["None", "Bez efekta", "Nessun effetto"],

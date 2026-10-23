@@ -34,6 +34,13 @@ pub struct VerificationPlugin;
 impl Plugin for VerificationPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Check>()
+            .add_systems(Startup, prepare_update_prompt.after(crate::updates::start))
+            .add_systems(
+                PreUpdate,
+                verify_update_prompt
+                    .after(bevy::input::InputSystems)
+                    .before(crate::app::input),
+            )
             .add_systems(
                 PreUpdate,
                 drive
@@ -45,6 +52,57 @@ impl Plugin for VerificationPlugin {
                 PostUpdate,
                 check_pose.after(bevy::transform::TransformSystems::Propagate),
             );
+    }
+}
+
+fn prepare_update_prompt(options: Res<Options>, mut check: ResMut<crate::updates::UpdateCheck>) {
+    if options.verify {
+        check.status = crate::updates::Status::Available {
+            tag: "v9999.0.0".into(),
+            url: "https://github.com/arvvoid/sabrinina-podvodna-bajka/releases/tag/v9999.0.0"
+                .into(),
+        };
+    }
+}
+
+fn verify_update_prompt(
+    options: Res<Options>,
+    check: Res<crate::updates::UpdateCheck>,
+    loading: Res<crate::loading::Loading>,
+    ui: Res<SessionUi>,
+    rigs: Query<&RigPlayer>,
+    texts: Query<&Text>,
+    mut keys: ResMut<ButtonInput<KeyCode>>,
+    mut frame: Local<u8>,
+) {
+    if !options.verify || *frame >= 5 {
+        return;
+    }
+    *frame += 1;
+    if *frame < 5 {
+        assert!(matches!(
+            check.status,
+            crate::updates::Status::Available { .. }
+        ));
+        assert!(!ui.loaded);
+        assert_eq!(loading.assets_total, 0);
+        assert!(rigs.is_empty());
+    }
+    match *frame {
+        3 => {
+            assert!(texts.iter().any(|text| text.0.contains("v9999.0.0")));
+            keys.press(KeyCode::Tab);
+        }
+        4 => {
+            keys.release(KeyCode::Tab);
+            keys.press(KeyCode::Enter);
+        }
+        5 => {
+            keys.release(KeyCode::Enter);
+            assert_eq!(check.status, crate::updates::Status::Continue);
+            println!("BEVY CHECK OK: update prompt blocks asset loading; keyboard skip resumes it");
+        }
+        _ => {}
     }
 }
 
