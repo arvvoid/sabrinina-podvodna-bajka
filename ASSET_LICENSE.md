@@ -64,6 +64,7 @@ Croatian Č Ć Đ Š Ž and č ć đ š ž.
 Include applicable third-party license notices with distributed releases.
 Runtime assets and their notices are embedded in the executable. Desktop
 packages also place the Alegreya, DejaVu and FluidR3 notices in `licenses/`; retain these
+along with the generated Rust dependency notices in `licenses/THIRD_PARTY_LICENSES.txt`
 and the root `LICENSE`, `NOTICE` and asset-license notice (packaged unchanged as
 `licenses/ASSET_LICENSE.txt` from `ASSET_LICENSE.md`) when distributing an
 authorized package. Keeping notices alone does not grant permission to

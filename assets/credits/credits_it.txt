@@ -15,10 +15,26 @@ Luka lo sta ricostruendo in 3D, conservando ciò che rendeva l’originale il mo
 
 È un piccolo gioco che sta ancora crescendo. Il nuoto, le creature e i loro piccoli dettagli sono ancora in lavorazione. Grazie per aver trascorso un po’ di tempo qui.
 
-Caratteri
+Scritto in Rust. Basato su Bevy. Realizzato con strumenti open source.
+
+Strumenti e librerie di terze parti
+Rust e Cargo — il progetto Rust e i collaboratori
+Bevy — il progetto Bevy e i collaboratori
+Blender — la Blender Foundation e i collaboratori
+
+Font
 Alegreya — Juan Pablo del Peral / Huerta Tipográfica
 SIL Open Font License 1.1
 DejaVu Sans — progetto DejaVu fonts
+
+Rendering musicale e SoundFont
+FluidSynth — il progetto FluidSynth e i collaboratori
+FluidR3 General MIDI — Frank Wen e Toby Smithe
+Campioni strumentali con licenza MIT usati per creare la musica.
+Il SoundFont e FluidSynth non sono necessari per eseguire il gioco.
+
+Per l'elenco completo delle dipendenze e i testi delle licenze, consulta:
+licenses/THIRD_PARTY_LICENSES.txt
 
 Prova il progetto originale su Scratch:
 https://scratch.mit.edu/projects/1203591608/

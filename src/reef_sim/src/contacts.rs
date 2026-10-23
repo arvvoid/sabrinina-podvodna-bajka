@@ -280,7 +280,15 @@ fn bounds_overlap(a: Capsule, b: Capsule) -> bool {
 }
 
 pub fn soft_contacts(world: &mut World) {
-    let body = sabrina_body(&world.sabrina);
+    contacts(world, true);
+}
+
+pub(crate) fn scenery_fish_contacts(world: &mut World) {
+    contacts(world, false);
+}
+
+fn contacts(world: &mut World, interact_with_sabrina: bool) {
+    let body = interact_with_sabrina.then(|| sabrina_body(&world.sabrina));
     let mut shapes = world.fish.map(|fish| fish_body(&fish));
     // Repeated, stable-order passes resolve overlap without changing rescue scores.
     for _ in 0..6 {
@@ -331,7 +339,7 @@ pub fn soft_contacts(world: &mut World) {
                 shapes[i] = fish_body(&a);
                 shapes[jellyfish] = fish_body(b);
             }
-            for capsule in body {
+            for &capsule in body.iter().flatten() {
                 let ca = shapes[i];
                 if !bounds_overlap(ca, capsule) {
                     continue;

@@ -15,10 +15,26 @@ Luka ga ponovno gradi u 3D-u, čuvajući ono zbog čega je izvorna igra bila ba�
 
 Ovo je mala igra koja još raste. Plivanje, morska stvorenja i njihovi sitni detalji još se dorađuju. Hvala ti što si proveo malo vremena ovdje.
 
-Pisma
+Napisano u Rustu. Pokreće Bevy. Izrađeno alatima otvorenog koda.
+
+Alati i biblioteke trećih strana
+Rust i Cargo — projekt Rust i suradnici
+Bevy — projekt Bevy i suradnici
+Blender — Blender Foundation i suradnici
+
+Fontovi
 Alegreya — Juan Pablo del Peral / Huerta Tipográfica
 SIL Open Font License 1.1
 DejaVu Sans — projekt DejaVu fonts
+
+Izrada glazbe i SoundFont
+FluidSynth — projekt FluidSynth i suradnici
+FluidR3 General MIDI — Frank Wen i Toby Smithe
+Uzorci instrumenata pod licencom MIT korišteni za izradu glazbe.
+SoundFont i FluidSynth nisu potrebni za pokretanje igre.
+
+Cjelovit popis ovisnosti i licencne obavijesti nalaze se u datoteci:
+licenses/THIRD_PARTY_LICENSES.txt
 
 Isprobaj izvorni projekt na Scratchu:
 https://scratch.mit.edu/projects/1203591608/

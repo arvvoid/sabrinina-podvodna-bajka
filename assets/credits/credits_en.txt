@@ -15,10 +15,26 @@ Luka is rebuilding it in 3D, keeping the things that made the original feel like
 
 It is a small game, still growing. The swimming, the creatures and their little details are works in progress. Thank you for spending a little time here.
 
-Lettering
+Written in Rust. Powered by Bevy. Built with open-source tools.
+
+Third-party tools and libraries
+Rust and Cargo — the Rust project and contributors
+Bevy — the Bevy project and contributors
+Blender — the Blender Foundation and contributors
+
+Fonts
 Alegreya — Juan Pablo del Peral / Huerta Tipográfica
 SIL Open Font License 1.1
 DejaVu Sans — DejaVu fonts project
+
+Music rendering and SoundFont
+FluidSynth — the FluidSynth project and contributors
+FluidR3 General MIDI — Frank Wen and Toby Smithe
+MIT-licensed instrument samples used to render the music.
+The SoundFont and FluidSynth are not required at runtime.
+
+For the full dependency list and license notices, see:
+licenses/THIRD_PARTY_LICENSES.txt
 
 Play the original Scratch project:
 https://scratch.mit.edu/projects/1203591608/

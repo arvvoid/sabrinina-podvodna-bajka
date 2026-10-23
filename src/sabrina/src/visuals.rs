@@ -539,10 +539,14 @@ fn actors(
                 };
                 next.scale = Vec3::splat(pulse);
                 if ui.screen.is_reading() {
-                    let depth = crate::presentation::reading_position(t).z;
-                    next.translation.z = depth;
+                    let pose = crate::presentation::reading_pose(t);
+                    next.translation.z = pose.position.z;
                     // The camera is orthographic, so depth alone does not change apparent size.
-                    next.scale = Vec3::splat(1.0 + depth * 0.065);
+                    next.scale = Vec3::splat(pose.scale);
+                    next.rotation = Quat::from_rotation_y(
+                        sim::sabrina_visual_yaw(s) - pose.face * s.swimming.yaw.cos(),
+                    ) * Quat::from_rotation_z(s.swimming.pitch)
+                        * Quat::from_rotation_x(pose.bank * motion);
                 }
             }
             Actor::Fish(i) => {
@@ -589,7 +593,8 @@ fn actors(
                     sim::Spell::Flying | sim::Spell::Returning
                 );
                 let charging = crystal.magic.state == sim::Spell::Charging;
-                show = true;
+                // Reading screens are a pure swim performance, without magic.
+                show = !ui.screen.is_reading();
                 next.translation = Vec3::new(
                     crystal.motion.pos.x,
                     crystal.motion.pos.y,
@@ -695,7 +700,7 @@ fn effects(
     let resting = crystal.magic.state == sim::Spell::Resting;
     let burst = crystal.magic.state == sim::Spell::Burst;
     let charging = crystal.magic.state == sim::Spell::Charging;
-    let ready = s.cooldown <= 0.0;
+    let ready = s.cooldown <= 0.0 && !ui.screen.is_reading();
     if flying {
         if !trail.flying {
             trail.points.fill(cp);
@@ -1012,7 +1017,12 @@ fn lighting(
             position.x,
             position.y,
             0.0,
-            if ui.started && reveal && options.capture.as_deref() != Some("occlusion-solid") {
+            // Reading screens choreograph real reef occlusion instead.
+            if ui.started
+                && reveal
+                && !ui.screen.is_reading()
+                && options.capture.as_deref() != Some("occlusion-solid")
+            {
                 1.0
             } else {
                 0.0
@@ -1115,6 +1125,7 @@ fn capture(
 
 fn crystal_light(
     rendered: Res<Presentation>,
+    ui: Res<SessionUi>,
     mut lights: Query<(&mut PointLight, &mut Transform), With<MagicLight>>,
     mut materials: ResMut<Assets<CrystalMaterial>>,
     mut changed_materials: Local<Vec<AssetId<CrystalMaterial>>>,
@@ -1122,7 +1133,7 @@ fn crystal_light(
     let crystal = &rendered.0.crystal;
     let charging = crystal.magic.state == sim::Spell::Charging;
     let burst = crystal.magic.state == sim::Spell::Burst;
-    let ready = rendered.0.sabrina.cooldown <= 0.0;
+    let ready = rendered.0.sabrina.cooldown <= 0.0 && !ui.screen.is_reading();
     for (mut light, mut t) in &mut lights {
         let translation = Vec3::new(
             crystal.motion.pos.x,
@@ -1185,6 +1196,7 @@ mod tests {
         app.add_plugins((MinimalPlugins, AssetPlugin::default()))
             .init_asset::<CrystalMaterial>()
             .init_resource::<Presentation>()
+            .init_resource::<SessionUi>()
             .init_resource::<Changes>()
             .add_systems(Update, crystal_light)
             .add_systems(

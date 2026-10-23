@@ -4,6 +4,14 @@
 use crate::*;
 
 pub fn fish_swimming(world: &mut World, dt: f32) {
+    swim(world, dt, true);
+}
+
+pub(crate) fn scenery_fish_swimming(world: &mut World, dt: f32) {
+    swim(world, dt, false);
+}
+
+fn swim(world: &mut World, dt: f32, interact_with_sabrina: bool) {
     // Each slot sees earlier slots' updated state. Preserve this order and the
     // random draws; parallel steering would change the simulation.
     for i in 0..FISH_COUNT {
@@ -116,7 +124,9 @@ pub fn fish_swimming(world: &mut World, dt: f32) {
         }
         let away = fish.motion.pos - world.sabrina.motion.pos;
         let radius = song_radius(world);
-        let hearing = song_reaches(world, fish.motion.pos) && fish.rescue.wave_flow <= 0.0;
+        let hearing = interact_with_sabrina
+            && song_reaches(world, fish.motion.pos)
+            && fish.rescue.wave_flow <= 0.0;
         if hearing {
             let wake = if world.sabrina.motion.velocity.length() > 0.4 {
                 world.sabrina.motion.velocity.unit() * -(radius * 0.22).min(1.4)
@@ -136,7 +146,11 @@ pub fn fish_swimming(world: &mut World, dt: f32) {
                 + (pull.unit() * (pull.length() * 2.0).min(3.8) * pulse
                     + world.sabrina.motion.velocity * 1.05)
                     * world.sabrina.song.strength;
-        } else if !world.sabrina.song.active && hungry(world) == 0 && away.length() < 1.5 {
+        } else if interact_with_sabrina
+            && !world.sabrina.song.active
+            && hungry(world) == 0
+            && away.length() < 1.5
+        {
             let mut push = away.unit();
             let mut nearest = 1000.0;
             for jellyfish in &world.jelly {

@@ -2755,6 +2755,33 @@ mod tests {
     }
 
     #[test]
+    fn credits_include_attribution_and_only_a_reference_to_dependency_notices() {
+        for lang in 0..3 {
+            let text = reading_text(false, Style::Keyboard, lang);
+            assert!(
+                text.len() < 3000,
+                "Credits must not embed the dependency inventory"
+            );
+            assert!(!text.contains("{{DEPENDENCIES}}"));
+            assert!(!text.contains("Lettering"));
+            assert!(text.contains(["Fonts", "Fontovi", "Font"][lang]));
+            assert!(text.contains("FluidR3 General MIDI"));
+            assert!(text.contains("Frank Wen"));
+            assert!(text.contains("Toby Smithe"));
+            assert!(text.contains("FluidSynth"));
+            let tools = [
+                "Third-party tools and libraries",
+                "Alati i biblioteke trećih strana",
+                "Strumenti e librerie di terze parti",
+            ][lang];
+            assert!(text.find("Bevy.").unwrap() < text.find(tools).unwrap());
+            assert!(text.find(tools).unwrap() < text.find("Alegreya").unwrap());
+            assert!(text.contains("https://scratch.mit.edu/projects/1203591608/"));
+            assert_eq!(text.matches("licenses/THIRD_PARTY_LICENSES.txt").count(), 1,);
+        }
+    }
+
+    #[test]
     fn reading_screens_clip_large_text_and_keep_controls_outside_the_crawl() {
         for screen in [Screen::Help, Screen::Credits] {
             for language in 0..3 {

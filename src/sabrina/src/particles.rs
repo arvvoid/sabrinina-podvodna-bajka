@@ -190,7 +190,7 @@ fn update(
                 } else {
                     -1.0
                 };
-                !resting || rendered.0.sabrina.cooldown <= 0.0
+                !ui.screen.is_reading() && (!resting || rendered.0.sabrina.cooldown <= 0.0)
             }
             Effect::Pop(i) => {
                 let fish = &rendered.0.fish[i];
