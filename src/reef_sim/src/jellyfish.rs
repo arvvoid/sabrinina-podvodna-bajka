@@ -25,6 +25,10 @@ pub fn jellyfish_and_contacts(world: &mut World, dt: f32, events: &mut Events) {
         jellyfish.behaviour.repel_flash = (jellyfish.behaviour.repel_flash - dt).max(0.0);
         let hearing = song_reaches(world, jellyfish.motion.pos);
         jellyfish.behaviour.eat_wait = (jellyfish.behaviour.eat_wait - dt).max(0.0);
+        if jellyfish.behaviour.state == JellyState::Arriving && jellyfish.behaviour.time > 4.5 {
+            jellyfish.behaviour.state = JellyState::Hungry;
+            jellyfish.behaviour.time = 0.0;
+        }
         match jellyfish.behaviour.state {
             JellyState::Arriving if !hearing => {
                 jellyfish.motion.pos = jellyfish.motion.pos
@@ -66,12 +70,6 @@ pub fn jellyfish_and_contacts(world: &mut World, dt: f32, events: &mut Events) {
                 if hearing {
                     desired_direction =
                         (world.sabrina.motion.pos - jellyfish.motion.pos).unit() * 1.1
-                }
-                if jellyfish.behaviour.state == JellyState::Arriving
-                    && jellyfish.behaviour.time > 4.5
-                {
-                    jellyfish.behaviour.state = JellyState::Hungry;
-                    jellyfish.behaviour.time = 0.0;
                 }
                 if jellyfish.motion.pos.x > 14.0 {
                     desired_direction.x = -1.0

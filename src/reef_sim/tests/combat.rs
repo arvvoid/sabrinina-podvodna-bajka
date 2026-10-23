@@ -1169,6 +1169,104 @@ fn progression_is_monotonic_bounded_and_respects_visitor_limit() {
 }
 
 #[test]
+fn arrivals_finish_without_singing_in_the_final_round() {
+    for gentle in [false, true] {
+        let mut world = encounter(gentle);
+        world.session.cycle = FINAL_ROUND - 1;
+        begin_visit(&mut world);
+        assert!(!world.sabrina.song.active);
+        for _ in 0..240 {
+            jellyfish::jellyfish_and_contacts(&mut world, 1.0 / 60.0, &mut Events::default());
+        }
+        assert!(
+            world
+                .jelly
+                .iter()
+                .all(|j| j.behaviour.state == JellyState::Arriving)
+        );
+        for _ in 0..32 {
+            jellyfish::jellyfish_and_contacts(&mut world, 1.0 / 60.0, &mut Events::default());
+        }
+        for jelly in &world.jelly {
+            assert_eq!(jelly.behaviour.state, JellyState::Hungry);
+            assert!(jelly.motion.velocity.length() > 0.0);
+        }
+    }
+}
+
+#[test]
+fn final_round_arrivals_keep_swimming_with_one_surviving_fish() {
+    for gentle in [false, true] {
+        for seed in [27, 54, 91] {
+            let mut world = World::default();
+            reset(
+                &mut world,
+                seed,
+                Settings {
+                    gentle,
+                    ..Settings::default()
+                },
+            );
+            world.session.cycle = FINAL_ROUND - 1;
+            begin_visit(&mut world);
+            world.sabrina.motion.pos = v(-14.0, 16.0);
+            world.sabrina.vitality.invulnerable = 1000.0;
+            for (index, fish) in world.fish.iter_mut().enumerate() {
+                fish.life.active = index == 0;
+                fish.rescue.shield = 1000.0;
+            }
+            // Opposing arrivals at the same height must not push against each other forever.
+            for jelly in &mut world.jelly {
+                jelly.behaviour.phase = 0.0;
+            }
+            for _ in 0..40 * 60 {
+                step(&mut world, 1.0 / 60.0, Input::default());
+            }
+            let start = world.jelly.map(|jelly| jelly.motion.pos);
+            let mut excursions = [0.0_f32; JELLY_COUNT];
+            for _ in 0..15 * 60 {
+                step(&mut world, 1.0 / 60.0, Input::default());
+                for (index, jelly) in world.jelly.iter().enumerate() {
+                    excursions[index] =
+                        excursions[index].max((jelly.motion.pos - start[index]).length());
+                }
+            }
+            assert_eq!(alive(&world), 1);
+            assert!(!world.session.finished());
+            for (index, excursion) in excursions.into_iter().enumerate() {
+                // Arrival bobbing spans only 0.3 units; require actual swimming beyond it.
+                assert!(
+                    excursion > 0.5,
+                    "Visitor {index} moved only {excursion:.3} units in 15s: gentle={gentle}, seed={seed}, start={:?}, end={:?}, fish={:?}, velocity={:?}",
+                    start[index],
+                    world.jelly[index].motion.pos,
+                    world.fish[0].motion.pos,
+                    world.jelly[index].motion.velocity
+                );
+                assert_eq!(world.jelly[index].behaviour.state, JellyState::Hungry);
+            }
+        }
+    }
+}
+
+#[test]
+fn arrival_completion_preserves_bubble_immobilization() {
+    let mut world = encounter(true);
+    world.jelly[0].behaviour.state = JellyState::Arriving;
+    world.jelly[0].behaviour.time = 4.5;
+    world.jelly[0].behaviour.bubble = 0.5;
+    let position = world.jelly[0].motion.pos;
+    for _ in 0..2 {
+        jellyfish::jellyfish_and_contacts(&mut world, 0.25, &mut Events::default());
+        assert_eq!(world.jelly[0].motion.pos, position);
+        assert_eq!(world.jelly[0].behaviour.state, JellyState::Arriving);
+    }
+    jellyfish::jellyfish_and_contacts(&mut world, 1.0 / 60.0, &mut Events::default());
+    assert_eq!(world.jelly[0].behaviour.state, JellyState::Hungry);
+    assert!(world.jelly[0].motion.velocity.length() > 0.0);
+}
+
+#[test]
 fn tenth_round_always_spawns_four_and_finishes_in_victory_once() {
     for gentle in [false, true] {
         for limit in 1..=3 {

@@ -15,6 +15,8 @@ Input is buffered before fixed updates. Rendering interpolates simulation snapsh
 
 Combat constants and difficulty curves live in `balance.rs`. Competitive play ends after round 10; quiet aquarium mode is endless. Damage, rescue rewards and round completion are resolved in the simulation. Visible score feedback is stored separately from events consumed by audio.
 
+Jellyfish switch from arriving to normal hungry steering after 4.5 seconds whether or not they hear Sabrina's song. Bubbles still immobilize them; an overdue arrival transition happens when the bubble releases. Opposing visitors must not remain locked in inward arrival movement at the center.
+
 ## Rendering and animation
 
 Actors use persistent entity roots and pooled visuals. Animated instances have separate skeletons but share meshes, textures and animation resources. Hidden fish and jellyfish stop animating; screen-size LODs use hysteresis.
