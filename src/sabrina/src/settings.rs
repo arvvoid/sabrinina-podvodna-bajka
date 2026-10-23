@@ -5,6 +5,77 @@ use bevy::{prelude::*, window::PresentMode};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TailColor {
+    #[default]
+    None,
+    NaturalGreen,
+    Violet,
+    Pink,
+    LagoonBlue,
+    Coral,
+    Gold,
+    Magic,
+    Custom([u8; 3]),
+}
+
+impl TailColor {
+    pub const PRESETS: [Self; 8] = [
+        Self::None,
+        Self::NaturalGreen,
+        Self::Violet,
+        Self::Pink,
+        Self::LagoonBlue,
+        Self::Coral,
+        Self::Gold,
+        Self::Magic,
+    ];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::None => "None",
+            Self::NaturalGreen => "Natural green",
+            Self::Violet => "Violet",
+            Self::Pink => "Pink",
+            Self::LagoonBlue => "Lagoon blue",
+            Self::Coral => "Coral",
+            Self::Gold => "Gold",
+            Self::Magic => "Magic",
+            Self::Custom(_) => "Custom",
+        }
+    }
+
+    pub fn rgb(self) -> Option<[u8; 3]> {
+        match self {
+            Self::None | Self::Magic => None,
+            Self::NaturalGreen => Some([65, 190, 125]),
+            Self::Violet => Some([155, 95, 230]),
+            Self::Pink => Some([240, 110, 180]),
+            Self::LagoonBlue => Some([55, 180, 220]),
+            Self::Coral => Some([245, 125, 100]),
+            Self::Gold => Some([235, 185, 70]),
+            Self::Custom(rgb) => Some(rgb),
+        }
+    }
+}
+
+fn deserialize_tail_color<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<TailColor, D::Error> {
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum SavedColor {
+        Named(TailColor),
+        Legacy([u8; 3]),
+    }
+    Ok(match Option::<SavedColor>::deserialize(deserializer)? {
+        None => TailColor::None,
+        Some(SavedColor::Named(color)) => color,
+        Some(SavedColor::Legacy(rgb)) => TailColor::Custom(rgb),
+    })
+}
+
 #[derive(Resource, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Preferences {
@@ -24,6 +95,8 @@ pub struct Preferences {
     pub music: f32,
     pub effects: f32,
     pub voice: f32,
+    #[serde(deserialize_with = "deserialize_tail_color")]
+    pub tail_color: TailColor,
 }
 
 impl Default for Preferences {
@@ -44,6 +117,7 @@ impl Default for Preferences {
             music: 0.30,
             effects: 0.55,
             voice: 0.90,
+            tail_color: TailColor::None,
         }
     }
 }
@@ -184,6 +258,37 @@ impl Preferences {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn tail_color_defaults_to_original_and_round_trips() {
+        let mut preferences: Preferences = serde_json::from_str("{}").unwrap();
+        assert_eq!(preferences.tail_color, TailColor::None);
+        for color in TailColor::PRESETS.into_iter().chain([
+            TailColor::Custom([0, 0, 0]),
+            TailColor::Custom([255, 255, 255]),
+            TailColor::Custom([123, 45, 210]),
+        ]) {
+            preferences.tail_color = color;
+            let restored: Preferences =
+                serde_json::from_str(&serde_json::to_string(&preferences).unwrap()).unwrap();
+            assert_eq!(restored.tail_color, color);
+        }
+        assert!(serde_json::from_str::<Preferences>(r#"{"tail_color":[256,0,0]}"#).is_err());
+        let original: Preferences = serde_json::from_str(r#"{"tail_color":null}"#).unwrap();
+        assert_eq!(original.tail_color, TailColor::None);
+    }
+
+    #[test]
+    fn removed_color_preferences_are_ignored_without_losing_tail_color() {
+        let preferences: Preferences = serde_json::from_str(
+            r#"{"tail_color":[123,45,210],"hair_color":[255,0,0],"bikini_color":[0,255,0]}"#,
+        )
+        .unwrap();
+        assert_eq!(preferences.tail_color, TailColor::Custom([123, 45, 210]));
+        let saved = serde_json::to_value(&preferences).unwrap();
+        assert!(saved.get("hair_color").is_none());
+        assert!(saved.get("bikini_color").is_none());
+    }
 
     #[test]
     fn rumble_defaults_to_normal_and_all_levels_survive_serialization() {

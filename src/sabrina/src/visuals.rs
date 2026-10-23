@@ -27,11 +27,22 @@ use bevy::{
 };
 use reef_sim as sim;
 
+fn background_fog() -> DistanceFog {
+    DistanceFog {
+        color: Color::srgb(0.025, 0.38, 0.48),
+        // Camera z is 36; keep the full playable width clear, including its corners.
+        falloff: FogFalloff::Linear {
+            start: 46.0,
+            end: 76.0,
+        },
+        ..default()
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, ShaderType)]
 pub struct WaterParams {
     clock: Vec4,
     color: Vec4,
-    depth_samples: [Vec4; 6],
 }
 
 #[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]
@@ -69,9 +80,12 @@ impl Material for WaterMaterial {
 #[derive(Asset, AsBindGroup, Reflect, Debug, Clone)]
 pub struct ReefExtension {
     #[uniform(100)]
-    pub settings: Vec4,
+    pub caustics: Vec4,
     #[uniform(101)]
     pub sabrina: Vec4,
+    #[texture(102)]
+    #[sampler(103)]
+    pub light_map: Handle<Image>,
 }
 
 impl MaterialExtension for ReefExtension {
@@ -99,11 +113,10 @@ struct MagicLight;
 
 pub(crate) type ReefMaterial = ExtendedMaterial<StandardMaterial, ReefExtension>;
 
-#[derive(Component, Clone, Copy)]
+#[derive(Component, Clone, Copy, Debug)]
 pub(crate) enum Effect {
     Backdrop,
     Shaft(usize),
-    Water,
     Distant(usize),
     Wave,
     Song(usize),
@@ -113,9 +126,9 @@ pub(crate) enum Effect {
     JellyBubble(usize),
     JellyHealth(usize),
     Trail(usize),
-    Spark(usize),
-    Pop(usize, usize),
-    Plankton(usize),
+    Spark,
+    Pop(usize),
+    Plankton,
     Note(usize),
     Burst,
 }
@@ -125,7 +138,7 @@ struct Sun {
     shadow_layer: bool,
 }
 
-#[derive(Resource)]
+#[derive(Resource, Clone)]
 struct Trail {
     points: [Vec3; 24],
     previous: Vec3,
@@ -138,6 +151,8 @@ pub struct ReefPlugin;
 impl Plugin for ReefPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins((
+            crate::caustics::CausticsPlugin,
+            crate::particles::ParticlePlugin,
             MaterialPlugin::<WaterMaterial>::default(),
             MaterialPlugin::<ReefMaterial>::default(),
             MaterialPlugin::<CrystalMaterial>::default(),
@@ -148,19 +163,16 @@ impl Plugin for ReefPlugin {
             time: 0.0,
             flying: false,
         })
-        .add_systems(Startup, setup)
+        .add_systems(Update, setup.in_set(crate::loading::LoadResources))
         .add_systems(
             Update,
             (bind_reef, actors, effects, lighting, crystal_light, capture)
                 .chain()
+                .after(crate::loading::LoadResources)
+                .run_if(crate::loading::resources_allowed)
                 .after(crate::presentation::prepare),
         );
     }
-}
-
-fn visual_random(s: f32) -> f32 {
-    // Visual-only variation must not consume the gameplay random-number stream.
-    0.5 + 0.5 * (s * 17.137 + s * s * 0.71).sin()
 }
 
 fn setup(
@@ -176,24 +188,30 @@ fn setup(
         .as_deref()
         .is_some_and(|k| k.starts_with("graphics-") || k.starts_with("pose-") || k == "rig");
     let casting = options.capture.as_deref() == Some("throw");
-    // One small shadow map is sufficient for this fixed, orthographic stage.
+    // A single cascade covers the fixed orthographic stage.
     commands.insert_resource(DirectionalLightShadowMap {
-        size: if preferences.quality == 2 { 1024 } else { 512 },
+        size: quality_shadow_map_size(preferences.quality),
     });
     commands.insert_resource(GlobalAmbientLight {
-        color: Color::srgb(0.65, 0.88, 0.91),
-        brightness: 350.0,
+        color: Color::WHITE,
+        brightness: 180.0,
         ..default()
     });
     let mut camera = commands.spawn((
-        Camera3d::default(),
+        Camera3d {
+            depth_texture_usages: (bevy::render::render_resource::TextureUsages::RENDER_ATTACHMENT
+                | bevy::render::render_resource::TextureUsages::TEXTURE_BINDING)
+                .into(),
+            ..default()
+        },
+        crate::caustics::CausticsSettings::default(),
         Hdr,
         bevy::core_pipeline::prepass::DepthPrepass,
         Tonemapping::Reinhard,
         ShadowFilteringMethod::Gaussian,
         quality_msaa(preferences.quality),
         Fxaa {
-            enabled: false,
+            enabled: preferences.quality == 1,
             ..default()
         },
         Projection::from(OrthographicProjection {
@@ -210,11 +228,7 @@ fn setup(
             ..OrthographicProjection::default_3d()
         }),
         Transform::from_xyz(0.0, if close || casting { 8.5 } else { 9.2 }, 36.0),
-        DistanceFog {
-            color: Color::srgb(0.025, 0.38, 0.48),
-            falloff: FogFalloff::Exponential { density: 0.0035 },
-            ..default()
-        },
+        background_fog(),
     ));
     if options.direct_draw {
         // Direct draws (the DX12 default) avoid wgpu's per-frame DX12
@@ -227,10 +241,12 @@ fn setup(
         commands.spawn((
             Sun { shadow_layer },
             DirectionalLight {
-                color: Color::srgb(1.0, 0.96, 0.78),
-                illuminance: 9000.0 * sunlight_weight(shadow_layer, preferences.quality),
+                color: Color::WHITE,
+                illuminance: 4800.0 * sunlight_weight(shadow_layer, preferences.quality),
                 shadow_maps_enabled: shadow_layer && preferences.quality > 0,
                 contact_shadows_enabled: false,
+                shadow_depth_bias: 0.005,
+                shadow_normal_bias: 0.4,
                 ..default()
             },
             CascadeShadowConfigBuilder {
@@ -249,8 +265,8 @@ fn setup(
     }
     commands.spawn((
         DirectionalLight {
-            color: Color::srgb(0.22, 0.72, 1.0),
-            illuminance: 1900.0,
+            color: Color::WHITE,
+            illuminance: 850.0,
             ..default()
         },
         Transform::from_rotation(Quat::from_euler(
@@ -263,7 +279,7 @@ fn setup(
     commands.spawn((
         MagicLight,
         PointLight {
-            color: Color::srgb(0.32, 0.82, 1.0),
+            color: Color::WHITE,
             intensity: 0.0,
             range: 5.0,
             shadow_maps_enabled: false,
@@ -277,7 +293,6 @@ fn setup(
             params: WaterParams {
                 clock: Vec4::new(0.0, kind, seed, 1.0),
                 color: Vec4::ONE,
-                depth_samples: [Vec4::ZERO; 6],
             },
             alpha,
         });
@@ -308,14 +323,6 @@ fn setup(
             AlphaMode::Add,
         );
     }
-    plane(
-        Effect::Water,
-        2.0,
-        0.0,
-        Vec3::new(0.0, 9.2, -3.0),
-        Vec3::new(38.0, 21.0, 1.0),
-        AlphaMode::Add,
-    );
     for i in 0..18 {
         plane(
             Effect::Distant(i),
@@ -373,41 +380,6 @@ fn setup(
         );
     }
     let sphere = meshes.add(Sphere::new(1.0).mesh().uv(12, 8));
-    // Particles of one colour share a material so they can be batched.
-    let mut particle = |color: Color| {
-        solid.add(StandardMaterial {
-            base_color: color,
-            emissive: color.to_linear() * 0.6,
-            perceptual_roughness: 0.68,
-            ..default()
-        })
-    };
-    let trail_material = particle(Color::srgb(0.25, 0.8, 1.0));
-    let spark_material = particle(Color::srgb(0.4, 0.95, 1.0));
-    let pop_material = particle(Color::srgb(1.0, 0.34, 0.36));
-    let plankton_material = particle(Color::srgb(0.45, 0.82, 0.91));
-    let mut ball = |effect, material: &Handle<StandardMaterial>, size: f32| {
-        commands.spawn((
-            effect,
-            NotShadowCaster,
-            NotShadowReceiver,
-            Mesh3d(sphere.clone()),
-            MeshMaterial3d(material.clone()),
-            Transform::from_scale(Vec3::splat(size)),
-        ));
-    };
-    for i in 0..24 {
-        ball(Effect::Trail(i), &trail_material, 0.03);
-        ball(Effect::Spark(i), &spark_material, 0.02);
-    }
-    for i in 0..72 {
-        for k in 0..6 {
-            ball(Effect::Pop(i, k), &pop_material, 0.1);
-        }
-    }
-    for i in 0..80 {
-        ball(Effect::Plankton(i), &plankton_material, 0.018);
-    }
     // The original song uses small eighth notes, not particle dots.
     let stem = meshes.add(Cylinder::new(1.0, 1.0));
     let note_materials =
@@ -476,6 +448,8 @@ fn bind_reef(
     standard: Res<Assets<StandardMaterial>>,
     mut reef: ResMut<Assets<ReefMaterial>>,
     mut crystal: ResMut<Assets<CrystalMaterial>>,
+    light_map: Res<crate::caustics::CausticsTexture>,
+    preferences: Res<Preferences>,
     names: Query<&Name>,
 ) {
     for (e, surface, handle, parent) in &query {
@@ -512,8 +486,14 @@ fn bind_reef(
                 .insert(MeshMaterial3d(reef.add(ExtendedMaterial {
                     base,
                     extension: ReefExtension {
-                        settings: Vec4::new(0.0, 1.0, 1.0, 0.0),
+                        caustics: Vec4::new(
+                            if preferences.reduced_motion { 0.0 } else { 1.0 },
+                            if preferences.quality == 0 { 2.4 } else { 3.2 },
+                            0.0,
+                            0.0,
+                        ),
                         sabrina: Vec4::ZERO,
+                        light_map: light_map.0.clone(),
                     },
                 })));
         }
@@ -525,17 +505,47 @@ fn actors(
     ui: Res<SessionUi>,
     preferences: Res<Preferences>,
     time: Res<Time>,
-    mut actors: Query<(&Actor, &mut ActorVisual, &mut Transform, &mut Visibility)>,
+    mut actors: Query<(
+        Entity,
+        &Actor,
+        &mut ActorVisual,
+        &mut Transform,
+        &mut Visibility,
+    )>,
     mut surfaces: Query<(&CharacterSurface, &mut MeshMaterial3d<StandardMaterial>)>,
+    mut reading: Local<Option<Vec<(Entity, f32, Transform)>>>,
 ) {
-    let dt = if ui.paused() { 0.0 } else { time.delta_secs() };
+    if ui.loaded && ui.screen.is_reading() {
+        if reading.is_none() {
+            *reading = Some(
+                actors
+                    .iter()
+                    .filter(|(_, actor, _, _, _)| matches!(actor, Actor::Fish(_)))
+                    .map(|(entity, _, view, transform, _)| (entity, view.yaw, *transform))
+                    .collect(),
+            );
+        }
+    } else if let Some(saved) = reading.take() {
+        for (entity, yaw, transform) in saved {
+            if let Ok((_, _, mut view, mut root, _)) = actors.get_mut(entity) {
+                view.yaw = yaw;
+                // Hidden pooled roots are not updated by the normal actor pass.
+                *root = transform;
+            }
+        }
+    }
+    let dt = if ui.scene_paused() {
+        0.0
+    } else {
+        time.delta_secs()
+    };
     let t = rendered.0.session.time;
     let motion = if preferences.reduced_motion {
         0.15
     } else {
         1.0
     };
-    for (actor, mut view, mut transform, mut visibility) in &mut actors {
+    for (_, actor, mut view, mut transform, mut visibility) in &mut actors {
         let mut show = true;
         let mut next = *transform;
         match *actor {
@@ -554,6 +564,16 @@ fn actors(
                     1.0
                 };
                 next.scale = Vec3::splat(pulse);
+                if ui.screen.is_reading() {
+                    let pose = crate::presentation::reading_pose(t);
+                    next.translation.z = pose.position.z;
+                    // The camera is orthographic, so depth alone does not change apparent size.
+                    next.scale = Vec3::splat(pose.scale);
+                    next.rotation = Quat::from_rotation_y(
+                        sim::sabrina_visual_yaw(s) - pose.face * s.swimming.yaw.cos(),
+                    ) * Quat::from_rotation_z(s.swimming.pitch)
+                        * Quat::from_rotation_x(pose.bank * motion);
+                }
             }
             Actor::Fish(i) => {
                 let f = &rendered.0.fish[i];
@@ -599,7 +619,8 @@ fn actors(
                     sim::Spell::Flying | sim::Spell::Returning
                 );
                 let charging = crystal.magic.state == sim::Spell::Charging;
-                show = crystal.magic.state != sim::Spell::Burst;
+                // Reading screens are a pure swim performance, without magic.
+                show = !ui.screen.is_reading();
                 next.translation = Vec3::new(
                     crystal.motion.pos.x,
                     crystal.motion.pos.y,
@@ -669,16 +690,31 @@ fn effects(
     preferences: Res<Preferences>,
     time: Res<Time>,
     mut trail: ResMut<Trail>,
-    mut query: Query<(
-        &Effect,
-        &mut Transform,
-        &mut Visibility,
-        Option<&MeshMaterial3d<WaterMaterial>>,
-    )>,
+    mut query: Query<
+        (
+            &Effect,
+            &mut Transform,
+            &mut Visibility,
+            Option<&MeshMaterial3d<WaterMaterial>>,
+        ),
+        Without<crate::particles::ParticleEmitter>,
+    >,
     mut water: ResMut<Assets<WaterMaterial>>,
+    mut reading: Local<Option<Trail>>,
 ) {
+    if ui.loaded && ui.screen.is_reading() {
+        if reading.is_none() {
+            *reading = Some(trail.clone());
+        }
+    } else if let Some(saved) = reading.take() {
+        *trail = saved;
+    }
     let t = rendered.0.session.time;
-    let dt = if ui.paused() { 0.0 } else { time.delta_secs() };
+    let dt = if ui.scene_paused() {
+        0.0
+    } else {
+        time.delta_secs()
+    };
     let motion = if preferences.reduced_motion {
         0.15
     } else {
@@ -698,7 +734,7 @@ fn effects(
     let resting = crystal.magic.state == sim::Spell::Resting;
     let burst = crystal.magic.state == sim::Spell::Burst;
     let charging = crystal.magic.state == sim::Spell::Charging;
-    let ready = s.cooldown <= 0.0;
+    let ready = s.cooldown <= 0.0 && !ui.screen.is_reading();
     if flying {
         if !trail.flying {
             trail.points.fill(cp);
@@ -736,13 +772,6 @@ fn effects(
                         .to_radians(),
                 );
             }
-            Effect::Water => {
-                amount = match preferences.quality {
-                    0 => 3.0,
-                    1 => 6.0,
-                    _ => 12.0,
-                }
-            }
             Effect::Distant(i) => {
                 let speed = if i < 4 {
                     0.42
@@ -764,13 +793,26 @@ fn effects(
             }
             Effect::Wave => {
                 let wave = &s.wave;
-                show = wave.active;
-                let travel = (wave.time * 8.0).min(5.5);
+                show = wave.active || wave.charging;
+                let travel = (wave.time * 8.0 * wave.scale).min(sim::WAVE_REACH * wave.scale);
                 let wave_position = wave.origin + wave.direction * travel;
                 next.translation = Vec3::new(wave_position.x, wave_position.y, 1.6);
                 next.rotation = Quat::from_rotation_z(wave.direction.y.atan2(wave.direction.x));
-                next.scale = Vec3::new(1.2, 2.0 * (0.65 + 0.38 * travel), 1.0);
+                next.scale = Vec3::new(
+                    1.2 * wave.scale,
+                    2.0 * (0.65 * wave.scale + 0.38 * travel),
+                    1.0,
+                );
                 amount = wave.time / 0.75;
+                if wave.charging {
+                    let progress = (wave.charge_time / sim::WAVE_CHARGE_SECONDS).clamp(0.0, 1.0);
+                    let palm = sim::sabrina_palm(s);
+                    let position = palm.offset + wave.direction * (0.25 + progress * 0.35);
+                    next.translation = Vec3::new(position.x, position.y, palm.depth + 0.1);
+                    next.scale = Vec3::new(0.65 + progress * 2.0, 0.65 + progress * 2.0, 1.0);
+                    next.rotation = Quat::IDENTITY;
+                    amount = -1.0 - progress;
+                }
             }
             Effect::Song(i) => {
                 show = s.song.active && s.song.strength > 0.05;
@@ -854,52 +896,7 @@ fn effects(
                 next.scale =
                     Vec3::splat(if flying { 0.075 } else { 0.028 } * (1.0 - i as f32 / 24.0));
             }
-            Effect::Spark(i) => {
-                show = !resting || ready;
-                let a = i as f32 * 2.39996 + t * 2.0 * motion;
-                let r = if burst {
-                    crystal.magic.time * 4.0
-                } else {
-                    0.5 + 0.25 * (a * 1.7).sin()
-                };
-                next.translation = cp + Vec3::new(a.cos() * r, a.sin() * r, (a * 2.0).sin() * 0.3);
-                next.scale = Vec3::splat(
-                    0.035
-                        * if burst {
-                            (1.0 - crystal.magic.time / 0.7).max(0.0)
-                        } else {
-                            0.65 + 0.35 * a.sin()
-                        },
-                );
-            }
-            Effect::Pop(i, k) => {
-                let f = &rendered.0.fish[i];
-                show = f.life.pop_time > 0.0 && f.life.pop_time < 0.30;
-                let a = k as f32 * std::f32::consts::PI / 3.0;
-                let progress = ((0.30 - f.life.pop_time) / 0.30).clamp(0.0, 1.0);
-                next.translation = Vec3::new(
-                    f.motion.pos.x + a.cos() * progress * 0.8,
-                    f.motion.pos.y + a.sin() * progress * 0.8,
-                    f.appearance.depth,
-                );
-                next.scale = Vec3::splat(0.1 * (1.0 - progress));
-            }
-            Effect::Plankton(i) => {
-                show = !preferences.reduced_motion
-                    && i < match preferences.quality {
-                        0 => 18,
-                        1 => 45,
-                        _ => 80,
-                    };
-                next.translation = Vec3::new(
-                    -18.0 + 36.0 * visual_random(i as f32 + 900.0),
-                    ((18.0 * visual_random(i as f32 + 950.0)
-                        + t * (0.12 + 0.06 * visual_random(i as f32)))
-                        % 19.0)
-                        .max(0.3),
-                    -5.0 + 8.0 * visual_random(i as f32 + 999.0),
-                );
-            }
+            Effect::Spark | Effect::Pop(_) | Effect::Plankton => continue,
             Effect::Note(i) => {
                 show = s.song.active && s.song.strength > 0.05;
                 let progress = (t * 0.28 + i as f32 / 7.0) % 1.0;
@@ -914,7 +911,7 @@ fn effects(
                 next.rotation = Quat::from_rotation_z(a.sin() * 0.2);
             }
             Effect::Burst => {
-                show = charging || burst;
+                show = charging || (burst && crystal.magic.time < 0.35);
                 let r = if burst {
                     1.0 + crystal.magic.time * 6.0
                 } else {
@@ -922,7 +919,11 @@ fn effects(
                 };
                 next.translation = cp;
                 next.scale = Vec3::new(r * 2.0, r * 2.0, 1.0);
-                amount = 0.5;
+                amount = if burst {
+                    0.5 * (1.0 - crystal.magic.time / 0.35).max(0.0)
+                } else {
+                    0.5
+                };
             }
         }
         if !ui.loaded && !show {
@@ -930,7 +931,7 @@ fn effects(
             if !matches!(effect, Effect::Shaft(_)) {
                 next.translation = Vec3::new(0.0, 7.0, 1.0);
             }
-            if matches!(effect, Effect::Note(_) | Effect::Pop(..)) {
+            if matches!(effect, Effect::Note(_)) {
                 next.scale = Vec3::ONE;
             }
         }
@@ -958,17 +959,6 @@ fn effects(
             };
         }
         params.clock.w = amount;
-        if matches!(*effect, Effect::Water) {
-            // Sample depths do not depend on the pixel. Calculate their
-            // phase/attenuation once instead of millions of times in WGSL.
-            let clock = params.clock.x * 0.23;
-            for i in 0..amount as usize {
-                let z = (i as f32 + 0.5) / amount;
-                let pair = i % 2 * 2;
-                params.depth_samples[i / 2][pair] = z * 4.08 + (z * 4.0 + clock).sin() * 0.35;
-                params.depth_samples[i / 2][pair + 1] = (-z * 2.0).exp() / amount;
-            }
-        }
         if params != current.params
             && let Some(mut m) = water.get_mut(&handle.0)
         {
@@ -979,22 +969,25 @@ fn effects(
 
 /// Effect kinds whose `water.wesl` branch reads `clock.x`; the rest stay static.
 fn uses_clock(kind: f32) -> bool {
-    matches!(kind as i32, 0 | 1 | 2 | 3 | 7)
+    matches!(kind as i32, 0 | 1 | 3 | 7)
 }
-// Preserve total sunlight when changing shadow strength. Balanced contributes
-// only 18% shadowed light; broad fill keeps faces readable in the reef's shade.
+// Preserve total sunlight while giving shadows readable contrast.
 
 fn sunlight_weight(shadow_layer: bool, quality: u8) -> f32 {
-    let shadow = if quality == 2 { 0.22 } else { 0.18 };
+    let shadow = if quality == 2 { 0.85 } else { 0.65 };
     if shadow_layer { shadow } else { 1.0 - shadow }
 }
 
 fn quality_msaa(quality: u8) -> Msaa {
-    if quality > 0 {
-        Msaa::Sample2
+    if quality == 2 {
+        Msaa::Sample4
     } else {
         Msaa::Off
     }
+}
+
+fn quality_shadow_map_size(quality: u8) -> usize {
+    if quality == 2 { 2048 } else { 1024 }
 }
 
 fn lighting(
@@ -1006,21 +999,22 @@ fn lighting(
     mut shadow_map: ResMut<DirectionalLightShadowMap>,
     mut cameras: Query<(&mut Fxaa, &mut Msaa), With<Camera3d>>,
     mut reef: ResMut<Assets<ReefMaterial>>,
+    mut updates: Local<Vec<(AssetId<ReefMaterial>, Vec4, Vec4)>>,
 ) {
     let motion = if preferences.reduced_motion {
         0.15
     } else {
         1.0
     };
-    let size = if preferences.quality == 2 { 1024 } else { 512 };
+    let size = quality_shadow_map_size(preferences.quality);
     if shadow_map.size != size {
         shadow_map.size = size;
     }
     for (layer, mut light, mut transform) in &mut sun {
-        light.illuminance = 7800.0
+        light.illuminance = 4800.0
             * sunlight_weight(layer.shadow_layer, preferences.quality)
-            * (1.15
-                + (0.10 * (ui.elapsed * 0.27).sin() + 0.05 * (ui.elapsed * 0.61).sin()) * motion);
+            * (1.0
+                + (0.06 * (ui.elapsed * 0.27).sin() + 0.03 * (ui.elapsed * 0.61).sin()) * motion);
         light.shadow_maps_enabled = layer.shadow_layer && preferences.quality > 0;
         transform.rotation = Quat::from_euler(
             EulerRot::YXZ,
@@ -1031,7 +1025,7 @@ fn lighting(
     }
     for (mut fxaa, mut msaa) in &mut cameras {
         let probe_fxaa = options.capture.is_some() && options.capture_fxaa;
-        let enabled = preferences.quality > 0 && probe_fxaa;
+        let enabled = preferences.quality == 1 || (preferences.quality > 0 && probe_fxaa);
         let samples = if probe_fxaa {
             Msaa::Off
         } else {
@@ -1045,14 +1039,22 @@ fn lighting(
             fxaa.enabled = enabled;
         }
     }
-    for (_, m) in reef.iter_mut() {
-        let position = rendered.0.sabrina.motion.pos;
-        m.extension.sabrina = Vec4::new(
+    updates.clear();
+    updates.extend(reef.iter().filter_map(|(id, m)| {
+        let reveal = m.base.alpha_mode == AlphaMode::Blend;
+        let position = if reveal {
+            rendered.0.sabrina.motion.pos
+        } else {
+            sim::v(0.0, 0.0)
+        };
+        let sabrina = Vec4::new(
             position.x,
             position.y,
             0.0,
+            // Reading screens choreograph real reef occlusion instead.
             if ui.started
-                && m.base.alpha_mode == AlphaMode::Blend
+                && reveal
+                && !ui.screen.is_reading()
                 && options.capture.as_deref() != Some("occlusion-solid")
             {
                 1.0
@@ -1060,12 +1062,19 @@ fn lighting(
                 0.0
             },
         );
-        m.extension.settings = Vec4::new(
-            ui.elapsed,
+        let caustics = Vec4::new(
             if preferences.reduced_motion { 0.0 } else { 1.0 },
-            if preferences.quality == 0 { 0.45 } else { 1.0 },
+            if preferences.quality == 0 { 2.4 } else { 3.2 },
+            0.0,
             0.0,
         );
+        (sabrina != m.extension.sabrina || caustics != m.extension.caustics)
+            .then_some((id, sabrina, caustics))
+    }));
+    for (id, sabrina, caustics) in updates.drain(..) {
+        let mut material = reef.get_mut(id).unwrap();
+        material.extension.sabrina = sabrina;
+        material.extension.caustics = caustics;
     }
 }
 
@@ -1150,20 +1159,25 @@ fn capture(
 
 fn crystal_light(
     rendered: Res<Presentation>,
+    ui: Res<SessionUi>,
     mut lights: Query<(&mut PointLight, &mut Transform), With<MagicLight>>,
     mut materials: ResMut<Assets<CrystalMaterial>>,
+    mut changed_materials: Local<Vec<AssetId<CrystalMaterial>>>,
 ) {
     let crystal = &rendered.0.crystal;
     let charging = crystal.magic.state == sim::Spell::Charging;
     let burst = crystal.magic.state == sim::Spell::Burst;
-    let ready = rendered.0.sabrina.cooldown <= 0.0;
+    let ready = rendered.0.sabrina.cooldown <= 0.0 && !ui.screen.is_reading();
     for (mut light, mut t) in &mut lights {
-        t.translation = Vec3::new(
+        let translation = Vec3::new(
             crystal.motion.pos.x,
             crystal.motion.pos.y,
             crystal.magic.depth + 0.6,
         );
-        light.intensity = 180.0
+        if t.translation != translation {
+            t.translation = translation;
+        }
+        let intensity = 180.0
             * if charging {
                 1.4
             } else if burst {
@@ -1178,24 +1192,292 @@ fn crystal_light(
             } else {
                 0.0
             };
+        if light.intensity != intensity {
+            light.intensity = intensity;
+        }
     }
-    for (_, m) in materials.iter_mut() {
-        m.extension.settings = Vec4::new(
-            rendered.0.session.time,
-            if charging {
-                (crystal.magic.time / 1.1).min(1.0)
-            } else {
-                0.0
-            },
-            0.0,
-            0.0,
-        );
+    let settings = Vec4::new(
+        rendered.0.session.time,
+        if charging {
+            (crystal.magic.time / 1.1).min(1.0)
+        } else {
+            0.0
+        },
+        0.0,
+        0.0,
+    );
+    changed_materials.clear();
+    changed_materials.extend(
+        materials
+            .iter()
+            .filter(|(_, material)| material.extension.settings != settings)
+            .map(|(id, _)| id),
+    );
+    for id in changed_materials.iter() {
+        materials.get_mut(*id).unwrap().extension.settings = settings;
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn reading_restores_fish_roots_and_flying_crystal_trails() {
+        use crate::{
+            app::{Screen, Simulation},
+            presentation::{Previous, prepare},
+        };
+
+        for reduced_motion in [false, true] {
+            for spell in [sim::Spell::Flying, sim::Spell::Returning] {
+                let preferences = Preferences {
+                    reduced_motion,
+                    ..default()
+                };
+                let mut world = sim::World::default();
+                sim::reset(&mut world, 27, preferences.simulation(false));
+                world.session.time = 123.0;
+                world.fish[0].life.active = true;
+                world.fish[1].life.active = false;
+                world.fish[1].life.pop_time = 0.0;
+                world.crystal.magic.state = spell;
+                world.crystal.motion.pos = sim::v(4.0, 8.0);
+                let cp = Vec3::new(4.0, 8.0, world.crystal.magic.depth);
+                let mut previous = world.clone();
+                previous.session.time -= 1.0 / 60.0;
+                let mut app = App::new();
+                app.insert_resource(Simulation(world.clone()))
+                    .insert_resource(Presentation(world))
+                    .insert_resource(Previous(Some(previous)))
+                    .insert_resource(preferences)
+                    .init_resource::<Time>()
+                    .insert_resource(Time::<Fixed>::from_hz(60.0))
+                    .init_resource::<Assets<WaterMaterial>>()
+                    .insert_resource(SessionUi {
+                        loaded: true,
+                        screen: Screen::Pause,
+                        return_to: Screen::Pause,
+                        ..default()
+                    })
+                    .insert_resource(Trail {
+                        points: std::array::from_fn(|i| cp - Vec3::X * i as f32 * 0.1),
+                        previous: cp,
+                        time: 0.007,
+                        flying: true,
+                    })
+                    .add_systems(Update, (prepare, actors, effects).chain());
+                let fish: Vec<_> = (0..2)
+                    .map(|i| {
+                        app.world_mut()
+                            .spawn((
+                                Actor::Fish(i),
+                                ActorVisual {
+                                    model: None,
+                                    variant: 0,
+                                    yaw: 1.2 + i as f32,
+                                },
+                                Transform::from_rotation(Quat::from_rotation_y(0.7)),
+                                Visibility::default(),
+                            ))
+                            .id()
+                    })
+                    .collect();
+                let trail_entities: Vec<_> = (0..24)
+                    .map(|i| {
+                        app.world_mut()
+                            .spawn((
+                                Effect::Trail(i),
+                                Transform::default(),
+                                Visibility::default(),
+                            ))
+                            .id()
+                    })
+                    .collect();
+                app.update();
+                let saved_fish: Vec<_> = fish
+                    .iter()
+                    .map(|&entity| {
+                        (
+                            entity,
+                            app.world().get::<ActorVisual>(entity).unwrap().yaw,
+                            *app.world().get::<Transform>(entity).unwrap(),
+                            *app.world().get::<Visibility>(entity).unwrap(),
+                        )
+                    })
+                    .collect();
+                let saved_trail = app.world().resource::<Trail>().points;
+                let saved_transforms: Vec<_> = trail_entities
+                    .iter()
+                    .map(|&entity| *app.world().get::<Transform>(entity).unwrap())
+                    .collect();
+                // Reopening must take a fresh snapshot; switching pages must not.
+                for pages in [
+                    [Screen::Credits, Screen::Help],
+                    [Screen::Help, Screen::Credits],
+                ] {
+                    for page in pages {
+                        app.world_mut().resource_mut::<SessionUi>().screen = page;
+                        for _ in 0..90 {
+                            app.world_mut()
+                                .resource_mut::<Time>()
+                                .advance_by(std::time::Duration::from_secs_f32(1.0 / 60.0));
+                            app.update();
+                        }
+                    }
+                    assert_ne!(
+                        app.world().get::<ActorVisual>(fish[0]).unwrap().yaw,
+                        saved_fish[0].1
+                    );
+                    assert!(!app.world().resource::<Trail>().flying);
+                    app.world_mut().resource_mut::<SessionUi>().screen = Screen::Pause;
+                    for _ in 0..3 {
+                        app.update();
+                        for &(entity, yaw, transform, visibility) in &saved_fish {
+                            assert_eq!(app.world().get::<ActorVisual>(entity).unwrap().yaw, yaw);
+                            assert_eq!(*app.world().get::<Transform>(entity).unwrap(), transform);
+                            assert_eq!(*app.world().get::<Visibility>(entity).unwrap(), visibility);
+                        }
+                        let trail = app.world().resource::<Trail>();
+                        assert_eq!(trail.points, saved_trail);
+                        assert_eq!(trail.previous, cp);
+                        assert_eq!(trail.time, 0.007);
+                        assert!(trail.flying);
+                        for (&entity, transform) in trail_entities.iter().zip(&saved_transforms) {
+                            assert_eq!(app.world().get::<Transform>(entity).unwrap(), transform);
+                        }
+                    }
+                }
+                app.world_mut().resource_mut::<SessionUi>().screen = Screen::Playing;
+                app.update();
+                assert_ne!(app.world().resource::<Trail>().points, saved_trail);
+                assert_ne!(
+                    app.world().get::<ActorVisual>(fish[0]).unwrap().yaw,
+                    saved_fish[0].1
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn frozen_crystal_does_not_dirty_lights_transforms_or_materials() {
+        #[derive(Resource, Default)]
+        struct Changes(usize);
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, AssetPlugin::default()))
+            .init_asset::<CrystalMaterial>()
+            .init_resource::<Presentation>()
+            .init_resource::<SessionUi>()
+            .init_resource::<Changes>()
+            .add_systems(Update, crystal_light)
+            .add_systems(
+                PostUpdate,
+                |lights: Query<
+                    Entity,
+                    (
+                        With<MagicLight>,
+                        Or<(Changed<Transform>, Changed<PointLight>)>,
+                    ),
+                >,
+                 mut changes: ResMut<Changes>| {
+                    changes.0 = lights.iter().count();
+                },
+            );
+        app.world_mut()
+            .spawn((MagicLight, PointLight::default(), Transform::default()));
+        let material = app
+            .world_mut()
+            .resource_mut::<Assets<CrystalMaterial>>()
+            .add(CrystalMaterial {
+                base: StandardMaterial::default(),
+                extension: CrystalExtension {
+                    settings: Vec4::splat(-1.0),
+                },
+            });
+        app.update();
+        let mut events =
+            bevy::ecs::message::MessageCursor::<AssetEvent<CrystalMaterial>>::default();
+        events
+            .read(
+                app.world()
+                    .resource::<Messages<AssetEvent<CrystalMaterial>>>(),
+            )
+            .for_each(drop);
+        for _ in 0..3 {
+            app.update();
+            assert_eq!(app.world().resource::<Changes>().0, 0);
+            assert!(
+                !events
+                    .read(
+                        app.world()
+                            .resource::<Messages<AssetEvent<CrystalMaterial>>>()
+                    )
+                    .any(|event| matches!(event, AssetEvent::Modified { .. }))
+            );
+        }
+        {
+            let mut rendered = app.world_mut().resource_mut::<Presentation>();
+            rendered.0.session.time = 1.0;
+            rendered.0.crystal.magic.state = sim::Spell::Charging;
+            rendered.0.crystal.magic.time = 0.55;
+            rendered.0.crystal.motion.pos.x += 1.0;
+        }
+        app.update();
+        assert_eq!(app.world().resource::<Changes>().0, 1);
+        assert_eq!(
+            app.world()
+                .resource::<Assets<CrystalMaterial>>()
+                .get(&material)
+                .unwrap()
+                .extension
+                .settings,
+            Vec4::new(1.0, 0.5, 0.0, 0.0)
+        );
+        let new_material = app
+            .world_mut()
+            .resource_mut::<Assets<CrystalMaterial>>()
+            .add(CrystalMaterial {
+                base: StandardMaterial::default(),
+                extension: CrystalExtension {
+                    settings: Vec4::ZERO,
+                },
+            });
+        app.update();
+        assert_eq!(app.world().resource::<Changes>().0, 0);
+        assert_eq!(
+            app.world()
+                .resource::<Assets<CrystalMaterial>>()
+                .get(&new_material)
+                .unwrap()
+                .extension
+                .settings,
+            Vec4::new(1.0, 0.5, 0.0, 0.0),
+            "New materials must initialize even while presentation time is frozen"
+        );
+    }
+
+    #[test]
+    fn fog_leaves_gameplay_clear_and_builds_only_in_the_background() {
+        let fog = background_fog();
+        let FogFalloff::Linear { start, end } = fog.falloff else {
+            panic!("Background haze must have a clear foreground cutoff");
+        };
+        let camera = Vec3::new(0.0, 9.2, 36.0);
+        let amount =
+            |position: Vec3| ((position.distance(camera) - start) / (end - start)).clamp(0.0, 1.0);
+        for x in [-20.0, 0.0, 20.0] {
+            for y in [0.0, 9.2, 19.5] {
+                for z in [-3.0, 0.0, 3.0] {
+                    assert_eq!(amount(Vec3::new(x, y, z)), 0.0);
+                }
+            }
+        }
+        let middle = amount(Vec3::new(0.0, 9.2, -20.0));
+        let distant = amount(Vec3::new(0.0, 9.2, -30.0));
+        assert!((0.3..0.4).contains(&middle));
+        assert!(distant > middle && distant < 1.0);
+        assert_eq!(amount(Vec3::new(0.0, 9.2, -40.0)), 1.0);
+    }
 
     #[test]
     fn warmup_preserves_effect_layout_after_loading_and_quality_changes() {
@@ -1218,14 +1500,10 @@ mod tests {
                 .add_systems(Update, effects);
             let entities = [
                 Effect::Backdrop,
-                Effect::Water,
                 Effect::Shaft(0),
                 Effect::Shaft(5),
-                Effect::Plankton(0),
-                Effect::Plankton(70),
                 Effect::Distant(0),
                 Effect::Glow,
-                Effect::Spark(0),
                 Effect::Trail(0),
             ]
             .into_iter()
@@ -1264,16 +1542,155 @@ mod tests {
     }
 
     #[test]
-    fn balanced_has_low_cost_aa_and_conservative_shadows() {
+    fn swimming_updates_only_the_foreground_reveal_material() {
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, AssetPlugin::default()))
+            .init_asset::<ReefMaterial>()
+            .init_resource::<Preferences>()
+            .init_resource::<SessionUi>()
+            .init_resource::<Presentation>()
+            .init_resource::<Options>()
+            .init_resource::<DirectionalLightShadowMap>()
+            .add_systems(Update, lighting);
+        let material = |alpha_mode| ExtendedMaterial {
+            base: StandardMaterial {
+                alpha_mode,
+                ..default()
+            },
+            extension: ReefExtension {
+                caustics: Vec4::new(1.0, 3.2, 0.0, 0.0),
+                sabrina: Vec4::ZERO,
+                light_map: default(),
+            },
+        };
+        let opaque = app
+            .world_mut()
+            .resource_mut::<Assets<ReefMaterial>>()
+            .add(material(AlphaMode::Opaque));
+        let foreground = app
+            .world_mut()
+            .resource_mut::<Assets<ReefMaterial>>()
+            .add(material(AlphaMode::Blend));
+        app.world_mut().resource_mut::<SessionUi>().started = true;
+        app.update();
+        app.update();
+        app.world_mut()
+            .resource_mut::<Messages<AssetEvent<ReefMaterial>>>()
+            .clear();
+        app.world_mut()
+            .resource_mut::<Presentation>()
+            .0
+            .sabrina
+            .motion
+            .pos = sim::v(4.0, 8.0);
+        app.update();
+        app.update();
+        let materials = app.world().resource::<Assets<ReefMaterial>>();
+        assert_eq!(
+            materials.get(&opaque).unwrap().extension.sabrina,
+            Vec4::ZERO
+        );
+        assert_eq!(
+            materials.get(&foreground).unwrap().extension.sabrina,
+            Vec4::new(4.0, 8.0, 0.0, 1.0)
+        );
+        let events = app.world().resource::<Messages<AssetEvent<ReefMaterial>>>();
+        assert!(
+            !events
+                .iter_current_update_messages()
+                .any(|event| matches!(event, AssetEvent::Modified { id } if *id == opaque.id()))
+        );
+    }
+
+    #[test]
+    fn graphics_tiers_have_distinct_aa_and_shadow_budgets() {
         assert_eq!(quality_msaa(0), Msaa::Off);
-        assert_eq!(quality_msaa(1), Msaa::Sample2);
-        assert_eq!(quality_msaa(2), Msaa::Sample2);
-        assert_eq!(sunlight_weight(true, 1), 0.18);
+        assert_eq!(quality_msaa(1), Msaa::Off);
+        assert_eq!(quality_msaa(2), Msaa::Sample4);
+        assert_eq!(sunlight_weight(true, 1), 0.65);
+        assert_eq!(sunlight_weight(true, 2), 0.85);
+        assert_eq!(quality_shadow_map_size(1), 1024);
+        assert_eq!(quality_shadow_map_size(2), 2048);
         for quality in 0..=2 {
             assert_eq!(
                 sunlight_weight(true, quality) + sunlight_weight(false, quality),
                 1.0
             );
         }
+    }
+
+    #[test]
+    fn graphics_tiers_apply_at_startup_and_when_switching_live() {
+        use bevy::ecs::system::RunSystemOnce;
+
+        for initial in 0..=2 {
+            let mut app = App::new();
+            app.init_resource::<Assets<Mesh>>()
+                .init_resource::<Assets<WaterMaterial>>()
+                .init_resource::<Assets<StandardMaterial>>()
+                .init_resource::<Assets<ReefMaterial>>()
+                .init_resource::<SessionUi>()
+                .init_resource::<Presentation>()
+                .insert_resource(Preferences {
+                    quality: initial,
+                    ..default()
+                })
+                .init_resource::<Options>()
+                .add_systems(Startup, setup);
+            app.update();
+            for (step, quality) in [initial, 2, 0, 1].into_iter().enumerate() {
+                app.world_mut().resource_mut::<Preferences>().quality = quality;
+                if step > 0 {
+                    app.world_mut().run_system_once(lighting).unwrap();
+                }
+                let world = app.world_mut();
+                for (msaa, fxaa) in world.query::<(&Msaa, &Fxaa)>().iter(world) {
+                    assert_eq!(*msaa, quality_msaa(quality));
+                    assert_eq!(fxaa.enabled, quality == 1);
+                }
+                assert_eq!(
+                    world.resource::<DirectionalLightShadowMap>().size,
+                    quality_shadow_map_size(quality)
+                );
+                let mut casters = 0;
+                for (sun, light) in world.query::<(&Sun, &DirectionalLight)>().iter(world) {
+                    assert_eq!(light.shadow_maps_enabled, sun.shadow_layer && quality > 0);
+                    casters += usize::from(light.shadow_maps_enabled);
+                }
+                assert_eq!(casters, usize::from(quality > 0));
+            }
+        }
+    }
+
+    #[test]
+    fn stage_lights_are_neutral_and_there_is_no_colored_water_overlay() {
+        let mut app = App::new();
+        app.init_resource::<Assets<Mesh>>()
+            .init_resource::<Assets<WaterMaterial>>()
+            .init_resource::<Assets<StandardMaterial>>()
+            .init_resource::<Preferences>()
+            .init_resource::<Options>()
+            .add_systems(Startup, setup);
+        app.update();
+        assert_eq!(
+            app.world().resource::<GlobalAmbientLight>().color,
+            Color::WHITE
+        );
+        for light in app
+            .world_mut()
+            .query::<&DirectionalLight>()
+            .iter(app.world())
+        {
+            assert_eq!(light.color, Color::WHITE);
+        }
+        for light in app.world_mut().query::<&PointLight>().iter(app.world()) {
+            assert_eq!(light.color, Color::WHITE);
+        }
+        assert!(
+            app.world()
+                .resource::<Assets<WaterMaterial>>()
+                .iter()
+                .all(|(_, material)| material.params.clock.y != 2.0)
+        );
     }
 }

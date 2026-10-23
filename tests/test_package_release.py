@@ -29,7 +29,7 @@ class PackageReleaseTests(unittest.TestCase):
             notice.write_text("license", encoding="utf-8")
         (self.root / "docs").mkdir()
         (self.root / "docs/ARCHITECTURE.md").write_text("not for distribution")
-        for name in ("LICENSE", "NOTICE", "ASSET_LICENSE.md", "README.md"):
+        for name in ("LICENSE", "NOTICE", "ASSET_LICENSE.md", "README.md", "THIRD_PARTY_LICENSES.txt"):
             (self.root / name).write_text(name, encoding="utf-8")
         (self.root / "art/icons").mkdir(parents=True)
         (self.root / "art/icons/app_icon.icns").write_bytes(b"test icon")
@@ -44,6 +44,8 @@ class PackageReleaseTests(unittest.TestCase):
         files = {
             "LICENSE", "NOTICE", "licenses/ASSET_LICENSE.txt",
             "licenses/LICENSE-DejaVu.txt", "licenses/LICENSE-FluidR3.txt",
+            "licenses/LICENSE-Alegreya.txt",
+            "licenses/THIRD_PARTY_LICENSES.txt",
         }
         if platform == "macos":
             files.update({
@@ -113,6 +115,17 @@ class PackageReleaseTests(unittest.TestCase):
         (self.root / "art/icons/app_icon.icns").unlink()
         with self.assertRaises(FileNotFoundError):
             packager.package(self.binary, "game", "zip", self.root / "dist", "macos")
+
+    def test_dependency_notices_are_packaged_verbatim_and_required_for_distribution(self):
+        notices = self.root / "THIRD_PARTY_LICENSES.txt"
+        notices.write_text("bevy - MIT OR Apache-2.0\nCopyright notices\n", encoding="utf-8")
+        directory = packager.package(
+            self.binary, "game", "directory", self.root / "dist", "linux",
+        )
+        self.assertEqual((directory / "licenses" / notices.name).read_bytes(), notices.read_bytes())
+        notices.unlink()
+        with self.assertRaises(FileNotFoundError):
+            packager.package(self.binary, "missing-notices", "zip", self.root / "dist", "linux")
 
     def test_default_platform_matches_host_and_repackaging_removes_old_docs(self):
         for host, platform in (("linux", "linux"), ("win32", "windows"), ("darwin", "macos")):

@@ -22,6 +22,8 @@ struct Check {
     vsync: bool,
     reduced_motion: bool,
     rumble: u8,
+    ability_stage: u8,
+    ability_time: f32,
 }
 
 #[derive(Component)]
@@ -31,7 +33,28 @@ pub struct VerificationPlugin;
 
 impl Plugin for VerificationPlugin {
     fn build(&self, app: &mut App) {
+        if app.world().resource::<Options>().verify {
+            app.insert_resource(bevy::winit::WinitSettings::continuous());
+        }
         app.init_resource::<Check>()
+            .add_systems(
+                Update,
+                verify_splash
+                    .after(crate::loading::bootstrap)
+                    .before(crate::loading::LoadResources),
+            )
+            .add_systems(
+                Update,
+                prepare_update_notice
+                    .in_set(crate::loading::LoadResources)
+                    .after(crate::updates::start),
+            )
+            .add_systems(
+                PreUpdate,
+                verify_update_notice
+                    .after(bevy::input::InputSystems)
+                    .before(crate::app::input),
+            )
             .add_systems(
                 PreUpdate,
                 drive
@@ -40,9 +63,84 @@ impl Plugin for VerificationPlugin {
                     .before(crate::app::input),
             )
             .add_systems(
+                PreUpdate,
+                verify_reading
+                    .after(drive)
+                    .before(crate::controls::update)
+                    .before(crate::app::input),
+            )
+            .add_systems(
                 PostUpdate,
                 check_pose.after(bevy::transform::TransformSystems::Propagate),
             );
+    }
+}
+
+fn verify_splash(
+    mut commands: Commands,
+    options: Res<Options>,
+    loading: Res<crate::loading::Loading>,
+    library: Res<crate::assets::Library>,
+    scene_cameras: Query<&Camera3d>,
+    ui_cameras: Query<&Camera2d>,
+    audio: Query<&Channel>,
+    texts: Query<&Text>,
+    mut checked: Local<bool>,
+) {
+    if !options.verify || !loading.splash_presented || *checked {
+        return;
+    }
+    assert!(library.handles.is_empty());
+    assert_eq!(loading.assets_total, 0);
+    assert!(scene_cameras.is_empty());
+    assert!(audio.is_empty());
+    assert_eq!(ui_cameras.iter().count(), 1);
+    assert!(texts.iter().any(|text| text.0.contains("0%")));
+    commands
+        .spawn(bevy::render::view::screenshot::Screenshot::primary_window())
+        .observe(bevy::render::view::screenshot::save_to_disk(
+            std::env::temp_dir().join("sabrina-bevy-startup.png"),
+        ));
+    println!("BEVY CHECK OK: splash rendered at 0% before models, audio or the 3D scene start");
+    *checked = true;
+}
+
+fn prepare_update_notice(options: Res<Options>, mut check: ResMut<crate::updates::UpdateCheck>) {
+    if options.verify {
+        check.latest_version = Some("v9999.0.0".into());
+    }
+}
+
+fn verify_update_notice(
+    mut commands: Commands,
+    options: Res<Options>,
+    check: Res<crate::updates::UpdateCheck>,
+    loading: Res<crate::loading::Loading>,
+    ui: Res<SessionUi>,
+    library: Res<crate::assets::Library>,
+    texts: Query<&Text>,
+    mut captured: Local<bool>,
+    mut finished: Local<bool>,
+) {
+    if !options.verify || *finished || !loading.splash_presented {
+        return;
+    }
+    assert_eq!(check.latest_version.as_deref(), Some("v9999.0.0"));
+    assert!(loading.assets_total > 0);
+    assert!(!library.handles.is_empty());
+    if !*captured && texts.iter().any(|text| text.0.contains("v9999.0.0")) {
+        commands
+            .spawn(bevy::render::view::screenshot::Screenshot::primary_window())
+            .observe(bevy::render::view::screenshot::save_to_disk(
+                std::env::temp_dir().join("sabrina-bevy-update-notice.png"),
+            ));
+        *captured = true;
+    }
+    if ui.loaded {
+        assert!(*captured);
+        assert_eq!(loading.progress, 1.0);
+        println!("BEVY CHECK OK: update notice never blocks loading or requires an action");
+        *finished = true;
     }
 }
 
@@ -70,7 +168,6 @@ fn drive(
     rigs: Query<&RigPlayer>,
     audio: Query<(Entity, &Channel, Option<&AudioSink>)>,
     mut events: ResMut<FrameEvents>,
-    mut exit: MessageWriter<AppExit>,
     texts: Query<&Text>,
     controller_checks: (
         Query<(&TextSpan, &TextColor)>,
@@ -96,6 +193,9 @@ fn drive(
         gamepad.digital_mut().reset_all();
         gamepad.analog_mut().set(GamepadAxis::LeftStickX, 0.0);
         gamepad.analog_mut().set(GamepadAxis::LeftStickY, 0.0);
+    }
+    if check.ability_stage == 3 {
+        return;
     }
     match frame {
         1 => {
@@ -126,15 +226,25 @@ fn drive(
             println!("BEVY CHECK OK: decoded MIDI-rendered exploration music");
             keys.press(KeyCode::KeyF);
         }
+        51 => {
+            let pointer_position = pixel(&window, Vec2::new(1350.0, 300.0));
+            window.set_cursor_position(Some(pointer_position));
+            mouse.press(MouseButton::Left);
+            keys.press(KeyCode::KeyE);
+        }
+        54 => {
+            assert_eq!(simulation.0.crystal.magic.state, reef_sim::Spell::Resting);
+            println!("BEVY CHECK OK: left-click Wave and E do not cast crystal");
+        }
         55 => {
             assert!(simulation.0.sabrina.wave.active);
             println!("BEVY CHECK OK: keyboard wave");
             simulation.0.sabrina.wave.active = false;
-            keys.press(KeyCode::Space);
+            mouse.press(MouseButton::Right);
         }
         60 => {
             assert_eq!(simulation.0.crystal.magic.state, reef_sim::Spell::Charging);
-            println!("BEVY CHECK OK: crystal hand wind-up");
+            println!("BEVY CHECK OK: right-click crystal hand wind-up");
         }
         150 => {
             assert!(simulation.0.sabrina.cooldown > 9.0 && simulation.0.sabrina.cooldown <= 12.0);
@@ -150,7 +260,7 @@ fn drive(
             assert!(simulation.0.sabrina.motion.pos.x > check.initial.x + 0.5);
             println!("BEVY CHECK OK: controller swimming");
             if let Ok(mut gamepad) = gamepads.single_mut() {
-                gamepad.digital_mut().press(GamepadButton::West);
+                gamepad.digital_mut().press(GamepadButton::East);
             }
         }
         196 => {
@@ -158,7 +268,7 @@ fn drive(
             println!("BEVY CHECK OK: controller song");
             simulation.0.sabrina.wave.cooldown = 0.0;
             if let Ok(mut gamepad) = gamepads.single_mut() {
-                gamepad.digital_mut().press(GamepadButton::East);
+                gamepad.digital_mut().press(GamepadButton::South);
             }
         }
         201 => {
@@ -190,7 +300,7 @@ fn drive(
             simulation.0.sabrina.throw_time = -1.0;
             simulation.0.sabrina.cooldown = 0.0;
             simulation.0.crystal.magic.state = reef_sim::Spell::Resting;
-            let pointer_position = pixel(&window, Vec2::new(1080.0, 48.0));
+            let pointer_position = pixel(&window, Vec2::new(656.0, 800.0));
             window.set_cursor_position(Some(pointer_position));
             mouse.press(MouseButton::Left);
         }
@@ -343,6 +453,14 @@ fn drive(
             }
             events.0.push(result);
         }
+        492 => {
+            assert_eq!(ui.screen, Screen::Playing);
+            assert!(!simulation.0.session.victory);
+            for jellyfish in &mut simulation.0.jelly {
+                assert_eq!(jellyfish.behaviour.state, reef_sim::JellyState::Leaving);
+                jellyfish.behaviour.time = 9.0;
+            }
+        }
         495 => {
             assert_eq!(ui.screen, Screen::Victory);
             assert!(simulation.0.session.victory);
@@ -405,10 +523,10 @@ fn drive(
         545 => {
             assert_eq!(hints.style, crate::controls::Style::Xbox);
             assert!(spans.iter().any(|(span, color)| {
-                span.0 == " · A"
+                span.0 == "A"
                     && color.0
                         == crate::controls::Style::Xbox
-                            .binding(crate::controls::Control::Crystal)
+                            .binding(crate::controls::Control::Wave)
                             .color
             }));
             commands
@@ -417,7 +535,7 @@ fn drive(
         }
         550 => {
             assert_eq!(hints.style, crate::controls::Style::PlayStation);
-            for symbol in [" · ×", " · □", " · ○"] {
+            for symbol in ["×", "□", "○"] {
                 assert!(spans.iter().any(|(span, _)| span.0 == symbol));
             }
             commands
@@ -429,7 +547,7 @@ fn drive(
             assert!(
                 !spans
                     .iter()
-                    .any(|(span, _)| [" · A", " · ×", " · □", " · ○"].contains(&span.0.as_str()))
+                    .any(|(span, _)| ["A", "×", "□", "○"].contains(&span.0.as_str()))
             );
             assert!(spans.iter().any(|(span, _)| span.0.contains("WASD")));
             println!(
@@ -438,6 +556,16 @@ fn drive(
             assert!(!preferences.show_fps);
             ui.return_to = Screen::Playing;
             ui.screen = Screen::Settings;
+        }
+        556 | 557 => {
+            keys.press(KeyCode::ArrowDown);
+        }
+        558 => {
+            commands
+                .spawn(bevy::render::view::screenshot::Screenshot::primary_window())
+                .observe(bevy::render::view::screenshot::save_to_disk(
+                    std::env::temp_dir().join("sabrina-bevy-slider-focus.png"),
+                ));
         }
         560 | 570 => {
             let position = pixel(&window, Vec2::new(1045.0, 650.0));
@@ -570,8 +698,276 @@ fn drive(
         }
         670 => {
             println!("BEVY CHECK OK: localized rumble settings cycle through all three levels");
-            println!("BEVY INPUT INTEGRATION COMPLETE");
-            exit.write(AppExit::Success);
+            crate::app::begin(
+                &mut simulation.0,
+                &mut ui,
+                &crate::settings::Preferences::default(),
+                true,
+            );
+            check.ability_time = simulation.0.session.time;
+        }
+        671.. => {
+            assert!(
+                simulation.0.session.time - check.ability_time < 8.0,
+                "Ability input verification timed out"
+            );
+            match check.ability_stage {
+                0 => {
+                    if simulation.0.sabrina.wave.cast_id == 0 {
+                        keys.press(KeyCode::KeyF);
+                    } else {
+                        assert!(simulation.0.session.time - check.ability_time >= 3.0);
+                        assert_eq!(simulation.0.sabrina.wave.scale, 2.0);
+                        assert!(simulation.0.sabrina.wave.cooldown > 8.0);
+                        println!(
+                            "BEVY CHECK OK: held keyboard Wave auto-releases charged after 3 seconds"
+                        );
+                        simulation.0.sabrina.wave.cooldown = 0.0;
+                        simulation.0.sabrina.wave.active = false;
+                        check.ability_time = simulation.0.session.time;
+                        check.ability_stage = 1;
+                    }
+                }
+                1 => {
+                    if simulation.0.sabrina.wave.cast_id == 1 {
+                        let position = pixel(&window, Vec2::new(1350.0, 300.0));
+                        window.set_cursor_position(Some(position));
+                        mouse.press(MouseButton::Left);
+                    } else {
+                        assert!(simulation.0.session.time - check.ability_time >= 3.0);
+                        assert_eq!(simulation.0.sabrina.wave.scale, 2.0);
+                        println!(
+                            "BEVY CHECK OK: held scene left-click Wave auto-releases charged after 3 seconds"
+                        );
+                        simulation.0.sabrina.wave.active = false;
+                        simulation.0.sabrina.motion.pos = reef_sim::v(-8.0, 8.0);
+                        simulation.0.sabrina.vitality.invulnerable = 10.0;
+                        for index in 0..reef_sim::JELLY_COUNT {
+                            let id = reef_sim::allocate_entity(
+                                &mut simulation.0,
+                                reef_sim::EntityKind::Jelly,
+                                index as i32,
+                            );
+                            simulation.0.jelly[index] = reef_sim::JellyEntity {
+                                id,
+                                motion: reef_sim::Motion {
+                                    pos: reef_sim::v(-14.0 + index as f32 * 28.0, 8.0),
+                                    ..default()
+                                },
+                                behaviour: reef_sim::JellyBehaviour {
+                                    state: if index < 2 {
+                                        reef_sim::JellyState::Hungry
+                                    } else {
+                                        reef_sim::JellyState::Hidden
+                                    },
+                                    bubble: 3.0,
+                                    ..default()
+                                },
+                            };
+                        }
+                        simulation.0.crystal.magic.state = reef_sim::Spell::Burst;
+                        simulation.0.crystal.magic.time = 0.0;
+                        simulation.0.crystal.magic.hit_count = 1;
+                        simulation.0.crystal.magic.hits[0] = simulation.0.jelly[0].id;
+                        simulation.0.crystal.motion.pos = reef_sim::v(-14.0, 8.0);
+                        simulation.0.sabrina.cooldown = 12.0;
+                        check.ability_stage = 2;
+                        check.ability_time = simulation.0.session.time;
+                    }
+                }
+                _ => {
+                    if simulation.0.crystal.magic.hit_count == 1 {
+                        keys.press(KeyCode::Space);
+                    } else {
+                        assert_eq!(simulation.0.jelly[1].behaviour.health, 80.0);
+                        assert!(simulation.0.jelly[1].behaviour.bubble > 2.8);
+                        assert!(simulation.0.sabrina.cooldown > 10.0);
+                        println!(
+                            "BEVY CHECK OK: Crystal homes across opposite sides of the scene for half damage"
+                        );
+                        check.ability_stage = 3;
+                    }
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
+#[derive(Default)]
+struct ReadingCheck {
+    frame: u32,
+    saved: Option<reef_sim::World>,
+    pose: reef_sim::V2,
+    offset: f32,
+    transforms: Vec<(Entity, Transform)>,
+    reduced_motion: bool,
+}
+
+fn verify_reading(
+    mut commands: Commands,
+    options: Res<Options>,
+    check: Res<Check>,
+    mut reading: Local<ReadingCheck>,
+    mut ui: ResMut<SessionUi>,
+    simulation: Res<Simulation>,
+    rendered: Res<crate::presentation::Presentation>,
+    mut preferences: ResMut<crate::settings::Preferences>,
+    mut keys: ResMut<ButtonInput<KeyCode>>,
+    mut pads: Query<&mut Gamepad, With<TestPad>>,
+    mut window: Single<&mut Window, With<PrimaryWindow>>,
+    content: Query<(&Node, &ComputedNode, &TextFont), With<crate::ui::CrawlText>>,
+    viewport: Query<(&Node, &ComputedNode), With<crate::ui::CrawlViewport>>,
+    transforms: Query<
+        (Entity, &Transform, Option<&Name>),
+        Or<(With<bevy::animation::AnimationTargetId>, With<Actor>)>,
+    >,
+    mut exit: MessageWriter<AppExit>,
+) {
+    if !options.verify || check.ability_stage != 3 {
+        return;
+    }
+    reading.frame += 1;
+    let offset = || {
+        let (node, _, _) = content.single().unwrap();
+        let Val::Px(top) = node.top else {
+            panic!("Crawl offset must use logical pixels")
+        };
+        -top
+    };
+    match reading.frame {
+        1 => {
+            reading.saved = Some(simulation.0.clone());
+            reading.pose = rendered.0.sabrina.motion.pos;
+            reading.reduced_motion = preferences.reduced_motion;
+            reading.transforms = transforms
+                .iter()
+                .map(|(entity, transform, _)| (entity, *transform))
+                .collect();
+            preferences.reduced_motion = false;
+            preferences.language = 1;
+            ui.screen = Screen::Credits;
+            ui.return_to = Screen::Pause;
+            window.resolution.set(960.0, 540.0);
+        }
+        8 | 380 => {
+            let (_, measured, font) = content.single().unwrap();
+            let (node, viewport) = viewport.single().unwrap();
+            assert_eq!(node.overflow, Overflow::clip());
+            assert!(measured.size().y > viewport.size().y);
+            assert!(viewport.size().x <= window.physical_width() as f32);
+            assert!(viewport.size().y < window.physical_height() as f32);
+            assert_eq!(font.font_size, FontSize::Px(38.0));
+            assert_eq!(offset(), 0.0);
+            commands
+                .spawn(bevy::render::view::screenshot::Screenshot::primary_window())
+                .observe(bevy::render::view::screenshot::save_to_disk(
+                    std::env::temp_dir().join(if reading.frame == 8 {
+                        "sabrina-bevy-hr-credits-small.png"
+                    } else {
+                        "sabrina-bevy-it-help.png"
+                    }),
+                ));
+        }
+        340 => {
+            assert!(
+                offset() > 0.0,
+                "Crawl must advance after the initial reading pause"
+            );
+            keys.press(KeyCode::KeyP);
+        }
+        342 => {
+            reading.offset = offset();
+            window.resolution.set(1280.0, 720.0);
+        }
+        360 => {
+            assert!(
+                (offset() - reading.offset).abs() < 0.01,
+                "Pause and resize must preserve the reading position"
+            );
+            keys.press(KeyCode::End);
+        }
+        363 => {
+            let (_, text, _) = content.single().unwrap();
+            let (_, viewport) = viewport.single().unwrap();
+            let limit = (text.size().y - viewport.size().y) * text.inverse_scale_factor();
+            assert!(
+                (offset() - limit).abs() < 0.1,
+                "The final paragraph must be reachable"
+            );
+            commands
+                .spawn(bevy::render::view::screenshot::Screenshot::primary_window())
+                .observe(bevy::render::view::screenshot::save_to_disk(
+                    std::env::temp_dir().join("sabrina-bevy-credits-end.png"),
+                ));
+        }
+        364 => keys.press(KeyCode::Home),
+        365 => {
+            assert_eq!(offset(), 0.0);
+            preferences.reduced_motion = reading.reduced_motion;
+            keys.press(KeyCode::Escape);
+        }
+        368 | 505 => {
+            assert_eq!(ui.screen, Screen::Pause);
+            let saved = reading.saved.as_ref().unwrap();
+            assert_eq!(simulation.0.session.time, saved.session.time);
+            assert_eq!(simulation.0.sabrina.motion.pos, saved.sabrina.motion.pos);
+            assert_eq!(
+                simulation.0.sabrina.vitality.health,
+                saved.sabrina.vitality.health
+            );
+            assert_eq!(rendered.0.sabrina.motion.pos, reading.pose);
+            for &(entity, before) in &reading.transforms {
+                let (_, after, name) = transforms.get(entity).unwrap();
+                assert!(before.translation.distance(after.translation) < 0.00001);
+                assert!(
+                    before.rotation.dot(after.rotation).abs() > 0.99999,
+                    "Reading screen changed paused actor or bone {entity:?} {name:?}: {:?} -> {:?}",
+                    before.rotation,
+                    after.rotation
+                );
+                assert!(before.scale.distance(after.scale) < 0.00001);
+            }
+            for i in 0..reef_sim::FISH_COUNT {
+                assert_eq!(simulation.0.fish[i].motion.pos, saved.fish[i].motion.pos);
+            }
+            if reading.frame == 505 {
+                println!(
+                    "BEVY CHECK OK: clipped reading screens, resize, keyboard/controller scrolling, reduced motion, and paused-game restoration"
+                );
+                println!("BEVY INPUT INTEGRATION COMPLETE");
+                exit.write(AppExit::Success);
+            }
+        }
+        375 => {
+            preferences.reduced_motion = true;
+            preferences.language = 2;
+            ui.screen = Screen::Help;
+        }
+        390..=420 => {
+            pads.single_mut()
+                .unwrap()
+                .digital_mut()
+                .press(GamepadButton::DPadDown);
+        }
+        422 => {
+            assert!(
+                offset() > 50.0,
+                "Controller must scroll even with reduced motion"
+            );
+            reading.offset = offset();
+        }
+        500 => {
+            assert_eq!(
+                offset(),
+                reading.offset,
+                "Reduced motion must not auto-scroll"
+            );
+            preferences.reduced_motion = reading.reduced_motion;
+            pads.single_mut()
+                .unwrap()
+                .digital_mut()
+                .press(GamepadButton::East);
         }
         _ => {}
     }
@@ -595,7 +991,7 @@ fn check_pose(
     materials: Res<Assets<StandardMaterial>>,
     ui_checks: (
         Query<&ImageNode>,
-        Query<(&TextColor, Option<&TextShadow>), With<Text>>,
+        Query<(&Text, &TextColor, Option<&TextShadow>)>,
         Query<&BackgroundColor>,
     ),
     render_materials: (
@@ -604,7 +1000,7 @@ fn check_pose(
         Res<crate::settings::Preferences>,
     ),
     lighting_checks: (
-        Query<&Msaa, With<Camera3d>>,
+        Query<(&Msaa, &bevy::anti_alias::fxaa::Fxaa), With<Camera3d>>,
         Query<(Entity, &Actor)>,
         Query<&Children>,
         Query<
@@ -625,12 +1021,13 @@ fn check_pose(
     }
     if check.frame == 55 {
         let (cameras, roots, children, surfaces, lights, shadow_map) = lighting_checks;
-        assert!(cameras.iter().all(|aa| *aa
-            == if preferences.quality > 0 {
-                Msaa::Sample2
+        assert!(cameras.iter().all(|(aa, fxaa)| *aa
+            == if preferences.quality == 2 {
+                Msaa::Sample4
             } else {
                 Msaa::Off
-            }));
+            }
+            && fxaa.enabled == (preferences.quality == 1)));
         assert_eq!(
             lights
                 .iter()
@@ -640,9 +1037,10 @@ fn check_pose(
         );
         assert_eq!(
             shadow_map.size,
-            if preferences.quality == 2 { 1024 } else { 512 }
+            if preferences.quality == 2 { 2048 } else { 1024 }
         );
         let mut excluded = 0;
+        let mut fish_surfaces = 0;
         for (root, actor) in &roots {
             if matches!(actor, Actor::Crystal | Actor::Jelly(_)) {
                 for descendant in children.iter_descendants(root) {
@@ -652,10 +1050,20 @@ fn check_pose(
                     }
                 }
             }
+            if matches!(actor, Actor::Fish(_)) {
+                for descendant in children.iter_descendants(root) {
+                    if let Ok((caster, receiver)) = surfaces.get(descendant) {
+                        assert_eq!(caster.is_none(), preferences.quality == 2);
+                        assert!(receiver.is_none());
+                        fish_surfaces += 1;
+                    }
+                }
+            }
         }
         assert!(excluded >= 9);
+        assert!(fish_surfaces > 0);
         println!(
-            "BEVY CHECK OK: quality AA, one small shadow map, shadow-free crystal and jellyfish"
+            "BEVY CHECK OK: quality AA, one tier-sized shadow map, shadow-free crystal and jellyfish"
         );
         assert!(
             ui_images
@@ -664,12 +1072,15 @@ fn check_pose(
                     (image.color.alpha() - crate::ui::HUD_BACKGROUND_ALPHA).abs() < 0.001
                 })
                 .count()
-                >= 8
+                >= 2
         );
         assert!(
             ui_texts
                 .iter()
-                .all(|(color, shadow)| color.alpha() == 1.0 && shadow.is_some())
+                .all(
+                    |(text, color, shadow)| (text.0.is_empty() || color.alpha() == 1.0)
+                        && shadow.is_some()
+                )
         );
         println!("BEVY CHECK OK: HUD backgrounds translucent; text opaque with contrast shadows");
         assert!(
@@ -677,9 +1088,11 @@ fn check_pose(
                 .iter()
                 .filter(|color| { (color.0.alpha() - crate::ui::HUD_METER_ALPHA).abs() < 0.001 })
                 .count()
-                >= 4
+                >= 1
         );
-        println!("BEVY CHECK OK: health and ability progress fills are semi-transparent");
+        println!(
+            "BEVY CHECK OK: health progress fill remains semi-transparent; abilities use icon sweeps"
+        );
         assert_eq!(
             reef.iter()
                 .filter(|(_, material)| material.base.alpha_mode == AlphaMode::Blend)
@@ -727,7 +1140,7 @@ fn check_pose(
         for (effect, visibility) in &effects {
             if matches!(
                 effect,
-                crate::visuals::Effect::Spark(_)
+                crate::visuals::Effect::Spark
                     | crate::visuals::Effect::Trail(_)
                     | crate::visuals::Effect::Glow
             ) {
@@ -742,7 +1155,7 @@ fn check_pose(
         assert_eq!(simulation.0.crystal.magic.state, reef_sim::Spell::Resting);
         assert_eq!(simulation.0.sabrina.cooldown, 0.0);
         assert!(effects.iter().any(|(effect, visibility)| {
-            matches!(effect, crate::visuals::Effect::Spark(_)) && *visibility == Visibility::Visible
+            matches!(effect, crate::visuals::Effect::Spark) && *visibility == Visibility::Visible
         }));
         println!("BEVY CHECK OK: ready orbiting crystal has particles");
     }

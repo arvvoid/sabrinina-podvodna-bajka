@@ -5,6 +5,7 @@
 /dist/
 /exports/
 /captures/
+/THIRD_PARTY_LICENSES.txt
 
 # Local settings
 .env

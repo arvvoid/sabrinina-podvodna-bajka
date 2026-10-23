@@ -16,6 +16,7 @@ mod assets;
 mod audio;
 
 mod build_info;
+mod caustics;
 mod controls;
 mod diagnostics;
 mod hair;
@@ -25,13 +26,16 @@ mod embedded_assets;
 
 mod loading;
 mod mipmaps;
+mod particles;
 
 mod presentation;
 
 mod rumble;
 mod settings;
+mod tail;
 
 mod ui;
+mod updates;
 
 mod verification;
 
@@ -59,7 +63,14 @@ fn main() {
     if options.window_system.is_some() {
         warn!("Ignoring --x11/--wayland: window-system overrides are only available on Linux");
     }
-    let mut prefs = settings::Preferences::load();
+    let mut prefs = if options.verify {
+        settings::Preferences {
+            vsync: false,
+            ..Default::default()
+        }
+    } else {
+        settings::Preferences::load()
+    };
     if let Some(kind) = &options.capture {
         if kind.starts_with("hr-") {
             prefs.language = 1;
@@ -182,9 +193,11 @@ fn main() {
         .add_plugins((
             bevy::diagnostic::FrameTimeDiagnosticsPlugin::default(),
             app::GamePlugin,
+            updates::UpdatePlugin,
             assets::CharacterPlugin,
             loading::LoadingPlugin,
             hair::HairPlugin,
+            tail::TailPlugin,
             visuals::ReefPlugin,
             ui::ReefUiPlugin,
             audio::ReefAudioPlugin,

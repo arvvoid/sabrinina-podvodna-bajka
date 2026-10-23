@@ -38,7 +38,7 @@ pub struct RigSpec {
     pub asset: usize,
 }
 
-#[derive(Component)]
+#[derive(Component, Clone)]
 pub struct RigPlayer {
     pub actor: Actor,
     pub generation: u64,
@@ -47,6 +47,11 @@ pub struct RigPlayer {
     pub phase: f32,
     blend: f32,
     outgoing: Vec<(AnimationNodeIndex, f32)>,
+}
+
+struct ReadingAnimations {
+    players: Vec<(Entity, AnimationPlayer, RigPlayer)>,
+    bones: Vec<(Entity, Transform, Option<Quat>)>,
 }
 
 #[derive(Component)]
@@ -160,16 +165,42 @@ fn select_lods(
     }
 }
 
+fn fish_shadows(
+    mut commands: Commands,
+    preferences: Res<Preferences>,
+    surfaces: Query<(Entity, &CharacterSurface, Has<bevy::light::NotShadowCaster>)>,
+) {
+    for (entity, surface, excluded) in &surfaces {
+        if !matches!(surface.actor, Actor::Fish(_)) {
+            continue;
+        }
+        if preferences.quality == 2 && excluded {
+            commands
+                .entity(entity)
+                .remove::<bevy::light::NotShadowCaster>();
+        } else if preferences.quality != 2 && !excluded {
+            commands.entity(entity).insert(bevy::light::NotShadowCaster);
+        }
+    }
+}
+
 pub struct CharacterPlugin;
 
 impl Plugin for CharacterPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Library>()
             .init_resource::<RigCache>()
-            .add_systems(Startup, load)
             .add_systems(
                 Update,
-                (crate::loading::ready, finish_load, sync_models).chain(),
+                load.in_set(crate::loading::LoadResources)
+                    .before(crate::loading::ready),
+            )
+            .add_systems(
+                Update,
+                (crate::loading::ready, finish_load, sync_models)
+                    .chain()
+                    .after(crate::loading::LoadResources)
+                    .run_if(crate::loading::resources_allowed),
             )
             .add_systems(
                 Update,
@@ -178,6 +209,7 @@ impl Plugin for CharacterPlugin {
                     .after(sync_models),
             )
             .add_systems(Update, select_lods.after(crate::presentation::prepare))
+            .add_systems(Update, fish_shadows.after(crate::presentation::prepare))
             .add_systems(Update, report_assets.after(select_lods))
             .add_systems(PostUpdate, restore_bones.before(AnimationSystems))
             .add_systems(
@@ -276,6 +308,7 @@ pub(crate) fn finish_load(
             "boot" => ui.screen = Screen::Loading,
             "menu" => {}
             "settings" => ui.screen = Screen::Settings,
+            "tail-color" => ui.screen = Screen::TailColor,
             "language" => ui.screen = Screen::Language,
             "victory" => {
                 ui.screen = Screen::Victory;
@@ -546,8 +579,7 @@ fn rig_ready(
                 .insert((bevy::light::NotShadowCaster, bevy::light::NotShadowReceiver));
         }
         if matches!(spec.actor, Actor::Fish(_)) {
-            // Small swimmers retain received reef lighting without adding a
-            // second skinned draw for every fish or dark patches on Sabrina.
+            // High enables fish casters in fish_shadows; cheaper tiers omit the extra draw.
             commands.entity(entity).insert(bevy::light::NotShadowCaster);
         }
         if let Ok(mesh) = mesh_handles.get(entity)
@@ -695,9 +727,53 @@ fn animate(
     ui: Res<SessionUi>,
     preferences: Res<Preferences>,
     time: Res<Time>,
-    mut players: Query<(&mut AnimationPlayer, &mut RigPlayer)>,
+    mut players: Query<(Entity, &mut AnimationPlayer, &mut RigPlayer)>,
+    mut bones: Query<
+        (Entity, &mut Transform, Option<&mut CorrectBone>),
+        With<bevy::animation::AnimationTargetId>,
+    >,
+    mut reading: Local<Option<ReadingAnimations>>,
 ) {
-    let dt = if ui.paused() {
+    if ui.loaded && ui.screen.is_reading() {
+        if reading.is_none() {
+            *reading = Some(ReadingAnimations {
+                players: players
+                    .iter()
+                    .map(|(entity, player, rig)| (entity, player.clone(), rig.clone()))
+                    .collect(),
+                bones: bones
+                    .iter()
+                    .map(|(entity, transform, correction)| {
+                        (
+                            entity,
+                            *transform,
+                            correction.and_then(|bone| bone.original),
+                        )
+                    })
+                    .collect(),
+            });
+        }
+    } else if let Some(saved) = reading.take() {
+        for (entity, saved_player, saved_rig) in saved.players {
+            if let Ok((_, mut player, mut rig)) = players.get_mut(entity) {
+                *player = saved_player;
+                *rig = saved_rig;
+            }
+        }
+        // Zero-weight animations do not evaluate hidden bones on return.
+        for (entity, saved_transform, original) in saved.bones {
+            if let Ok((_, mut transform, correction)) = bones.get_mut(entity) {
+                *transform = saved_transform;
+                if let Some(mut bone) = correction {
+                    bone.original = original;
+                }
+            }
+        }
+        if ui.scene_paused() {
+            return;
+        }
+    }
+    let dt = if ui.scene_paused() {
         0.0
     } else {
         time.delta_secs()
@@ -707,7 +783,7 @@ fn animate(
                 1.0
             }
     };
-    for (mut player, mut rig) in &mut players {
+    for (_, mut player, mut rig) in &mut players {
         let hidden = match rig.actor {
             Actor::Fish(i) => {
                 let f = &rendered.0.fish[i];
@@ -997,4 +1073,233 @@ fn report_assets(
         triangles
     );
     *reported = true;
+}
+
+#[cfg(test)]
+mod animation_tests {
+    use super::*;
+    use crate::{
+        app::Screen,
+        presentation::{Previous, prepare},
+    };
+
+    fn assert_restored(world: &World, saved: &[(Entity, AnimationPlayer, RigPlayer)]) {
+        for (entity, before, rig_before) in saved {
+            let after = world.get::<AnimationPlayer>(*entity).unwrap();
+            let rig = world.get::<RigPlayer>(*entity).unwrap();
+            assert_eq!(rig.current, rig_before.current);
+            assert_eq!(rig.phase, rig_before.phase);
+            assert_eq!(rig.generation, rig_before.generation);
+            assert_eq!(rig.blend, rig_before.blend);
+            assert_eq!(rig.outgoing, rig_before.outgoing);
+            assert_eq!(
+                after.playing_animations().count(),
+                before.playing_animations().count()
+            );
+            for (node, expected) in before.playing_animations() {
+                let actual = after.animation(*node).unwrap();
+                assert_eq!(actual.weight(), expected.weight());
+                assert_eq!(actual.seek_time(), expected.seek_time());
+                assert_eq!(actual.speed(), expected.speed());
+                assert_eq!(actual.repeat_mode(), expected.repeat_mode());
+                assert_eq!(actual.is_paused(), expected.is_paused());
+            }
+        }
+    }
+
+    #[test]
+    fn reading_restores_animation_phases_and_in_progress_crossfades() {
+        for reduced_motion in [false, true] {
+            let mut app = App::new();
+            app.init_resource::<Presentation>()
+                .insert_resource(Simulation(reef_sim::World::default()))
+                .init_resource::<Previous>()
+                .init_resource::<Time>()
+                .init_resource::<Time<Fixed>>()
+                .init_resource::<Preferences>()
+                .insert_resource(SessionUi {
+                    loaded: true,
+                    screen: Screen::Pause,
+                    ..default()
+                })
+                .add_systems(Update, (prepare, animate).chain());
+            app.world_mut().resource_mut::<Preferences>().reduced_motion = reduced_motion;
+            app.world_mut()
+                .resource_mut::<Time>()
+                .advance_by(std::time::Duration::from_secs_f32(0.1));
+            let mut world = reef_sim::World::default();
+            world.session.time = 10.0;
+            world.sabrina.song.active = reduced_motion;
+            world.fish[0].life.active = true;
+            world.fish[0].id.generation = 42;
+            world.jelly[0].behaviour.state = reef_sim::JellyState::Hungry;
+            app.world_mut().resource_mut::<Simulation>().0 = world.clone();
+            app.world_mut().resource_mut::<Presentation>().0 = world.clone();
+            world.session.time -= 1.0 / 60.0;
+            app.world_mut().resource_mut::<Previous>().0 = Some(world);
+            let frozen_transform = Transform::from_rotation(Quat::from_rotation_z(0.3));
+            let bone = app
+                .world_mut()
+                .spawn((
+                    bevy::animation::AnimationTargetId::from_name(&Name::new("Root")),
+                    frozen_transform,
+                ))
+                .id();
+            let clips: ClipMap = Arc::new(
+                [
+                    "Idle",
+                    "Swim",
+                    "Turn_Left",
+                    "Turn_Right",
+                    "Dive",
+                    "Sing",
+                    "Pulse",
+                    "Drift",
+                ]
+                .into_iter()
+                .enumerate()
+                .map(|(i, name)| (name.into(), (AnimationNodeIndex::new(i), 2.0)))
+                .collect(),
+            );
+            let mut entities = Vec::new();
+            for (actor, name, outgoing) in [
+                (
+                    Actor::Sabrina,
+                    if reduced_motion { "Sing" } else { "Idle" },
+                    Some("Swim"),
+                ),
+                (Actor::Fish(0), "Swim", None),
+                (Actor::Jelly(0), "Pulse", Some("Drift")),
+            ] {
+                let mut player = AnimationPlayer::default();
+                player
+                    .play(clips[name].0)
+                    .repeat()
+                    .set_speed(0.0)
+                    .set_seek_time(0.73)
+                    .set_weight(if outgoing.is_some() { 0.4 } else { 1.0 });
+                let outgoing = outgoing
+                    .map(|name| {
+                        let node = clips[name].0;
+                        player
+                            .play(node)
+                            .repeat()
+                            .set_speed(0.0)
+                            .set_seek_time(1.13)
+                            .set_weight(0.6);
+                        (node, 1.0)
+                    })
+                    .into_iter()
+                    .collect();
+                entities.push(
+                    app.world_mut()
+                        .spawn((
+                            player,
+                            RigPlayer {
+                                actor,
+                                generation: 42,
+                                clips: clips.clone(),
+                                current: name.into(),
+                                phase: 0.73,
+                                blend: if actor == Actor::Fish(0) { 1.0 } else { 0.4 },
+                                outgoing,
+                            },
+                        ))
+                        .id(),
+                );
+            }
+            app.update();
+            let saved: Vec<_> = entities
+                .iter()
+                .map(|&entity| {
+                    (
+                        entity,
+                        app.world().get::<AnimationPlayer>(entity).unwrap().clone(),
+                        app.world().get::<RigPlayer>(entity).unwrap().clone(),
+                    )
+                })
+                .collect();
+            for screen in [Screen::Help, Screen::Credits] {
+                app.world_mut().resource_mut::<SessionUi>().screen = screen;
+                for _ in 0..20 {
+                    app.update();
+                }
+                app.world_mut().get_mut::<Transform>(bone).unwrap().rotation =
+                    Quat::from_rotation_z(1.2);
+                assert_ne!(
+                    app.world().get::<RigPlayer>(entities[1]).unwrap().phase,
+                    saved[1].2.phase
+                );
+                assert!(
+                    app.world()
+                        .get::<AnimationPlayer>(entities[2])
+                        .unwrap()
+                        .playing_animations()
+                        .all(|(_, a)| a.weight() == 0.0)
+                );
+                // Switching reading pages must not replace the gameplay snapshot.
+                app.world_mut().resource_mut::<SessionUi>().screen = Screen::Credits;
+                app.update();
+                app.world_mut().resource_mut::<SessionUi>().screen = Screen::Pause;
+                for _ in 0..3 {
+                    app.update();
+                    assert_restored(app.world(), &saved);
+                    assert_eq!(
+                        *app.world().get::<Transform>(bone).unwrap(),
+                        frozen_transform
+                    );
+                }
+            }
+            app.world_mut().resource_mut::<SessionUi>().screen = Screen::Playing;
+            app.update();
+            assert!(app.world().get::<RigPlayer>(entities[0]).unwrap().blend > saved[0].2.blend);
+            assert_ne!(
+                app.world().get::<RigPlayer>(entities[1]).unwrap().phase,
+                saved[1].2.phase
+            );
+        }
+    }
+}
+
+#[cfg(test)]
+mod shadow_tests {
+    use super::*;
+    use bevy::light::{NotShadowCaster, NotShadowReceiver};
+
+    #[test]
+    fn fish_cast_only_on_high_and_crystal_exclusions_are_preserved() {
+        let mut app = App::new();
+        app.init_resource::<Preferences>()
+            .add_systems(Update, fish_shadows);
+        let mut entities = Vec::new();
+        for actor in [Actor::Fish(0), Actor::Crystal, Actor::Jelly(0)] {
+            let entity = app
+                .world_mut()
+                .spawn((
+                    CharacterSurface {
+                        actor,
+                        normal: default(),
+                        hurt: default(),
+                    },
+                    NotShadowCaster,
+                ))
+                .id();
+            if actor != Actor::Fish(0) {
+                app.world_mut().entity_mut(entity).insert(NotShadowReceiver);
+            }
+            entities.push(entity);
+        }
+        for quality in [0, 1, 2, 1, 2, 0] {
+            app.world_mut().resource_mut::<Preferences>().quality = quality;
+            app.update();
+            assert_eq!(
+                app.world().get::<NotShadowCaster>(entities[0]).is_none(),
+                quality == 2
+            );
+            for &entity in &entities[1..] {
+                assert!(app.world().get::<NotShadowCaster>(entity).is_some());
+                assert!(app.world().get::<NotShadowReceiver>(entity).is_some());
+            }
+        }
+    }
 }

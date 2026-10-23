@@ -10,6 +10,26 @@ pub struct Capsule {
     pub radius: f32,
 }
 
+#[test]
+fn bounds_never_reject_intersecting_capsules() {
+    for i in 0..4096 {
+        let t = i as f32 * 0.17;
+        let a = cap(
+            v(t.sin(), t.cos()),
+            v((t * 0.7).cos(), (t * 1.3).sin()),
+            0.2,
+        );
+        let b = cap(
+            v((t * 0.3).sin() * 3.0, (t * 0.5).cos()),
+            v((t * 0.9).cos(), (t * 0.4).sin() * 3.0),
+            0.4,
+        );
+        if contact_gap(a, b) < 0.0 {
+            assert!(bounds_overlap(a, b));
+        }
+    }
+}
+
 fn cap(a: V2, b: V2, radius: f32) -> Capsule {
     Capsule { a, b, radius }
 }
@@ -160,6 +180,7 @@ pub fn sabrina_body(sabrina: &SabrinaEntity) -> [Capsule; 16] {
     let swimming = sabrina.motion.velocity.length() > 0.864
         && !sabrina.song.active
         && !sabrina.wave.active
+        && !sabrina.wave.charging
         && sabrina.throw_time < 0.0
         && sabrina.vitality.stunned <= 0.0
         && sabrina.vitality.hurt_flash <= 0.0;
@@ -250,10 +271,28 @@ pub fn contact_gap(a: Capsule, b: Capsule) -> f32 {
     (p - q).length() - a.radius - b.radius
 }
 
+fn bounds_overlap(a: Capsule, b: Capsule) -> bool {
+    let radius = a.radius + b.radius;
+    a.a.x.min(a.b.x) <= b.a.x.max(b.b.x) + radius
+        && b.a.x.min(b.b.x) <= a.a.x.max(a.b.x) + radius
+        && a.a.y.min(a.b.y) <= b.a.y.max(b.b.y) + radius
+        && b.a.y.min(b.b.y) <= a.a.y.max(a.b.y) + radius
+}
+
 pub fn soft_contacts(world: &mut World) {
-    let body = sabrina_body(&world.sabrina);
+    contacts(world, true);
+}
+
+pub(crate) fn scenery_fish_contacts(world: &mut World) {
+    contacts(world, false);
+}
+
+fn contacts(world: &mut World, interact_with_sabrina: bool) {
+    let body = interact_with_sabrina.then(|| sabrina_body(&world.sabrina));
+    let mut shapes = world.fish.map(|fish| fish_body(&fish));
     // Repeated, stable-order passes resolve overlap without changing rescue scores.
     for _ in 0..6 {
+        let mut corrected = false;
         for i in 0..FISH_COUNT {
             let mut a = world.fish[i];
             if !a.life.active || a.rescue.teleport > 0.0 {
@@ -261,59 +300,76 @@ pub fn soft_contacts(world: &mut World) {
             }
             for jellyfish in i + 1..FISH_COUNT {
                 let b = &mut world.fish[jellyfish];
-                if !b.life.active
-                    || b.rescue.teleport > 0.0
-                    || (a.motion.pos - b.motion.pos).length() > 3.0
-                {
+                if !b.life.active || b.rescue.teleport > 0.0 {
                     continue;
                 }
-                let ca = fish_body(&a);
-                let cb = fish_body(b);
+                let ca = shapes[i];
+                let cb = shapes[jellyfish];
+                if !bounds_overlap(ca, cb) {
+                    continue;
+                }
                 let (p, q) = closest(ca, cb);
                 let delta = p - q;
-                let distance = delta.length();
-                let penetration = ca.radius + cb.radius - distance;
-                if penetration <= 0.0 {
+                let radius = ca.radius + cb.radius;
+                if delta.dot(delta) >= radius * radius {
                     continue;
                 }
-                let normal = if distance > 0.0001 {
-                    delta * (1.0 / distance)
+                corrected = true;
+                let side = if (a.motion.pos.y - b.motion.pos.y).abs() > 0.1 {
+                    (a.motion.pos.y - b.motion.pos.y).signum()
                 } else {
-                    fallback(i, jellyfish)
+                    1.0
                 };
-                let ia = 1.0 / (ca.radius * ca.radius);
-                let ib = 1.0 / (cb.radius * cb.radius);
-                let correction = (penetration + 0.001).min(0.45);
-                a.motion.pos = bounds(a.motion.pos + normal * (correction * ia / (ia + ib)));
-                b.motion.pos = bounds(b.motion.pos - normal * (correction * ib / (ia + ib)));
-                let closing = (a.motion.velocity - b.motion.velocity).dot(normal);
-                if closing < 0.0 {
-                    let force = -(1.0 + 0.16) * closing / (ia + ib);
-                    impulse(&mut a, normal * (force * ia), normal);
-                    impulse(b, normal * (-force * ib), normal * -1.0);
-                }
+                // Clear the full vertical capsule extents without a bouncing impulse.
+                let top = |c: Capsule| c.a.y.max(c.b.y) + c.radius;
+                let bottom = |c: Capsule| c.a.y.min(c.b.y) - c.radius;
+                let gap = if side > 0.0 {
+                    top(cb) - bottom(ca)
+                } else {
+                    top(ca) - bottom(cb)
+                } + 0.02;
+                let old = a.motion.pos;
+                a.motion.pos = bounds(a.motion.pos + v(0.0, side * gap * 0.5));
+                let moved = (a.motion.pos.y - old.y).abs();
+                let old = b.motion.pos;
+                b.motion.pos = bounds(b.motion.pos - v(0.0, side * (gap - moved)));
+                let moved_b = (b.motion.pos.y - old.y).abs();
+                a.motion.pos =
+                    bounds(a.motion.pos + v(0.0, side * (gap - moved - moved_b).max(0.0)));
+                shapes[i] = fish_body(&a);
+                shapes[jellyfish] = fish_body(b);
             }
-            for capsule in body {
-                let ca = fish_body(&a);
+            for &capsule in body.iter().flatten() {
+                let ca = shapes[i];
+                if !bounds_overlap(ca, capsule) {
+                    continue;
+                }
                 let (p, q) = closest(ca, capsule);
                 let delta = p - q;
-                let distance = delta.length();
-                let penetration = ca.radius + capsule.radius - distance;
-                if penetration <= 0.0 {
+                let radius = ca.radius + capsule.radius;
+                let squared = delta.dot(delta);
+                if squared >= radius * radius {
                     continue;
                 }
+                let distance = squared.sqrt();
+                let penetration = radius - distance;
+                corrected = true;
                 let normal = if distance > 0.0001 {
                     delta * (1.0 / distance)
                 } else {
                     fallback(i, 97)
                 };
                 a.motion.pos = bounds(a.motion.pos + normal * (penetration + 0.002).min(0.55));
+                shapes[i] = fish_body(&a);
                 let closing = (a.motion.velocity - world.sabrina.motion.velocity).dot(normal);
                 if closing < 0.0 {
                     impulse(&mut a, normal * (-1.08 * closing), normal)
                 }
             }
             world.fish[i] = a;
+        }
+        if !corrected {
+            break;
         }
     }
 }

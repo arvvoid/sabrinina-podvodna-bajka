@@ -43,6 +43,9 @@ pub fn interpolate(previous: &World, current: &World, alpha: f32) -> World {
         if a.wave.active && b.wave.active && a.wave.cast_id == b.wave.cast_id {
             b.wave.time = mix(a.wave.time, b.wave.time, t);
         }
+        if a.wave.charging && b.wave.charging {
+            b.wave.charge_time = mix(a.wave.charge_time, b.wave.charge_time, t);
+        }
     }
     for (a, b) in previous.fish.iter().zip(&mut out.fish) {
         if a.id != b.id || a.life.active != b.life.active {

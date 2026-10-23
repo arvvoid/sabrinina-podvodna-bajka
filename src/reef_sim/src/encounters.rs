@@ -3,6 +3,19 @@
 //! Peaceful intervals, visitor scheduling, recovery and scoring.
 use crate::*;
 
+pub fn random_rest_duration(world: &mut World) -> f32 {
+    world.settings.rest_seconds * world.rng.range(0.75, 1.25)
+}
+
+pub fn current_total_score(world: &World) -> i32 {
+    world.points.total_score
+        + if world.session.water == Water::Visit {
+            world.points.score
+        } else {
+            0
+        }
+}
+
 pub fn begin_visit(world: &mut World) {
     if world.settings.aquarium || world.session.finished() || world.session.cycle >= FINAL_ROUND {
         return;
@@ -61,7 +74,10 @@ pub fn finish_visit(world: &mut World, events: &mut Events) {
     if world.session.finished()
         || world.settings.aquarium
         || world.session.water != Water::Visit
-        || hungry(world) != 0
+        || world
+            .jelly
+            .iter()
+            .any(|jellyfish| jellyfish.behaviour.state != JellyState::Hidden)
         || alive(world) == 0
         || world.sabrina.vitality.health <= 0.0
     {
@@ -84,7 +100,7 @@ pub fn finish_visit(world: &mut World, events: &mut Events) {
     world.points.total_score += world.points.score;
     world.points.best_score = world.points.best_score.max(world.points.score);
     world.session.water = Water::Calm;
-    world.session.rest_remaining = world.settings.rest_seconds * world.rng.range(0.85, 1.2);
+    world.session.rest_remaining = random_rest_duration(world);
     events.visit_ended = true;
     if world.session.cycle == FINAL_ROUND {
         world.session.victory = true;
@@ -166,7 +182,10 @@ pub fn recovery_and_scoring(world: &mut World, dt: f32, events: &mut Events) {
                     .jelly
                     .iter()
                     .filter(|j| {
-                        matches!(j.behaviour.state, JellyState::Hungry | JellyState::Arriving)
+                        matches!(
+                            j.behaviour.state,
+                            JellyState::Hungry | JellyState::Arriving | JellyState::Leaving
+                        )
                     })
                     .all(|j| (j.motion.pos - world.fish[index].motion.pos).length() >= 6.0)
             {
@@ -179,7 +198,7 @@ pub fn recovery_and_scoring(world: &mut World, dt: f32, events: &mut Events) {
             + dt * if world.settings.gentle { 1.2 } else { 0.8 })
         .min(100.0)
     }
-    if !world.session.game_over && world.session.water == Water::Visit && hungry(world) == 0 {
+    if !world.session.game_over && world.session.water == Water::Visit {
         finish_visit(world, events)
     }
 }

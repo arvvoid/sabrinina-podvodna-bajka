@@ -24,6 +24,252 @@ fn encounter(gentle: bool) -> World {
 }
 
 #[test]
+fn departing_stings_and_fish_losses_are_counted_before_round_finalization() {
+    for score in [50, 200] {
+        let mut world = encounter(true);
+        world.points.total_score = 750;
+        world.points.best_score = 100;
+        world.points.score = score;
+        send_home(&mut world.jelly[0]);
+        let count = alive(&world);
+        let mut events = Events::default();
+        finish_visit(&mut world, &mut events);
+        assert!(!events.visit_ended);
+        assert_eq!(world.session.water, Water::Visit);
+        assert_eq!(world.points.total_score, 750);
+        assert_eq!(world.points.best_score, 100);
+        assert_eq!(world.points.last_score, 0);
+        world.sabrina.motion.pos = world.jelly[0].motion.pos;
+        world.fish[0].motion.pos = world.jelly[0].motion.pos;
+        world.fish[0].rescue.shield = 0.0;
+        jellyfish::jellyfish_and_contacts(&mut world, 0.01, &mut events);
+        assert!(events.hit);
+        assert_eq!(events.eaten, 1);
+        let penalized = (score - 100).max(0);
+        assert_eq!(current_total_score(&world), 750 + penalized);
+        recovery_and_scoring(&mut world, 0.01, &mut events);
+        assert!(!events.visit_ended);
+        world.jelly[0].behaviour.time = 9.0;
+        jellyfish::jellyfish_and_contacts(&mut world, 0.01, &mut events);
+        recovery_and_scoring(&mut world, 0.01, &mut events);
+        let finalized = penalized + (count - 1) * SURVIVOR_POINTS;
+        assert!(events.visit_ended);
+        assert_eq!(world.session.water, Water::Calm);
+        assert_eq!(world.points.last_survivors, count - 1);
+        assert_eq!(world.points.last_score, finalized);
+        assert_eq!(world.points.best_score, finalized.max(100));
+        assert_eq!(current_total_score(&world), 750 + finalized);
+        finish_visit(&mut world, &mut Events::default());
+        begin_visit(&mut world);
+        assert_eq!(current_total_score(&world), 750 + finalized);
+    }
+}
+
+#[test]
+fn final_round_stays_playable_until_departures_finish_and_defeat_still_wins() {
+    for outcome in ["survive", "lose_health", "lose_fish"] {
+        let mut world = encounter(true);
+        world.session.cycle = FINAL_ROUND;
+        damage_jelly(&mut world, 0, 100.0, true, &mut Events::default());
+        let events = step(&mut world, 1.0 / 60.0, Input::default());
+        assert!(!events.victory && !events.visit_ended);
+        assert!(!world.session.finished());
+        if outcome == "lose_health" {
+            world.sabrina.motion.pos = world.jelly[0].motion.pos;
+            world.sabrina.vitality.health = 1.0;
+        } else if outcome == "lose_fish" {
+            for fish in &mut world.fish {
+                fish.life.active = false;
+            }
+            world.fish[0].life.active = true;
+            world.fish[0].motion.pos = world.jelly[0].motion.pos;
+            world.fish[0].rescue.shield = 0.0;
+        }
+        let mut ended = 0;
+        for _ in 0..600 {
+            let events = step(&mut world, 1.0 / 60.0, Input::default());
+            ended += i32::from(events.visit_ended);
+        }
+        if outcome == "survive" {
+            assert!(world.session.victory);
+            assert!(!world.session.game_over);
+            assert_eq!(ended, 1);
+            assert_eq!(world.jelly[0].behaviour.state, JellyState::Hidden);
+            assert_eq!(
+                world.points.total_score,
+                200 + alive(&world) * SURVIVOR_POINTS
+            );
+        } else {
+            assert!(world.session.game_over);
+            assert!(!world.session.victory);
+            assert_eq!(ended, 0);
+            assert_eq!(world.points.total_score, 0);
+        }
+    }
+}
+
+#[test]
+fn running_score_accumulates_across_rounds_without_counting_completed_round_twice() {
+    let mut world = encounter(true);
+    world.points.total_score = 750;
+    damage_jelly(&mut world, 0, 100.0, true, &mut Events::default());
+    assert_eq!(current_total_score(&world), 950);
+    world.jelly[0].behaviour.state = JellyState::Hidden;
+    finish_visit(&mut world, &mut Events::default());
+    let total = 950 + alive(&world) * SURVIVOR_POINTS;
+    assert_eq!(current_total_score(&world), total);
+    finish_visit(&mut world, &mut Events::default());
+    assert_eq!(current_total_score(&world), total);
+    begin_visit(&mut world);
+    assert_eq!(current_total_score(&world), total);
+    damage_jelly(&mut world, 0, 10.0, false, &mut Events::default());
+    assert_eq!(current_total_score(&world), total + 10);
+}
+
+#[test]
+fn quiet_intervals_are_randomized_within_selected_bounds_including_first_round() {
+    for seconds in [25.0, 55.0, 150.0] {
+        let mut first = Vec::new();
+        let mut subsequent = Vec::new();
+        for seed in 1..50 {
+            let mut world = World::default();
+            reset(
+                &mut world,
+                seed,
+                Settings {
+                    rest_seconds: seconds,
+                    ..Settings::default()
+                },
+            );
+            first.push(world.session.rest_remaining);
+            begin_visit(&mut world);
+            for jelly in &mut world.jelly {
+                jelly.behaviour.state = JellyState::Hidden;
+            }
+            finish_visit(&mut world, &mut Events::default());
+            subsequent.push(world.session.rest_remaining);
+        }
+        for waits in [first, subsequent] {
+            assert!(
+                waits
+                    .iter()
+                    .all(|&wait| wait >= seconds * 0.75 && wait <= seconds * 1.25)
+            );
+            assert!(waits.iter().any(|&wait| wait < seconds));
+            assert!(waits.iter().any(|&wait| wait > seconds));
+        }
+    }
+}
+
+#[test]
+fn song_reliably_lures_all_visitors_only_inside_the_fish_radius() {
+    for gentle in [false, true] {
+        for energy in [100.0, 25.0, 1.0] {
+            for state in [JellyState::Hungry, JellyState::Arriving] {
+                for inside in [false, true] {
+                    let mut world = four_visitors();
+                    world.settings.gentle = gentle;
+                    world.sabrina.motion.pos = v(0.0, 8.0);
+                    world.sabrina.song.active = true;
+                    world.sabrina.song.strength = 1.0;
+                    world.sabrina.song.energy = energy;
+                    let radius = song_radius(&world);
+                    let position = v(radius + if inside { -0.01 } else { 0.01 }, 8.0);
+                    assert_eq!(song_reaches(&world, position), inside);
+                    for fish in &mut world.fish {
+                        fish.life.active = false;
+                    }
+                    for jelly in &mut world.jelly {
+                        jelly.behaviour.state = state;
+                        jelly.behaviour.turn_in = 100.0;
+                        jelly.behaviour.exit_side = -1;
+                        jelly.motion.pos = position;
+                        jelly.motion.direction = v(1.0, 0.0);
+                        jelly.motion.velocity = v(0.0, 0.0);
+                    }
+                    for slot in 0..JELLY_COUNT {
+                        let mut single = world.clone();
+                        for (index, jelly) in single.jelly.iter_mut().enumerate() {
+                            if index != slot {
+                                jelly.behaviour.state = JellyState::Hidden;
+                            }
+                        }
+                        jellyfish::jellyfish_and_contacts(
+                            &mut single,
+                            0.01,
+                            &mut Events::default(),
+                        );
+                        assert_eq!(
+                            single.jelly[slot].motion.velocity.x < 0.0,
+                            inside,
+                            "{gentle}, {energy}, {state:?}, inside={inside}"
+                        );
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn song_lure_overrides_fish_pursuit_and_stops_when_radius_shrinks_or_song_stops() {
+    for stop in [false, true] {
+        let mut world = encounter(true);
+        world.sabrina.motion.pos = v(0.0, 8.0);
+        world.sabrina.song.active = true;
+        world.sabrina.song.strength = 1.0;
+        world.jelly[0].motion.pos = v(4.5, 8.0);
+        world.jelly[0].motion.direction = v(1.0, 0.0);
+        world.jelly[0].behaviour.turn_in = 100.0;
+        world.jelly[0].behaviour.kind = 1;
+        world.fish[0].motion.pos = v(8.0, 8.0);
+        jellyfish::jellyfish_and_contacts(&mut world, 0.01, &mut Events::default());
+        assert!(world.jelly[0].motion.velocity.x < 0.0);
+        if stop {
+            world.sabrina.song.active = false;
+        } else {
+            world.sabrina.song.energy = 1.0;
+        }
+        // Compare steering from rest so old momentum cannot masquerade as attraction.
+        world.jelly[0].motion.velocity = v(0.0, 0.0);
+        jellyfish::jellyfish_and_contacts(&mut world, 0.01, &mut Events::default());
+        assert!(world.jelly[0].motion.velocity.x > 0.0);
+    }
+}
+
+#[test]
+fn song_does_not_override_bubbles_retreat_or_arrival_completion() {
+    for state in [JellyState::Hidden, JellyState::Leaving, JellyState::Hungry] {
+        let mut world = encounter(true);
+        world.sabrina.motion.pos = v(0.0, 8.0);
+        world.sabrina.song.active = true;
+        world.sabrina.song.strength = 1.0;
+        world.jelly[0].motion.pos = v(4.0, 8.0);
+        world.jelly[0].behaviour.state = state;
+        world.jelly[0].behaviour.exit_side = 1;
+        if state == JellyState::Hungry {
+            world.jelly[0].behaviour.bubble = 3.0;
+        }
+        let before = world.jelly[0].motion.pos.x;
+        jellyfish::jellyfish_and_contacts(&mut world, 0.01, &mut Events::default());
+        assert!(world.jelly[0].motion.pos.x >= before);
+    }
+    let mut world = encounter(true);
+    world.sabrina.motion.pos = v(0.0, 8.0);
+    world.sabrina.song.active = true;
+    world.sabrina.song.strength = 1.0;
+    world.jelly[0].motion.pos = v(4.0, 8.0);
+    world.jelly[0].behaviour.state = JellyState::Arriving;
+    world.jelly[0].behaviour.time = 4.5;
+    jellyfish::jellyfish_and_contacts(&mut world, 0.01, &mut Events::default());
+    assert_eq!(world.jelly[0].behaviour.state, JellyState::Hungry);
+    let edge = world.sabrina.motion.pos + v(song_radius(&world), 0.0);
+    assert!(!song_reaches(&world, edge));
+    world.sabrina.song.strength = 0.05;
+    assert!(!song_reaches(&world, world.sabrina.motion.pos));
+}
+
+#[test]
 fn crystal_hit_bubbles_instead_of_dispatching_and_returns_without_a_second_hit() {
     let mut world = encounter(true);
     world.crystal.magic.state = Spell::Flying;
@@ -99,6 +345,67 @@ fn missed_skillshot_returns_and_cannot_collect_points() {
 }
 
 #[test]
+fn departing_jellyfish_sting_sabrina_and_harm_unprotected_fish_without_chasing() {
+    for gentle in [false, true] {
+        let mut world = encounter(gentle);
+        world.jelly[0].behaviour.state = JellyState::Leaving;
+        world.jelly[0].behaviour.health = 0.0;
+        world.jelly[0].behaviour.exit_side = 1;
+        world.sabrina.motion.pos = world.jelly[0].motion.pos;
+        world.sabrina.song.active = true;
+        world.fish[0].motion.pos = world.jelly[0].motion.pos;
+        world.fish[0].rescue.shield = 0.0;
+        world.points.score = 200;
+        let before = world.jelly[0].motion.pos.x;
+        let mut events = Events::default();
+        jellyfish::jellyfish_and_contacts(&mut world, 0.01, &mut events);
+        assert!(events.hit);
+        assert_eq!(
+            world.sabrina.vitality.health,
+            if gentle { 72.0 } else { 65.0 }
+        );
+        assert!(!world.sabrina.song.active);
+        assert_eq!(world.points.score, 100);
+        assert!(!world.fish[0].life.active);
+        assert_eq!(events.eaten, 1);
+        assert_eq!(events.repelled, 0);
+        assert_eq!(world.jelly[0].behaviour.state, JellyState::Leaving);
+        assert!(world.jelly[0].motion.pos.x > before);
+    }
+}
+
+#[test]
+fn departing_contact_respects_invulnerability_shields_bubbles_and_despawning() {
+    for state in [JellyState::Leaving, JellyState::Hidden] {
+        for bubbled in [false, true] {
+            let mut world = encounter(true);
+            world.jelly[0].behaviour.state = state;
+            world.jelly[0].behaviour.bubble = if bubbled { 1.0 } else { 0.0 };
+            world.sabrina.motion.pos = world.jelly[0].motion.pos;
+            world.sabrina.vitality.invulnerable = 1.0;
+            world.fish[0].motion.pos = world.jelly[0].motion.pos;
+            world.fish[0].rescue.shield = 1.0;
+            let mut events = Events::default();
+            jellyfish::jellyfish_and_contacts(&mut world, 0.01, &mut events);
+            assert!(!events.hit);
+            assert_eq!(world.sabrina.vitality.health, 100.0);
+            assert!(world.fish[0].life.active);
+            assert_eq!(events.eaten, 0);
+        }
+    }
+    let mut world = encounter(true);
+    world.jelly[0].behaviour.state = JellyState::Leaving;
+    world.jelly[0].behaviour.time = 9.0;
+    world.sabrina.motion.pos = world.jelly[0].motion.pos;
+    world.fish[0].motion.pos = world.jelly[0].motion.pos;
+    let mut events = Events::default();
+    jellyfish::jellyfish_and_contacts(&mut world, 0.01, &mut events);
+    assert_eq!(world.jelly[0].behaviour.state, JellyState::Hidden);
+    assert!(!events.hit);
+    assert_eq!(events.eaten, 0);
+}
+
+#[test]
 fn bubble_stops_movement_stings_and_feeding_then_expires() {
     let mut world = encounter(true);
     world.sabrina.motion.pos = world.jelly[0].motion.pos;
@@ -151,10 +458,11 @@ fn visitors_never_leave_because_of_time_or_eaten_count() {
 }
 
 #[test]
-fn wave_only_hits_close_visitors_in_front_and_only_once() {
+fn wave_hits_visitors_at_full_range_in_front_and_only_once() {
     for (position, hit) in [
         (v(2.0, 8.5), true),
-        (v(5.0, 8.5), false),
+        (v(5.0, 8.5), true),
+        (v(9.0, 8.5), false),
         (v(-1.0, 8.5), false),
         (v(1.5, 14.0), false),
     ] {
@@ -180,6 +488,417 @@ fn wave_only_hits_close_visitors_in_front_and_only_once() {
         );
         assert_eq!(world.points.score, if hit { 10 } else { 0 });
         assert_eq!(world.jelly[0].behaviour.bubble, 0.0);
+    }
+}
+
+#[test]
+fn charged_wave_requires_three_seconds_and_doubles_reach_and_width() {
+    for hz in [30, 60, 120] {
+        let mut world = encounter(true);
+        let mut events = Events::default();
+        for tick in 0..(3 * hz) {
+            water_wave(
+                &mut world,
+                1.0 / hz as f32,
+                Input {
+                    wave: tick == 0,
+                    wave_held: true,
+                    ..Input::default()
+                },
+                &mut events,
+            );
+            if tick < 3 * hz - 1 {
+                assert!(world.sabrina.wave.charging, "{hz} Hz, tick {tick}");
+                assert!(!events.wave_cast);
+                assert_eq!(world.sabrina.wave.cooldown, 0.0);
+            }
+        }
+        assert!(events.wave_cast);
+        assert!(!world.sabrina.wave.charging);
+        assert_eq!(world.sabrina.wave.scale, 2.0);
+        assert_eq!(world.sabrina.wave.cooldown, 9.0);
+        assert_eq!(wave_recharge_duration(&world), 9.0);
+    }
+}
+
+#[test]
+fn releasing_wave_early_casts_normal_and_cancellation_or_stun_does_not_cast() {
+    for cancel in [false, true] {
+        let mut world = encounter(true);
+        let mut events = Events::default();
+        water_wave(
+            &mut world,
+            0.01,
+            Input {
+                wave: true,
+                wave_held: true,
+                ..Input::default()
+            },
+            &mut events,
+        );
+        for _ in 0..298 {
+            water_wave(
+                &mut world,
+                0.01,
+                Input {
+                    wave_held: true,
+                    ..Input::default()
+                },
+                &mut events,
+            );
+        }
+        if cancel {
+            world.sabrina.wave.cancel_charge();
+        }
+        water_wave(&mut world, 0.01, Input::default(), &mut events);
+        assert_eq!(events.wave_cast, !cancel);
+        assert!(!world.sabrina.wave.charging);
+        assert_eq!(world.sabrina.wave.scale, 1.0);
+        assert_eq!(world.sabrina.wave.cooldown, if cancel { 0.0 } else { 3.0 });
+    }
+    let mut world = encounter(true);
+    let mut events = Events::default();
+    water_wave(
+        &mut world,
+        0.01,
+        Input {
+            wave: true,
+            wave_held: true,
+            ..Input::default()
+        },
+        &mut events,
+    );
+    world.sabrina.vitality.stunned = 1.0;
+    water_wave(&mut world, 0.01, Input::default(), &mut events);
+    assert!(!world.sabrina.wave.charging && !events.wave_cast);
+}
+
+#[test]
+fn holding_after_auto_release_never_repeats_and_new_tap_returns_to_normal() {
+    let mut world = World::default();
+    reset(
+        &mut world,
+        27,
+        Settings {
+            aquarium: true,
+            ..Settings::default()
+        },
+    );
+    for tick in 0..1000 {
+        step(
+            &mut world,
+            1.0 / 60.0,
+            Input {
+                wave: tick == 0,
+                wave_held: true,
+                ..Input::default()
+            },
+        );
+    }
+    assert_eq!(world.sabrina.wave.cast_id, 1);
+    assert_eq!(world.sabrina.wave.cooldown, 0.0);
+    let events = step(
+        &mut world,
+        1.0 / 60.0,
+        Input {
+            wave: true,
+            ..Input::default()
+        },
+    );
+    assert!(events.wave_cast);
+    assert_eq!(world.sabrina.wave.scale, 1.0);
+    assert_eq!(world.sabrina.wave.cooldown, 3.0);
+}
+
+#[test]
+fn charged_wave_doubles_width_and_crystal_cannot_interrupt_its_charge() {
+    for scale in [1.0, 2.0] {
+        let mut world = encounter(true);
+        world.sabrina.motion.pos = v(0.0, 8.0);
+        world.sabrina.wave.active = true;
+        world.sabrina.wave.cast_id = 1;
+        world.sabrina.wave.origin = v(0.0, 8.0);
+        world.sabrina.wave.scale = scale;
+        world.fish[0].life.active = true;
+        world.fish[0].motion.pos = v(4.0 * scale, 8.0 + 2.0 * scale);
+        world.fish[1].life.active = true;
+        world.fish[1].motion.pos = v(4.0 * scale, 8.0 + 3.0 * scale);
+        for _ in 0..75 {
+            water_wave(&mut world, 0.01, Input::default(), &mut Events::default());
+        }
+        assert_eq!(world.fish[0].rescue.wave_hit, 1);
+        assert_eq!(world.fish[1].rescue.wave_hit, 0);
+    }
+    let mut world = encounter(true);
+    world.sabrina.wave.charging = true;
+    crystal(
+        &mut world,
+        0.01,
+        Input {
+            cast: true,
+            ..Input::default()
+        },
+        &mut Events::default(),
+    );
+    assert_eq!(world.crystal.magic.state, Spell::Resting);
+    assert!(world.sabrina.wave.charging);
+}
+
+fn four_visitors() -> World {
+    let mut world = encounter(true);
+    for index in 0..JELLY_COUNT {
+        let id = allocate_entity(&mut world, EntityKind::Jelly, index as i32);
+        world.jelly[index] = JellyEntity {
+            id,
+            motion: Motion {
+                pos: v(index as f32 * 4.0, 8.0),
+                ..Motion::default()
+            },
+            behaviour: JellyBehaviour {
+                state: JellyState::Hungry,
+                ..JellyBehaviour::default()
+            },
+        };
+    }
+    world
+}
+
+#[test]
+fn wave_sweeps_multiple_visitors_once_with_the_same_range_as_fish() {
+    for charged in [false, true] {
+        let mut world = four_visitors();
+        world.sabrina.motion.pos = v(0.0, 8.0);
+        let scale = if charged { 2.0 } else { 1.0 };
+        for (index, jelly) in world.jelly.iter_mut().enumerate() {
+            jelly.motion.pos = v((3.0 + index as f32 * 0.5) * scale, 8.5);
+        }
+        world.fish[0].motion.pos = v(5.5 * scale, 8.5);
+        world.fish[0].life.active = true;
+        world.fish[1].motion.pos = v(9.0 * scale, 8.5);
+        world.fish[1].life.active = true;
+        let mut events = Events::default();
+        water_wave(
+            &mut world,
+            0.01,
+            Input {
+                wave: true,
+                wave_held: charged,
+                ..Input::default()
+            },
+            &mut events,
+        );
+        if charged {
+            for _ in 0..299 {
+                water_wave(
+                    &mut world,
+                    0.01,
+                    Input {
+                        wave_held: true,
+                        ..Input::default()
+                    },
+                    &mut events,
+                );
+            }
+        }
+        for _ in 0..100 {
+            water_wave(&mut world, 0.01, Input::default(), &mut events);
+        }
+        for jelly in world.jelly {
+            assert_eq!(jelly.behaviour.health, 90.0);
+            assert!(jelly.behaviour.knockback.x > 0.0);
+        }
+        assert_eq!(world.fish[0].rescue.wave_hit, world.sabrina.wave.cast_id);
+        assert_ne!(world.fish[1].rescue.wave_hit, world.sabrina.wave.cast_id);
+        assert_eq!(world.points.score, 40);
+    }
+}
+
+#[test]
+fn crystal_chains_four_distinct_targets_with_halved_damage_and_full_bubbles() {
+    for gentle in [false, true] {
+        let mut world = four_visitors();
+        world.settings.gentle = gentle;
+        world.crystal.magic.state = Spell::Flying;
+        world.crystal.motion.pos = v(-2.0, 8.0);
+        world.crystal.motion.direction = v(1.0, 0.0);
+        world.sabrina.cooldown = 12.0;
+        let mut events = Events::default();
+        for count in 1..=4 {
+            for _ in 0..100 {
+                crystal(&mut world, 0.01, Input::default(), &mut events);
+                if world.crystal.magic.state == Spell::Burst {
+                    break;
+                }
+            }
+            assert_eq!(world.crystal.magic.hit_count, count);
+            assert_eq!(world.crystal.magic.state, Spell::Burst);
+            assert_eq!(
+                world.jelly[count - 1].behaviour.health,
+                100.0 - 40.0 * 0.5_f32.powi(count as i32 - 1)
+            );
+            assert_eq!(world.jelly[count - 1].behaviour.bubble, 3.0);
+            assert_eq!(world.sabrina.cooldown, 12.0 + 2.0 * (count - 1) as f32);
+            assert_eq!(recharge_duration(&world), world.sabrina.cooldown);
+            if count < 4 {
+                crystal(&mut world, 1.4, Input::default(), &mut events);
+                assert!(crystal_chain_target(&world).is_some());
+                crystal(
+                    &mut world,
+                    0.01,
+                    Input {
+                        cast: true,
+                        ..Input::default()
+                    },
+                    &mut events,
+                );
+                assert_eq!(world.crystal.magic.state, Spell::Flying);
+            }
+        }
+        assert!(crystal_chain_target(&world).is_none());
+        crystal(
+            &mut world,
+            0.21,
+            Input {
+                cast: true,
+                ..Input::default()
+            },
+            &mut events,
+        );
+        assert_eq!(world.crystal.magic.state, Spell::Returning);
+        assert_eq!(world.points.score, 75);
+        world.crystal.magic.state = Spell::Resting;
+        world.sabrina.cooldown = 0.0;
+        crystal(
+            &mut world,
+            0.01,
+            Input {
+                cast: true,
+                ..Input::default()
+            },
+            &mut events,
+        );
+        assert_eq!(world.crystal.magic.state, Spell::Charging);
+        assert_eq!(world.crystal.magic.hit_count, 0);
+        assert_eq!(recharge_duration(&world), 12.0);
+    }
+}
+
+#[test]
+fn crystal_chain_window_expires_and_never_queues_early_presses() {
+    for delay in [1.49, 1.5, 1.51] {
+        let mut world = four_visitors();
+        world.crystal.magic.state = Spell::Burst;
+        world.crystal.magic.hits[0] = world.jelly[0].id;
+        world.crystal.magic.hit_count = 1;
+        world.crystal.motion.pos = world.jelly[0].motion.pos;
+        world.sabrina.cooldown = 10.0;
+        let mut events = Events::default();
+        crystal(
+            &mut world,
+            delay,
+            Input {
+                cast: true,
+                ..Input::default()
+            },
+            &mut events,
+        );
+        assert_eq!(
+            world.crystal.magic.state,
+            if delay <= 1.5 {
+                Spell::Flying
+            } else {
+                Spell::Returning
+            }
+        );
+        assert_eq!(world.sabrina.cooldown, 10.0);
+    }
+    let mut world = four_visitors();
+    world.crystal.magic.state = Spell::Flying;
+    world.crystal.motion.pos = v(-2.0, 8.0);
+    world.crystal.motion.direction = v(1.0, 0.0);
+    let mut events = Events::default();
+    crystal(
+        &mut world,
+        0.1,
+        Input {
+            cast: true,
+            ..Input::default()
+        },
+        &mut events,
+    );
+    assert_eq!(world.crystal.magic.state, Spell::Burst);
+    crystal(&mut world, 0.01, Input::default(), &mut events);
+    assert_eq!(world.crystal.magic.state, Spell::Burst);
+}
+
+#[test]
+fn crystal_followups_ignore_previous_hidden_and_defeated_but_accept_distant_targets() {
+    let mut world = four_visitors();
+    world.crystal.magic.state = Spell::Burst;
+    world.crystal.magic.hit_count = 1;
+    world.crystal.magic.hits[0] = world.jelly[0].id;
+    world.crystal.motion.pos = world.jelly[0].motion.pos;
+    world.jelly[1].behaviour.state = JellyState::Hidden;
+    world.jelly[2].behaviour.health = 0.0;
+    world.jelly[3].behaviour.state = JellyState::Hidden;
+    assert!(crystal_chain_target(&world).is_none());
+    world.jelly[3].behaviour.state = JellyState::Hungry;
+    world.jelly[3].motion.pos.x = 30.0;
+    assert_eq!(crystal_chain_target(&world), Some(world.jelly[3].id));
+    world.sabrina.vitality.stunned = 1.0;
+    crystal(
+        &mut world,
+        0.01,
+        Input {
+            cast: true,
+            ..Input::default()
+        },
+        &mut Events::default(),
+    );
+    assert_eq!(world.crystal.magic.state, Spell::Burst);
+}
+
+#[test]
+fn crystal_followup_homes_across_the_scene_and_tracks_moving_targets() {
+    for side in [-1.0, 1.0] {
+        for gentle in [false, true] {
+            let mut world = four_visitors();
+            world.settings.gentle = gentle;
+            for jelly in &mut world.jelly[2..] {
+                jelly.behaviour.state = JellyState::Hidden;
+            }
+            world.jelly[0].motion.pos = v(-14.0 * side, 4.0);
+            world.jelly[1].motion.pos = v(14.0 * side, 13.0);
+            world.crystal.motion.pos = world.jelly[0].motion.pos;
+            world.crystal.motion.direction = v(-side, 0.0);
+            world.crystal.magic.state = Spell::Burst;
+            world.crystal.magic.hit_count = 1;
+            world.crystal.magic.hits[0] = world.jelly[0].id;
+            let mut events = Events::default();
+            crystal(
+                &mut world,
+                0.01,
+                Input {
+                    cast: true,
+                    ..Input::default()
+                },
+                &mut events,
+            );
+            assert_eq!(world.crystal.magic.target, world.jelly[1].id);
+            assert!(world.crystal.motion.direction.x * side > 0.0);
+            for tick in 0..400 {
+                world.jelly[1].motion.pos.y = 13.0 + (tick as f32 * 0.03).sin();
+                crystal(&mut world, 0.01, Input::default(), &mut events);
+                if world.crystal.magic.hit_count == 2 {
+                    break;
+                }
+                assert_eq!(world.crystal.magic.state, Spell::Flying);
+            }
+            assert_eq!(world.crystal.magic.hit_count, 2);
+            assert_eq!(world.jelly[0].behaviour.health, 100.0);
+            assert_eq!(world.jelly[1].behaviour.health, 80.0);
+            assert_eq!(world.jelly[1].behaviour.bubble, 3.0);
+        }
     }
 }
 
@@ -308,6 +1027,155 @@ fn safe_crystal_collection_and_empty_casts_award_nothing() {
 }
 
 #[test]
+fn departing_threats_ignore_health_but_respect_bubbles() {
+    for health in [0.0, 100.0] {
+        for bubbled in [false, true] {
+            let mut world = encounter(true);
+            world.jelly[0].behaviour.state = JellyState::Leaving;
+            world.jelly[0].behaviour.health = health;
+            world.jelly[0].behaviour.bubble = if bubbled { 1.0 } else { 0.0 };
+            assert_eq!(dangerous(&world.jelly[0]), !bubbled);
+            assert_eq!(
+                threat_distance(&world, v(2.0, 8.0)),
+                if bubbled { f32::INFINITY } else { 2.0 }
+            );
+        }
+    }
+}
+
+#[test]
+fn fish_avoid_defeated_departing_visitors() {
+    let speed = |state| {
+        let mut world = encounter(true);
+        for fish in &mut world.fish {
+            fish.life.active = false;
+        }
+        world.fish[0].life.active = true;
+        world.fish[0].motion.pos = v(2.0, 8.0);
+        world.fish[0].motion.direction = v(1.0, 0.0);
+        world.fish[0].swimming.cruise_heading = 0.0;
+        world.fish[0].swimming.turn_in = 10.0;
+        world.jelly[0].behaviour.state = state;
+        world.jelly[0].behaviour.health = 0.0;
+        fish::fish_swimming(&mut world, 0.1);
+        world.fish[0].motion.velocity.x
+    };
+    assert!(speed(JellyState::Leaving) > speed(JellyState::Hidden));
+}
+
+#[test]
+fn crystal_rescues_fish_from_departing_visitors_without_damaging_them() {
+    for health in [0.0, 100.0] {
+        let mut world = encounter(true);
+        world.jelly[0].behaviour.state = JellyState::Leaving;
+        world.jelly[0].behaviour.health = health;
+        world.sabrina.motion.pos = v(-2.0, 8.0);
+        world.fish[0].motion.pos = world.sabrina.motion.pos + crystal_orbit(&world, 0.0).offset;
+        let mut events = Events::default();
+        crystal(
+            &mut world,
+            0.01,
+            Input {
+                cast: true,
+                ..Input::default()
+            },
+            &mut events,
+        );
+        assert_eq!(events.teleported, 1);
+        assert_eq!(world.points.score, RESCUE_POINTS);
+        assert_eq!(world.points.visit_rescues, 1);
+        damage_jelly(&mut world, 0, CRYSTAL_DAMAGE, true, &mut events);
+        damage_jelly(&mut world, 0, WAVE_DAMAGE, false, &mut events);
+        assert_eq!(world.jelly[0].behaviour.health, health);
+        assert_eq!(world.points.score, RESCUE_POINTS);
+        assert_eq!(events.repelled, 0);
+        assert!(!events.jelly_hit);
+        world.crystal.magic.state = Spell::Burst;
+        world.crystal.magic.hit_count = 1;
+        world.crystal.magic.time = 0.0;
+        assert_eq!(crystal_chain_target(&world), None);
+    }
+}
+
+#[test]
+fn song_rescue_requires_clearance_from_departing_visitors() {
+    for health in [0.0, 100.0] {
+        let mut world = encounter(true);
+        world.jelly[0].behaviour.state = JellyState::Leaving;
+        world.jelly[0].behaviour.health = health;
+        world.sabrina.motion.pos = v(2.0, 8.0);
+        world.sabrina.song.active = true;
+        world.sabrina.song.strength = 1.0;
+        world.fish[0].motion.pos = v(2.0, 8.0);
+        fish::fish_swimming(&mut world, 0.5);
+        assert_eq!(world.fish[0].rescue.song_risk_cycle, world.session.cycle);
+        world.fish[0].motion.pos = v(5.99, 8.0);
+        world.sabrina.motion.pos = world.fish[0].motion.pos;
+        fish::fish_swimming(&mut world, 0.5);
+        assert_eq!(world.points.visit_rescues, 0);
+        world.fish[0].motion.pos = v(6.0, 8.0);
+        world.sabrina.motion.pos = world.fish[0].motion.pos;
+        fish::fish_swimming(&mut world, 0.01);
+        assert_eq!(world.points.score, RESCUE_POINTS);
+        assert_eq!(world.points.visit_rescues, 1);
+    }
+}
+
+#[test]
+fn pending_rescue_clearance_includes_bubbled_departures() {
+    for song in [false, true] {
+        let mut world = encounter(true);
+        world.jelly[0].behaviour.state = JellyState::Leaving;
+        world.jelly[0].behaviour.health = 0.0;
+        world.jelly[0].behaviour.bubble = 1.0;
+        world.fish[0].motion.pos = v(5.99, 8.0);
+        if song {
+            world.sabrina.motion.pos = world.fish[0].motion.pos;
+            world.sabrina.song.active = true;
+            world.sabrina.song.strength = 1.0;
+            world.fish[0].rescue.song_risk_cycle = world.session.cycle;
+            world.fish[0].rescue.song_escort = 1.0;
+            fish::fish_swimming(&mut world, 0.01);
+        } else {
+            world.fish[0].rescue.wave_escape = 0.01;
+            recovery_and_scoring(&mut world, 0.02, &mut Events::default());
+        }
+        assert_eq!(world.points.visit_rescues, 0);
+    }
+}
+
+#[test]
+fn wave_rescues_fish_from_departures_only_when_clear_at_escape_time() {
+    for health in [0.0, 100.0] {
+        for distance in [5.99, 6.0] {
+            let mut world = encounter(true);
+            world.sabrina.motion.pos = v(0.0, 8.0);
+            world.jelly[0].behaviour.state = JellyState::Leaving;
+            world.jelly[0].behaviour.health = health;
+            world.jelly[0].motion.pos = v(-1.5, 8.5);
+            world.fish[0].motion.pos = v(2.0, 8.5);
+            let mut events = Events::default();
+            water_wave(
+                &mut world,
+                0.5,
+                Input {
+                    wave: true,
+                    ..Input::default()
+                },
+                &mut events,
+            );
+            assert!(world.fish[0].rescue.wave_escape > 0.0);
+            assert_eq!(world.points.score, 0);
+            world.fish[0].motion.pos = world.jelly[0].motion.pos + v(distance, 0.0);
+            recovery_and_scoring(&mut world, 1.1, &mut events);
+            let escaped = distance >= 6.0;
+            assert_eq!(world.points.visit_rescues, i32::from(escaped));
+            assert_eq!(world.points.score, if escaped { RESCUE_POINTS } else { 0 });
+        }
+    }
+}
+
+#[test]
 fn threatened_crystal_collection_earns_one_shared_rescue_reward() {
     let mut world = encounter(true);
     world.sabrina.motion.pos = v(-2.0, 8.0);
@@ -347,7 +1215,7 @@ fn wave_rescue_waits_for_survival_and_real_separation() {
 }
 
 #[test]
-fn survivor_bonus_requires_every_visitor_defeated_and_never_pays_twice() {
+fn survivor_bonus_requires_every_visitor_gone_and_never_pays_twice() {
     let mut world = encounter(true);
     let count = alive(&world);
     let mut events = Events::default();
@@ -355,6 +1223,9 @@ fn survivor_bonus_requires_every_visitor_defeated_and_never_pays_twice() {
     assert!(!events.visit_ended);
     assert_eq!(world.points.score, 0);
     damage_jelly(&mut world, 0, 100.0, true, &mut events);
+    recovery_and_scoring(&mut world, 0.01, &mut events);
+    assert!(!events.visit_ended);
+    world.jelly[0].behaviour.state = JellyState::Hidden;
     recovery_and_scoring(&mut world, 0.01, &mut events);
     assert!(events.visit_ended);
     assert_eq!(world.points.last_score, 200 + count * SURVIVOR_POINTS);
@@ -376,7 +1247,7 @@ fn survivor_bonus_requires_every_visitor_defeated_and_never_pays_twice() {
 }
 
 #[test]
-fn multiple_visitors_must_all_be_defeated_before_survivor_bonus() {
+fn multiple_visitors_must_all_disappear_before_survivor_bonus() {
     let mut world = encounter(true);
     world.jelly[1].behaviour.state = JellyState::Hungry;
     let mut events = Events::default();
@@ -385,6 +1256,10 @@ fn multiple_visitors_must_all_be_defeated_before_survivor_bonus() {
     assert!(!events.visit_ended);
     assert_eq!(world.points.score, 200);
     damage_jelly(&mut world, 1, 100.0, true, &mut events);
+    world.jelly[0].behaviour.state = JellyState::Hidden;
+    recovery_and_scoring(&mut world, 0.01, &mut events);
+    assert!(!events.visit_ended);
+    world.jelly[1].behaviour.state = JellyState::Hidden;
     recovery_and_scoring(&mut world, 0.01, &mut events);
     assert!(events.visit_ended);
     assert_eq!(world.points.score, 400 + alive(&world) * SURVIVOR_POINTS);
@@ -536,6 +1411,104 @@ fn progression_is_monotonic_bounded_and_respects_visitor_limit() {
 }
 
 #[test]
+fn arrivals_finish_without_singing_in_the_final_round() {
+    for gentle in [false, true] {
+        let mut world = encounter(gentle);
+        world.session.cycle = FINAL_ROUND - 1;
+        begin_visit(&mut world);
+        assert!(!world.sabrina.song.active);
+        for _ in 0..240 {
+            jellyfish::jellyfish_and_contacts(&mut world, 1.0 / 60.0, &mut Events::default());
+        }
+        assert!(
+            world
+                .jelly
+                .iter()
+                .all(|j| j.behaviour.state == JellyState::Arriving)
+        );
+        for _ in 0..32 {
+            jellyfish::jellyfish_and_contacts(&mut world, 1.0 / 60.0, &mut Events::default());
+        }
+        for jelly in &world.jelly {
+            assert_eq!(jelly.behaviour.state, JellyState::Hungry);
+            assert!(jelly.motion.velocity.length() > 0.0);
+        }
+    }
+}
+
+#[test]
+fn final_round_arrivals_keep_swimming_with_one_surviving_fish() {
+    for gentle in [false, true] {
+        for seed in [27, 54, 91] {
+            let mut world = World::default();
+            reset(
+                &mut world,
+                seed,
+                Settings {
+                    gentle,
+                    ..Settings::default()
+                },
+            );
+            world.session.cycle = FINAL_ROUND - 1;
+            begin_visit(&mut world);
+            world.sabrina.motion.pos = v(-14.0, 16.0);
+            world.sabrina.vitality.invulnerable = 1000.0;
+            for (index, fish) in world.fish.iter_mut().enumerate() {
+                fish.life.active = index == 0;
+                fish.rescue.shield = 1000.0;
+            }
+            // Opposing arrivals at the same height must not push against each other forever.
+            for jelly in &mut world.jelly {
+                jelly.behaviour.phase = 0.0;
+            }
+            for _ in 0..40 * 60 {
+                step(&mut world, 1.0 / 60.0, Input::default());
+            }
+            let start = world.jelly.map(|jelly| jelly.motion.pos);
+            let mut excursions = [0.0_f32; JELLY_COUNT];
+            for _ in 0..15 * 60 {
+                step(&mut world, 1.0 / 60.0, Input::default());
+                for (index, jelly) in world.jelly.iter().enumerate() {
+                    excursions[index] =
+                        excursions[index].max((jelly.motion.pos - start[index]).length());
+                }
+            }
+            assert_eq!(alive(&world), 1);
+            assert!(!world.session.finished());
+            for (index, excursion) in excursions.into_iter().enumerate() {
+                // Arrival bobbing spans only 0.3 units; require actual swimming beyond it.
+                assert!(
+                    excursion > 0.5,
+                    "Visitor {index} moved only {excursion:.3} units in 15s: gentle={gentle}, seed={seed}, start={:?}, end={:?}, fish={:?}, velocity={:?}",
+                    start[index],
+                    world.jelly[index].motion.pos,
+                    world.fish[0].motion.pos,
+                    world.jelly[index].motion.velocity
+                );
+                assert_eq!(world.jelly[index].behaviour.state, JellyState::Hungry);
+            }
+        }
+    }
+}
+
+#[test]
+fn arrival_completion_preserves_bubble_immobilization() {
+    let mut world = encounter(true);
+    world.jelly[0].behaviour.state = JellyState::Arriving;
+    world.jelly[0].behaviour.time = 4.5;
+    world.jelly[0].behaviour.bubble = 0.5;
+    let position = world.jelly[0].motion.pos;
+    for _ in 0..2 {
+        jellyfish::jellyfish_and_contacts(&mut world, 0.25, &mut Events::default());
+        assert_eq!(world.jelly[0].motion.pos, position);
+        assert_eq!(world.jelly[0].behaviour.state, JellyState::Arriving);
+    }
+    jellyfish::jellyfish_and_contacts(&mut world, 1.0 / 60.0, &mut Events::default());
+    assert_eq!(world.jelly[0].behaviour.state, JellyState::Hungry);
+    assert!(world.jelly[0].motion.velocity.length() > 0.0);
+}
+
+#[test]
 fn tenth_round_always_spawns_four_and_finishes_in_victory_once() {
     for gentle in [false, true] {
         for limit in 1..=3 {
@@ -550,6 +1523,11 @@ fn tenth_round_always_spawns_four_and_finishes_in_victory_once() {
             let mut events = Events::default();
             for index in 0..4 {
                 damage_jelly(&mut world, index, 100.0, true, &mut events);
+                recovery_and_scoring(&mut world, 0.0, &mut events);
+                assert!(!world.session.victory);
+            }
+            for index in 0..4 {
+                world.jelly[index].behaviour.state = JellyState::Hidden;
                 recovery_and_scoring(&mut world, 0.0, &mut events);
                 assert_eq!(world.session.victory, index == 3);
             }
@@ -567,6 +1545,7 @@ fn tenth_round_always_spawns_four_and_finishes_in_victory_once() {
                         cast: true,
                         wave: true,
                         toggle_song: true,
+                        ..Input::default()
                     },
                 );
                 assert!(!events.victory && !events.visit_ended && !events.game_over);
@@ -642,6 +1621,7 @@ fn complete_game_has_exactly_ten_rounds_and_accumulates_each_score() {
         let mut events = Events::default();
         for index in 0..JELLY_COUNT {
             damage_jelly(&mut world, index, 100.0, true, &mut events);
+            world.jelly[index].behaviour.state = JellyState::Hidden;
         }
         recovery_and_scoring(&mut world, 0.0, &mut events);
         total += visitors * 200 + alive(&world) * SURVIVOR_POINTS;

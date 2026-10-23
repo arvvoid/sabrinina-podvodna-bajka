@@ -1,4 +1,5 @@
-Sabrina’s Underwater Fairy Tale — a 3D remake
+Sabrina’s Underwater Fairy Tale
+A little sea, from Scratch to 3D
 
 Development and remake
 Luka Dežulović
@@ -6,7 +7,36 @@ Luka Dežulović
 Original idea
 Sabrina Dežulović
 
-The game began in Scratch from an idea by Sabrina Dežulović. Luka Dežulović is remaking that little underwater world in 3D, preserving its mermaid magic, tropical fish and calm aquarium moments.
+It started with Sabrina’s idea: a mermaid, tropical fish, a magic crystal, and a little underwater world to look after.
+
+The first version found its home in Scratch. This remake gives that same little sea some more room, with reefs to swim around and fish to keep you company.
+
+Luka is rebuilding it in 3D, keeping the things that made the original feel like Sabrina’s world. There is still a song to sing, a school of fish to protect, and time for a quiet swim when the jellyfish are gone.
+
+It is a small game, still growing. The swimming, the creatures and their little details are works in progress. Thank you for spending a little time here.
+
+Written in Rust. Powered by Bevy. Built with open-source tools.
+
+Third-party tools and libraries
+Rust and Cargo — the Rust project and contributors
+Bevy — the Bevy project and contributors
+Blender — the Blender Foundation and contributors
+
+Fonts
+Alegreya — Juan Pablo del Peral / Huerta Tipográfica
+SIL Open Font License 1.1
+DejaVu Sans — DejaVu fonts project
+
+Music rendering and SoundFont
+FluidSynth — the FluidSynth project and contributors
+FluidR3 General MIDI — Frank Wen and Toby Smithe
+MIT-licensed instrument samples used to render the music.
+The SoundFont and FluidSynth are not required at runtime.
+
+For the full dependency list and license notices, see:
+licenses/THIRD_PARTY_LICENSES.txt
 
 Play the original Scratch project:
 https://scratch.mit.edu/projects/1203591608/
+
+And now, back to the fish.

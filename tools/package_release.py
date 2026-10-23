@@ -14,6 +14,7 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[1]
 ASSET_NOTICES = (
     "fonts/LICENSE-DejaVu.txt",
+    "fonts/LICENSE-Alegreya.txt",
     "audio/LICENSE-FluidR3.txt",
 )
 
@@ -59,6 +60,7 @@ def package(binary, name, archive_format, output, platform=None):
             if not source.is_file():
                 raise FileNotFoundError(source)
             shutil.copy2(source, folder / "licenses" / source.name)
+        shutil.copy2(ROOT / "THIRD_PARTY_LICENSES.txt", folder / "licenses/THIRD_PARTY_LICENSES.txt")
         for filename in ("LICENSE", "NOTICE"):
             shutil.copy2(ROOT / filename, folder / filename)
         shutil.copy2(ROOT / "ASSET_LICENSE.md", folder / "licenses/ASSET_LICENSE.txt")

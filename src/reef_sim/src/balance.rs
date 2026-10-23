@@ -6,7 +6,13 @@ use crate::*;
 pub const CRYSTAL_DAMAGE: f32 = 40.0;
 pub const WAVE_DAMAGE: f32 = 10.0;
 pub const BUBBLE_SECONDS: f32 = 3.0;
-pub const WAVE_REACH: f32 = 2.5;
+pub const WAVE_REACH: f32 = 5.5;
+pub const WAVE_CHARGE_SECONDS: f32 = 3.0;
+pub const WAVE_COOLDOWN: f32 = 3.0;
+pub const CHARGED_WAVE_COOLDOWN: f32 = 9.0;
+pub const CRYSTAL_COOLDOWN: f32 = 12.0;
+pub const CRYSTAL_CHAIN_COOLDOWN: f32 = 2.0;
+pub const CRYSTAL_CHAIN_SECONDS: f32 = 1.5;
 pub const RESCUE_POINTS: i32 = 50;
 pub const SURVIVOR_POINTS: i32 = 25;
 pub const RETREAT_POINTS: i32 = 100;
@@ -39,11 +45,12 @@ pub fn award_rescue(world: &mut World, index: usize) {
 }
 
 pub fn dangerous(jellyfish: &JellyEntity) -> bool {
-    matches!(
-        jellyfish.behaviour.state,
-        JellyState::Arriving | JellyState::Hungry
-    ) && jellyfish.behaviour.bubble <= 0.0
-        && jellyfish.behaviour.health > 0.0
+    jellyfish.behaviour.bubble <= 0.0
+        && (jellyfish.behaviour.state == JellyState::Leaving
+            || (matches!(
+                jellyfish.behaviour.state,
+                JellyState::Arriving | JellyState::Hungry
+            ) && jellyfish.behaviour.health > 0.0))
 }
 
 pub fn threat_distance(world: &World, position: V2) -> f32 {

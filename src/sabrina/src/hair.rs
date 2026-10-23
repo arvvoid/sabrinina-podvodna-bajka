@@ -61,7 +61,7 @@ impl HairBone {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 struct Spring {
     angle: Vec2,
     velocity: Vec2,
@@ -84,10 +84,15 @@ impl Spring {
     }
 }
 
-#[derive(Resource, Default)]
+#[derive(Resource, Default, Clone)]
 struct HairMotion {
     previous: Option<(f32, Vec2, Vec2)>,
     impulse: Vec2,
+}
+
+struct ReadingHair {
+    motion: HairMotion,
+    bones: Vec<(Entity, Spring, Quat)>,
 }
 
 fn angle_delta(current: f32, previous: f32) -> f32 {
@@ -204,9 +209,35 @@ fn bind(
 fn flow(
     rendered: Res<Presentation>,
     preferences: Res<Preferences>,
+    ui: Res<crate::app::SessionUi>,
     mut motion: ResMut<HairMotion>,
-    mut bones: Query<(&mut Transform, &mut HairBone)>,
+    mut bones: Query<(Entity, &mut Transform, &mut HairBone)>,
+    mut reading: Local<Option<ReadingHair>>,
 ) {
+    if ui.loaded && ui.screen.is_reading() {
+        if reading.is_none() {
+            *reading = Some(ReadingHair {
+                motion: motion.clone(),
+                bones: bones
+                    .iter()
+                    .map(|(entity, transform, bone)| {
+                        (entity, bone.spring.clone(), transform.rotation)
+                    })
+                    .collect(),
+            });
+        }
+    } else if let Some(saved) = reading.take() {
+        *motion = saved.motion;
+        for (entity, spring, rotation) in saved.bones {
+            if let Ok((_, mut transform, mut bone)) = bones.get_mut(entity) {
+                bone.spring = spring;
+                transform.rotation = rotation;
+            }
+        }
+        if ui.scene_paused() {
+            return;
+        }
+    }
     if bones.is_empty() {
         return;
     }
@@ -216,7 +247,7 @@ fn flow(
     let heading = Vec2::new(sabrina.swimming.pitch, sabrina.swimming.yaw);
     let Some((previous_time, previous_velocity, previous_heading)) = motion.previous else {
         motion.previous = Some((time, velocity, heading));
-        for (mut transform, bone) in &mut bones {
+        for (_, mut transform, bone) in &mut bones {
             transform.rotation = bone.rotation();
         }
         return;
@@ -230,7 +261,7 @@ fn flow(
     if !(0.0..=0.5).contains(&dt) {
         // A restart or long discontinuity is not a physical acceleration.
         motion.impulse = Vec2::ZERO;
-        for (mut transform, mut bone) in &mut bones {
+        for (_, mut transform, mut bone) in &mut bones {
             bone.spring = Spring {
                 angle: rest_angle(bone.segment),
                 ..default()
@@ -253,7 +284,7 @@ fn flow(
         1.0
     };
     let effort = (velocity.length() / 7.2).clamp(0.0, 1.0);
-    for (mut transform, mut bone) in &mut bones {
+    for (_, mut transform, mut bone) in &mut bones {
         let target = target_angle(
             time,
             effort,
@@ -280,6 +311,7 @@ fn currents(
     rendered: Res<Presentation>,
     preferences: Res<Preferences>,
     mut materials: ResMut<Assets<HairMaterial>>,
+    surfaces: Query<&MeshMaterial3d<HairMaterial>>,
 ) {
     let next = settings(
         rendered.0.session.time,
@@ -287,8 +319,12 @@ fn currents(
         preferences.reduced_motion,
         rendered.0.sabrina.vitality.hurt_flash,
     );
-    for (_, material) in materials.iter_mut() {
-        if material.extension.settings != next {
+    for handle in &surfaces {
+        if materials
+            .get(&handle.0)
+            .is_some_and(|material| material.extension.settings != next)
+        {
+            let mut material = materials.get_mut(&handle.0).unwrap();
             material.extension.settings = next;
         }
     }
@@ -297,6 +333,73 @@ fn currents(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn hair_preserves_textures_motion_damage_and_unchanged_assets() {
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, AssetPlugin::default()))
+            .init_asset::<StandardMaterial>()
+            .init_asset::<HairMaterial>()
+            .init_resource::<Preferences>()
+            .init_resource::<Presentation>()
+            .add_systems(Update, (bind, currents).chain());
+        let texture = Handle::<Image>::default();
+        let normal = app
+            .world_mut()
+            .resource_mut::<Assets<StandardMaterial>>()
+            .add(StandardMaterial {
+                base_color_texture: Some(texture.clone()),
+                normal_map_texture: Some(texture.clone()),
+                ..default()
+            });
+        let entity = app
+            .world_mut()
+            .spawn((
+                CharacterSurface {
+                    actor: Actor::Sabrina,
+                    normal: normal.clone(),
+                    hurt: normal.clone(),
+                },
+                bevy::gltf::GltfMaterialName("Sabrina_Hair".into()),
+                MeshMaterial3d(normal),
+            ))
+            .id();
+        app.update();
+        let handle = app
+            .world()
+            .get::<MeshMaterial3d<HairMaterial>>(entity)
+            .unwrap()
+            .0
+            .clone();
+        app.world_mut()
+            .resource_mut::<Presentation>()
+            .0
+            .sabrina
+            .vitality
+            .hurt_flash = 1.0;
+        app.update();
+        let material = app
+            .world()
+            .resource::<Assets<HairMaterial>>()
+            .get(&handle)
+            .unwrap();
+        assert_eq!(material.extension.settings.w, 1.0);
+        assert_eq!(material.base.base_color_texture, Some(texture.clone()));
+        assert_eq!(material.base.normal_map_texture, Some(texture));
+        assert_eq!(material.base.anisotropy_strength, 0.35);
+        assert_eq!(material.base.alpha_mode, AlphaMode::Opaque);
+        app.update();
+        app.world_mut()
+            .resource_mut::<Messages<AssetEvent<HairMaterial>>>()
+            .clear();
+        app.update();
+        assert!(
+            !app.world_mut()
+                .resource_mut::<Messages<AssetEvent<HairMaterial>>>()
+                .drain()
+                .any(|event| matches!(event, AssetEvent::Modified { .. }))
+        );
+    }
 
     #[test]
     fn currents_use_simulation_time_and_bound_motion_and_damage() {
@@ -333,6 +436,87 @@ mod tests {
         for name in ["Head", "Hair_Back_1", "Hair_5_1", "Hair_0_0", "Hair_0_6"] {
             assert!(HairBone::new(name, Quat::IDENTITY, Quat::IDENTITY).is_none());
         }
+    }
+
+    #[test]
+    fn reading_restores_hair_springs_and_motion_history() {
+        use crate::app::{Screen, SessionUi};
+
+        let mut app = App::new();
+        app.init_resource::<Presentation>()
+            .init_resource::<Preferences>()
+            .init_resource::<HairMotion>()
+            .insert_resource(SessionUi {
+                loaded: true,
+                screen: Screen::Pause,
+                ..default()
+            })
+            .add_systems(Update, flow);
+        let bone = app
+            .world_mut()
+            .spawn((
+                Transform::default(),
+                HairBone::new("Hair_0_1", Quat::IDENTITY, Quat::IDENTITY).unwrap(),
+            ))
+            .id();
+        for step in 0..30 {
+            app.world_mut()
+                .resource_mut::<Presentation>()
+                .0
+                .session
+                .time = 10.0 + step as f32 / 60.0;
+            app.update();
+        }
+        let saved_world = app.world().resource::<Presentation>().0.clone();
+        let saved_motion = app.world().resource::<HairMotion>().clone();
+        let saved_spring = app.world().get::<HairBone>(bone).unwrap().spring.clone();
+        let saved_transform = *app.world().get::<Transform>(bone).unwrap();
+        for reduced_motion in [false, true] {
+            app.world_mut().resource_mut::<Preferences>().reduced_motion = reduced_motion;
+            app.world_mut().resource_mut::<SessionUi>().screen = Screen::Help;
+            for step in 0..60 {
+                let mut rendered = app.world_mut().resource_mut::<Presentation>();
+                rendered.0.session.time = if reduced_motion {
+                    11.5
+                } else {
+                    step as f32 / 60.0
+                };
+                rendered.0.sabrina.motion.velocity = reef_sim::v(4.0, 1.0);
+                app.update();
+            }
+            assert_ne!(
+                app.world().get::<Transform>(bone).unwrap().rotation,
+                saved_transform.rotation
+            );
+            app.world_mut().resource_mut::<SessionUi>().screen = Screen::Credits;
+            app.update();
+            app.world_mut().resource_mut::<SessionUi>().screen = Screen::Pause;
+            app.world_mut().resource_mut::<Presentation>().0 = saved_world.clone();
+            for _ in 0..3 {
+                app.update();
+                let spring = &app.world().get::<HairBone>(bone).unwrap().spring;
+                let motion = app.world().resource::<HairMotion>();
+                assert_eq!(spring.angle, saved_spring.angle);
+                assert_eq!(spring.velocity, saved_spring.velocity);
+                assert_eq!(motion.previous, saved_motion.previous);
+                assert_eq!(motion.impulse, saved_motion.impulse);
+                assert_eq!(
+                    *app.world().get::<Transform>(bone).unwrap(),
+                    saved_transform
+                );
+            }
+        }
+        app.world_mut().resource_mut::<SessionUi>().screen = Screen::Playing;
+        app.world_mut()
+            .resource_mut::<Presentation>()
+            .0
+            .session
+            .time += 1.0 / 60.0;
+        app.update();
+        assert_ne!(
+            app.world().get::<Transform>(bone).unwrap().rotation,
+            saved_transform.rotation
+        );
     }
 
     #[test]

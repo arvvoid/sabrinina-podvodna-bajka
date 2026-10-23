@@ -3,8 +3,9 @@
 //! Sabrina movement, ability timers and swimming pose state.
 use crate::*;
 
-pub fn recharge_duration(_world: &World) -> f32 {
-    12.0
+pub fn recharge_duration(world: &World) -> f32 {
+    CRYSTAL_COOLDOWN
+        + CRYSTAL_CHAIN_COOLDOWN * world.crystal.magic.hit_count.saturating_sub(1) as f32
 }
 
 pub fn song_duration(world: &World) -> f32 {
@@ -15,8 +16,12 @@ pub fn song_recharge_duration(world: &World) -> f32 {
     if world.settings.gentle { 20.0 } else { 24.0 }
 }
 
-pub fn wave_recharge_duration(_world: &World) -> f32 {
-    3.0
+pub fn wave_recharge_duration(world: &World) -> f32 {
+    if world.sabrina.wave.scale > 1.0 {
+        CHARGED_WAVE_COOLDOWN
+    } else {
+        WAVE_COOLDOWN
+    }
 }
 
 pub fn song_radius(world: &World) -> f32 {
@@ -25,6 +30,12 @@ pub fn song_radius(world: &World) -> f32 {
     } else {
         0.0
     }
+}
+
+pub fn song_reaches(world: &World, position: V2) -> bool {
+    world.sabrina.song.active
+        && world.sabrina.song.strength > 0.05
+        && (position - world.sabrina.motion.pos).length() < song_radius(world)
 }
 
 pub fn toggle_song(world: &mut World) -> bool {
@@ -178,7 +189,7 @@ pub fn sabrina_pose(sabrina: &SabrinaEntity) -> SabrinaPose {
     if sabrina.throw_time >= 0.0 {
         return SabrinaPose::Throw;
     }
-    if sabrina.wave.active {
+    if sabrina.wave.active || sabrina.wave.charging {
         return SabrinaPose::Wave;
     }
     if sabrina.song.active {
@@ -207,7 +218,14 @@ pub fn sabrina_pose(sabrina: &SabrinaEntity) -> SabrinaPose {
 pub fn sabrina_pose_phase(sabrina: &SabrinaEntity) -> f32 {
     match sabrina_pose(sabrina) {
         SabrinaPose::Throw => (sabrina.throw_time / 1.6).clamp(0.0, 1.0),
-        SabrinaPose::Wave => (sabrina.wave.time / 0.75).clamp(0.0, 1.0),
+        SabrinaPose::Wave if sabrina.wave.charging => {
+            (sabrina.wave.charge_time / 0.25).min(1.0) * 0.35
+        }
+        SabrinaPose::Wave => {
+            let phase = (sabrina.wave.time / 0.75).clamp(0.0, 1.0);
+            let gathered = (sabrina.wave.charge_time / 0.25).clamp(0.0, 1.0) * 0.35;
+            gathered + phase * (1.0 - gathered)
+        }
         _ => (sabrina.swimming.phase % 6.28318530718) / 6.28318530718,
     }
 }
@@ -222,11 +240,16 @@ pub fn sabrina_visual_yaw(sabrina: &SabrinaEntity) -> f32 {
 /// Model-local axis/angle shared by the rendered arms and sampled contacts.
 pub fn sabrina_cast_rotation(sabrina: &SabrinaEntity) -> ([f32; 3], f32) {
     let (direction, blend_weight) = match sabrina_pose(sabrina) {
-        SabrinaPose::Wave => (
+        SabrinaPose::Wave if sabrina.wave.charging => (
             sabrina.wave.direction,
-            (sabrina.wave.time / 0.08).clamp(0.0, 1.0)
-                * ((0.75 - sabrina.wave.time) / 0.25).clamp(0.0, 1.0),
+            (sabrina.wave.charge_time / 0.25).clamp(0.0, 1.0),
         ),
+        SabrinaPose::Wave => (sabrina.wave.direction, {
+            let gathered = (sabrina.wave.charge_time / 0.25).clamp(0.0, 1.0);
+            let release = (sabrina.wave.time / 0.08).clamp(0.0, 1.0);
+            (gathered + (1.0 - gathered) * release)
+                * ((0.75 - sabrina.wave.time) / 0.25).clamp(0.0, 1.0)
+        }),
         SabrinaPose::Throw => (
             sabrina.throw_direction,
             (sabrina.throw_time / 0.3).clamp(0.0, 1.0)

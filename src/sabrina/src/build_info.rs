@@ -10,6 +10,14 @@ pub fn menu_label() -> String {
     format!("{VERSION} · {HASH} · {DATE}")
 }
 
+pub fn release_version() -> &'static str {
+    if VERSION == "DEV" {
+        env!("CARGO_PKG_VERSION")
+    } else {
+        VERSION
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -26,5 +34,18 @@ mod tests {
         assert_eq!(&DATE[4..5], "-");
         assert_eq!(&DATE[7..8], "-");
         assert_eq!(menu_label(), format!("{VERSION} · {HASH} · {DATE}"));
+    }
+
+    #[test]
+    fn update_version_uses_release_tag_or_package_version_for_development() {
+        assert_eq!(
+            release_version(),
+            if VERSION == "DEV" {
+                env!("CARGO_PKG_VERSION")
+            } else {
+                VERSION
+            }
+        );
+        semver::Version::parse(release_version().trim_start_matches('v')).unwrap();
     }
 }

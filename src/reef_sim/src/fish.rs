@@ -4,6 +4,14 @@
 use crate::*;
 
 pub fn fish_swimming(world: &mut World, dt: f32) {
+    swim(world, dt, true);
+}
+
+pub(crate) fn scenery_fish_swimming(world: &mut World, dt: f32) {
+    swim(world, dt, false);
+}
+
+fn swim(world: &mut World, dt: f32, interact_with_sabrina: bool) {
     // Each slot sees earlier slots' updated state. Preserve this order and the
     // random draws; parallel steering would change the simulation.
     for i in 0..FISH_COUNT {
@@ -73,16 +81,35 @@ pub fn fish_swimming(world: &mut World, dt: f32) {
             if k == i || !other.life.active {
                 continue;
             }
-            let d = (fish.motion.pos - other.motion.pos).length();
-            if d < 0.7 && d > 0.01 {
-                separation = separation + (fish.motion.pos - other.motion.pos).unit() * (0.7 - d)
+            let offset = fish.motion.pos - other.motion.pos;
+            let distance_squared = offset.dot(offset);
+            if other.rescue.teleport <= 0.0 && distance_squared < 16.0 {
+                let relative = fish.motion.velocity - other.motion.velocity;
+                let speed_squared = relative.dot(relative);
+                let ahead = if speed_squared > 0.001 {
+                    (-offset.dot(relative) / speed_squared).clamp(0.0, 1.2)
+                } else {
+                    0.0
+                };
+                let clearance = (fish.appearance.size + other.appearance.size) * 0.85 + 0.15;
+                let predicted = (offset + relative * ahead).length();
+                if predicted < clearance {
+                    // Both fish choose complementary vertical lanes, even head-on.
+                    let side = if offset.y.abs() > 0.1 {
+                        offset.y.signum()
+                    } else if i < k {
+                        1.0
+                    } else {
+                        -1.0
+                    };
+                    separation.y += side * (clearance - predicted) * 3.0;
+                }
             }
-            if other.appearance.species == fish.appearance.species && d < 3.0 {
+            if other.appearance.species == fish.appearance.species && distance_squared < 9.0 {
                 school = school + other.motion.velocity;
                 neighbours += 1;
             }
         }
-        desired_velocity = desired_velocity + separation * 0.8;
         if neighbours > 0 {
             desired_velocity = desired_velocity * 0.8 + school * (0.2 / neighbours as f32)
         }
@@ -97,9 +124,8 @@ pub fn fish_swimming(world: &mut World, dt: f32) {
         }
         let away = fish.motion.pos - world.sabrina.motion.pos;
         let radius = song_radius(world);
-        let hearing = world.sabrina.song.active
-            && world.sabrina.song.strength > 0.05
-            && away.length() < radius
+        let hearing = interact_with_sabrina
+            && song_reaches(world, fish.motion.pos)
             && fish.rescue.wave_flow <= 0.0;
         if hearing {
             let wake = if world.sabrina.motion.velocity.length() > 0.4 {
@@ -120,7 +146,11 @@ pub fn fish_swimming(world: &mut World, dt: f32) {
                 + (pull.unit() * (pull.length() * 2.0).min(3.8) * pulse
                     + world.sabrina.motion.velocity * 1.05)
                     * world.sabrina.song.strength;
-        } else if !world.sabrina.song.active && hungry(world) == 0 && away.length() < 1.5 {
+        } else if interact_with_sabrina
+            && !world.sabrina.song.active
+            && hungry(world) == 0
+            && away.length() < 1.5
+        {
             let mut push = away.unit();
             let mut nearest = 1000.0;
             for jellyfish in &world.jelly {
@@ -137,7 +167,7 @@ pub fn fish_swimming(world: &mut World, dt: f32) {
         for jellyfish in &world.jelly {
             if matches!(
                 jellyfish.behaviour.state,
-                JellyState::Hungry | JellyState::Arriving
+                JellyState::Hungry | JellyState::Arriving | JellyState::Leaving
             ) {
                 danger = danger.min((fish.motion.pos - jellyfish.motion.pos).length())
             }
@@ -166,6 +196,11 @@ pub fn fish_swimming(world: &mut World, dt: f32) {
             award_rescue(world, i);
             fish = world.fish[i];
         }
+        // Damped steering removes abrupt flips as neighbours enter or leave the lookahead.
+        let response = 1.0 - (-5.0 * dt).exp();
+        fish.swimming.avoidance =
+            fish.swimming.avoidance + (separation - fish.swimming.avoidance) * response;
+        desired_velocity = desired_velocity + fish.swimming.avoidance;
         let mut heading = fish.motion.direction.y.atan2(fish.motion.direction.x);
         let target = desired_velocity.y.atan2(desired_velocity.x);
         let change = (target - heading).sin().atan2((target - heading).cos());

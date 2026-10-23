@@ -201,6 +201,6 @@ pub fn reset(world: &mut World, seed: u32, mut settings: Settings) {
     settings.rest_seconds = settings.rest_seconds.clamp(25.0, 150.0);
     settings.visitor_limit = settings.visitor_limit.clamp(1, NORMAL_VISITOR_LIMIT);
     world.settings = settings;
-    world.session.rest_remaining = settings.rest_seconds;
+    world.session.rest_remaining = random_rest_duration(world);
     add_fish(world, 10, false);
 }
