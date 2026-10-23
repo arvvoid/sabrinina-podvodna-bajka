@@ -208,6 +208,28 @@ struct ButtonLabel {
 #[derive(Component)]
 struct Dynamic(&'static str);
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum HudTextValue {
+    Health(i32),
+    Stats(i32, i32),
+    Phase(bool, i32),
+    Reward(i32, bool),
+}
+
+#[derive(Component, Default)]
+struct HudTextCache(Option<(usize, HudTextValue)>);
+
+impl HudTextCache {
+    fn changed(&mut self, language: usize, value: HudTextValue) -> bool {
+        let next = Some((language, value));
+        if self.0 == next {
+            return false;
+        }
+        self.0 = next;
+        true
+    }
+}
+
 #[derive(Component)]
 struct Meter(&'static str, f32);
 
@@ -275,11 +297,33 @@ impl UiMaterial for AbilityIcon {
 #[derive(Resource, Default)]
 struct Focus {
     index: usize,
-    key: String,
+    key: Option<LayoutKey>,
+    update_status: Option<crate::updates::Status>,
     last_screen: Option<Screen>,
     count: usize,
     navigation: MenuNavigation,
     controller: Option<Entity>,
+}
+
+#[derive(Debug, PartialEq)]
+struct LayoutKey {
+    screen: Screen,
+    language: usize,
+    quality: u8,
+    flags: [bool; 7],
+    visitors: i32,
+    sliders: [f32; 4],
+    best: i32,
+    size: Vec2,
+    controls: Style,
+    rumble: u8,
+    tail: crate::settings::TailColor,
+}
+
+struct ButtonImages {
+    hover: Handle<Image>,
+    primary: Handle<Image>,
+    normal: Handle<Image>,
 }
 
 pub struct ReefUiPlugin;
@@ -460,7 +504,9 @@ impl Builder<'_, '_, '_> {
             ))
             .id();
         if let Some(key) = dynamic {
-            self.commands.entity(e).insert(Dynamic(key));
+            self.commands
+                .entity(e)
+                .insert((Dynamic(key), HudTextCache::default()));
         }
         if self.background_alpha < 1.0 {
             self.commands.entity(e).insert(TextShadow {
@@ -720,37 +766,39 @@ fn draw(
     let zoom = (window.width() / CANVAS_WIDTH).min(window.height() / CANVAS_HEIGHT);
     scale.0 = zoom;
     // Rebuild only when layout or settings change; HUD values update separately.
-    let mut key = format!(
-        "{:?}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{:?}:{}:{}:{}:{:?}",
-        ui.screen,
-        preferences.language,
-        preferences.quality,
-        preferences.fullscreen,
-        preferences.vsync,
-        preferences.reduced_motion,
-        preferences.gentle,
-        preferences.visitors,
-        preferences.rest,
-        preferences.music,
-        preferences.effects,
-        preferences.voice,
-        preferences.best,
-        window.width(),
-        window.height(),
-        hints.style,
-        preferences.show_fps,
-        preferences.rumble,
-        ui.loaded && options.capture.is_none(),
-        preferences.tail_color
-    );
-    key.push_str(&format!(
-        "{:?}:{}",
-        update_check.status, update_check.browser_error
-    ));
-    if key == focus.key {
+    let key = LayoutKey {
+        screen: ui.screen,
+        language: preferences.language,
+        quality: preferences.quality,
+        flags: [
+            preferences.fullscreen,
+            preferences.vsync,
+            preferences.reduced_motion,
+            preferences.gentle,
+            preferences.show_fps,
+            ui.loaded && options.capture.is_none(),
+            update_check.browser_error,
+        ],
+        visitors: preferences.visitors,
+        sliders: [
+            preferences.rest,
+            preferences.music,
+            preferences.effects,
+            preferences.voice,
+        ],
+        best: preferences.best,
+        size: Vec2::new(window.width(), window.height()),
+        controls: hints.style,
+        rumble: preferences.rumble,
+        tail: preferences.tail_color,
+    };
+    if focus.key.as_ref() == Some(&key)
+        && focus.update_status.as_ref() == Some(&update_check.status)
+    {
         return;
     }
-    focus.key = key;
+    focus.key = Some(key);
+    focus.update_status = Some(update_check.status.clone());
     if focus.last_screen != Some(ui.screen) {
         focus.index = 0;
         focus.last_screen = Some(ui.screen);
@@ -2038,7 +2086,13 @@ fn update(
     ui: Res<SessionUi>,
     preferences: Res<Preferences>,
     mut texts: Query<
-        (&Dynamic, &mut Text, &mut TextColor, Option<&mut TextShadow>),
+        (
+            &Dynamic,
+            &mut Text,
+            &mut TextColor,
+            Option<&mut TextShadow>,
+            &mut HudTextCache,
+        ),
         Without<ButtonLabel>,
     >,
     mut labels: Query<(&ButtonLabel, &mut TextColor, &mut Text), Without<Dynamic>>,
@@ -2048,18 +2102,24 @@ fn update(
     library: Res<crate::assets::Library>,
     loading: Res<crate::loading::Loading>,
     server: Res<AssetServer>,
+    mut button_images: Local<Option<ButtonImages>>,
 ) {
     let sabrina = &simulation.0.sabrina;
     let language = preferences.language;
-    for (key, mut text, mut color, shadow) in &mut texts {
+    for (key, mut text, mut color, shadow, mut cache) in &mut texts {
         if let Some((kind, label)) = reward_line(key.0) {
             let reward = simulation.0.points.rewards[kind as usize];
-            let value = if reward.time > 0.0 {
-                format!("+{} · {}", reward.points, tr(label, language))
-            } else {
-                String::new()
-            };
-            text.set_if_neq(Text(value));
+            if cache.changed(
+                language,
+                HudTextValue::Reward(reward.points, reward.time > 0.0),
+            ) {
+                let value = if reward.time > 0.0 {
+                    format!("+{} · {}", reward.points, tr(label, language))
+                } else {
+                    String::new()
+                };
+                text.set_if_neq(Text(value));
+            }
             color.set_if_neq(TextColor(
                 Color::srgb(0.87, 0.97, 1.0).with_alpha(reward_opacity(reward.time)),
             ));
@@ -2070,6 +2130,30 @@ fn update(
                 };
                 shadow.set_if_neq(next);
             }
+            continue;
+        }
+        let stamp = match key.0 {
+            "health" => Some(HudTextValue::Health(sabrina.vitality.health.ceil() as i32)),
+            "stats" => Some(HudTextValue::Stats(
+                reef_sim::alive(&simulation.0),
+                reef_sim::current_total_score(&simulation.0),
+            )),
+            "phase" => {
+                let visiting = simulation.0.session.water == reef_sim::Water::Visit;
+                Some(HudTextValue::Phase(
+                    visiting,
+                    if visiting {
+                        simulation.0.session.cycle
+                    } else {
+                        0
+                    },
+                ))
+            }
+            _ => None,
+        };
+        if let Some(stamp) = stamp
+            && !cache.changed(language, stamp)
+        {
             continue;
         }
         let value = match key.0 {
@@ -2196,20 +2280,27 @@ fn update(
             }
         }
     }
+    if hits.is_empty() {
+        return;
+    }
+    let images = button_images.get_or_insert_with(|| ButtonImages {
+        hover: server.load("ui/reef_png/button_hover.png"),
+        primary: server.load("ui/reef_png/button.png"),
+        normal: server.load("ui/reef_png/button_teal.png"),
+    });
     for (hit, mut image) in &mut hits {
-        let file = if hit.index == focus.index {
-            "button_hover"
+        let handle = if hit.index == focus.index {
+            &images.hover
         } else if matches!(hit.action, Action::SelectLanguage(selected) if selected == language)
             || matches!(hit.action, Action::Play | Action::Done | Action::Pause)
                 && ui.screen != Screen::Playing
         {
-            "button"
+            &images.primary
         } else {
-            "button_teal"
+            &images.normal
         };
-        let handle = server.load(format!("ui/reef_png/{file}.png"));
-        if image.image != handle {
-            image.image = handle;
+        if image.image != *handle {
+            image.image = handle.clone();
         }
     }
 }
@@ -2282,6 +2373,39 @@ mod tests {
         assert_eq!(reward_opacity(0.6), 1.0);
         assert_eq!(reward_opacity(0.3), 0.5);
         assert_eq!(reward_opacity(0.0), 0.0);
+    }
+
+    #[test]
+    fn hud_text_cache_only_refreshes_changed_values_or_language() {
+        for (first, next) in [
+            (HudTextValue::Health(100), HudTextValue::Health(99)),
+            (HudTextValue::Stats(24, 50), HudTextValue::Stats(23, 50)),
+            (HudTextValue::Stats(24, 50), HudTextValue::Stats(24, 60)),
+            (HudTextValue::Phase(false, 0), HudTextValue::Phase(true, 1)),
+            (HudTextValue::Phase(true, 1), HudTextValue::Phase(true, 2)),
+            (
+                HudTextValue::Reward(40, true),
+                HudTextValue::Reward(80, true),
+            ),
+            (
+                HudTextValue::Reward(40, true),
+                HudTextValue::Reward(40, false),
+            ),
+        ] {
+            let mut cache = HudTextCache::default();
+            assert!(cache.changed(0, first));
+            for _ in 0..120 {
+                assert!(!cache.changed(0, first));
+            }
+            assert!(cache.changed(1, first));
+            assert!(!cache.changed(1, first));
+            assert!(cache.changed(1, next));
+            assert!(!cache.changed(1, next));
+            assert!(
+                HudTextCache::default().changed(1, next),
+                "Rebuilt labels need initial text"
+            );
+        }
     }
 
     #[test]

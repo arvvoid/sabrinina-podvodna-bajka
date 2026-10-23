@@ -1101,18 +1101,22 @@ fn crystal_light(
     rendered: Res<Presentation>,
     mut lights: Query<(&mut PointLight, &mut Transform), With<MagicLight>>,
     mut materials: ResMut<Assets<CrystalMaterial>>,
+    mut changed_materials: Local<Vec<AssetId<CrystalMaterial>>>,
 ) {
     let crystal = &rendered.0.crystal;
     let charging = crystal.magic.state == sim::Spell::Charging;
     let burst = crystal.magic.state == sim::Spell::Burst;
     let ready = rendered.0.sabrina.cooldown <= 0.0;
     for (mut light, mut t) in &mut lights {
-        t.translation = Vec3::new(
+        let translation = Vec3::new(
             crystal.motion.pos.x,
             crystal.motion.pos.y,
             crystal.magic.depth + 0.6,
         );
-        light.intensity = 180.0
+        if t.translation != translation {
+            t.translation = translation;
+        }
+        let intensity = 180.0
             * if charging {
                 1.4
             } else if burst {
@@ -1127,24 +1131,131 @@ fn crystal_light(
             } else {
                 0.0
             };
+        if light.intensity != intensity {
+            light.intensity = intensity;
+        }
     }
-    for (_, m) in materials.iter_mut() {
-        m.extension.settings = Vec4::new(
-            rendered.0.session.time,
-            if charging {
-                (crystal.magic.time / 1.1).min(1.0)
-            } else {
-                0.0
-            },
-            0.0,
-            0.0,
-        );
+    let settings = Vec4::new(
+        rendered.0.session.time,
+        if charging {
+            (crystal.magic.time / 1.1).min(1.0)
+        } else {
+            0.0
+        },
+        0.0,
+        0.0,
+    );
+    changed_materials.clear();
+    changed_materials.extend(
+        materials
+            .iter()
+            .filter(|(_, material)| material.extension.settings != settings)
+            .map(|(id, _)| id),
+    );
+    for id in changed_materials.iter() {
+        materials.get_mut(*id).unwrap().extension.settings = settings;
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn frozen_crystal_does_not_dirty_lights_transforms_or_materials() {
+        #[derive(Resource, Default)]
+        struct Changes(usize);
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, AssetPlugin::default()))
+            .init_asset::<CrystalMaterial>()
+            .init_resource::<Presentation>()
+            .init_resource::<Changes>()
+            .add_systems(Update, crystal_light)
+            .add_systems(
+                PostUpdate,
+                |lights: Query<
+                    Entity,
+                    (
+                        With<MagicLight>,
+                        Or<(Changed<Transform>, Changed<PointLight>)>,
+                    ),
+                >,
+                 mut changes: ResMut<Changes>| {
+                    changes.0 = lights.iter().count();
+                },
+            );
+        app.world_mut()
+            .spawn((MagicLight, PointLight::default(), Transform::default()));
+        let material = app
+            .world_mut()
+            .resource_mut::<Assets<CrystalMaterial>>()
+            .add(CrystalMaterial {
+                base: StandardMaterial::default(),
+                extension: CrystalExtension {
+                    settings: Vec4::splat(-1.0),
+                },
+            });
+        app.update();
+        let mut events =
+            bevy::ecs::message::MessageCursor::<AssetEvent<CrystalMaterial>>::default();
+        events
+            .read(
+                app.world()
+                    .resource::<Messages<AssetEvent<CrystalMaterial>>>(),
+            )
+            .for_each(drop);
+        for _ in 0..3 {
+            app.update();
+            assert_eq!(app.world().resource::<Changes>().0, 0);
+            assert!(
+                !events
+                    .read(
+                        app.world()
+                            .resource::<Messages<AssetEvent<CrystalMaterial>>>()
+                    )
+                    .any(|event| matches!(event, AssetEvent::Modified { .. }))
+            );
+        }
+        {
+            let mut rendered = app.world_mut().resource_mut::<Presentation>();
+            rendered.0.session.time = 1.0;
+            rendered.0.crystal.magic.state = sim::Spell::Charging;
+            rendered.0.crystal.magic.time = 0.55;
+            rendered.0.crystal.motion.pos.x += 1.0;
+        }
+        app.update();
+        assert_eq!(app.world().resource::<Changes>().0, 1);
+        assert_eq!(
+            app.world()
+                .resource::<Assets<CrystalMaterial>>()
+                .get(&material)
+                .unwrap()
+                .extension
+                .settings,
+            Vec4::new(1.0, 0.5, 0.0, 0.0)
+        );
+        let new_material = app
+            .world_mut()
+            .resource_mut::<Assets<CrystalMaterial>>()
+            .add(CrystalMaterial {
+                base: StandardMaterial::default(),
+                extension: CrystalExtension {
+                    settings: Vec4::ZERO,
+                },
+            });
+        app.update();
+        assert_eq!(app.world().resource::<Changes>().0, 0);
+        assert_eq!(
+            app.world()
+                .resource::<Assets<CrystalMaterial>>()
+                .get(&new_material)
+                .unwrap()
+                .extension
+                .settings,
+            Vec4::new(1.0, 0.5, 0.0, 0.0),
+            "New materials must initialize even while presentation time is frozen"
+        );
+    }
 
     #[test]
     fn fog_leaves_gameplay_clear_and_builds_only_in_the_background() {
