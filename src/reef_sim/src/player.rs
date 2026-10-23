@@ -223,11 +223,8 @@ pub fn sabrina_pose_phase(sabrina: &SabrinaEntity) -> f32 {
         }
         SabrinaPose::Wave => {
             let phase = (sabrina.wave.time / 0.75).clamp(0.0, 1.0);
-            if sabrina.wave.charge_time > 0.0 {
-                0.35 + phase * 0.65
-            } else {
-                phase
-            }
+            let gathered = (sabrina.wave.charge_time / 0.25).clamp(0.0, 1.0) * 0.35;
+            gathered + phase * (1.0 - gathered)
         }
         _ => (sabrina.swimming.phase % 6.28318530718) / 6.28318530718,
     }
@@ -247,14 +244,12 @@ pub fn sabrina_cast_rotation(sabrina: &SabrinaEntity) -> ([f32; 3], f32) {
             sabrina.wave.direction,
             (sabrina.wave.charge_time / 0.25).clamp(0.0, 1.0),
         ),
-        SabrinaPose::Wave => (
-            sabrina.wave.direction,
-            (if sabrina.wave.charge_time > 0.0 {
-                1.0
-            } else {
-                (sabrina.wave.time / 0.08).clamp(0.0, 1.0)
-            }) * ((0.75 - sabrina.wave.time) / 0.25).clamp(0.0, 1.0),
-        ),
+        SabrinaPose::Wave => (sabrina.wave.direction, {
+            let gathered = (sabrina.wave.charge_time / 0.25).clamp(0.0, 1.0);
+            let release = (sabrina.wave.time / 0.08).clamp(0.0, 1.0);
+            (gathered + (1.0 - gathered) * release)
+                * ((0.75 - sabrina.wave.time) / 0.25).clamp(0.0, 1.0)
+        }),
         SabrinaPose::Throw => (
             sabrina.throw_direction,
             (sabrina.throw_time / 0.3).clamp(0.0, 1.0)

@@ -74,7 +74,10 @@ pub fn finish_visit(world: &mut World, events: &mut Events) {
     if world.session.finished()
         || world.settings.aquarium
         || world.session.water != Water::Visit
-        || hungry(world) != 0
+        || world
+            .jelly
+            .iter()
+            .any(|jellyfish| jellyfish.behaviour.state != JellyState::Hidden)
         || alive(world) == 0
         || world.sabrina.vitality.health <= 0.0
     {
@@ -192,7 +195,7 @@ pub fn recovery_and_scoring(world: &mut World, dt: f32, events: &mut Events) {
             + dt * if world.settings.gentle { 1.2 } else { 0.8 })
         .min(100.0)
     }
-    if !world.session.game_over && world.session.water == Water::Visit && hungry(world) == 0 {
+    if !world.session.game_over && world.session.water == Water::Visit {
         finish_visit(world, events)
     }
 }

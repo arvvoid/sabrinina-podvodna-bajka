@@ -228,8 +228,10 @@ component!(WaterWave {
 
 impl WaterWave {
     pub fn cancel_charge(&mut self) {
-        self.charging = false;
-        self.charge_time = 0.0;
+        if self.charging {
+            self.charging = false;
+            self.charge_time = 0.0;
+        }
     }
 }
 

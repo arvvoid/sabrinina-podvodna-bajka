@@ -214,6 +214,70 @@ fn charging_wave_holds_hands_forward_and_releases_without_pose_jump() {
 }
 
 #[test]
+fn short_wave_holds_release_continuously_and_finish_the_pose() {
+    for charge_time in [0.0, 0.01, 0.1, 0.24, 0.25, 3.0] {
+        for facing in [-1.0, 1.0] {
+            let mut s = SabrinaEntity::default();
+            s.wave.charging = true;
+            s.wave.charge_time = charge_time;
+            s.wave.direction = v(facing, 0.5).unit();
+            let phase = sabrina_pose_phase(&s);
+            let rotation = sabrina_cast_rotation(&s);
+            let palm = sabrina_palm(&s);
+            s.wave.charging = false;
+            s.wave.active = true;
+            near(sabrina_pose_phase(&s), phase);
+            assert_eq!(sabrina_cast_rotation(&s), rotation);
+            near(sabrina_palm(&s).offset.x, palm.offset.x);
+            near(sabrina_palm(&s).offset.y, palm.offset.y);
+            s.wave.time = 0.04;
+            near(
+                sabrina_pose_phase(&s),
+                phase + (0.04 / 0.75) * (1.0 - phase),
+            );
+            let partial_angle = sabrina_cast_rotation(&s).1;
+            s.wave.time = 0.08;
+            let full_angle = sabrina_cast_rotation(&s).1;
+            let gathered = (charge_time / 0.25).clamp(0.0, 1.0);
+            near(
+                partial_angle,
+                full_angle * (gathered + (1.0 - gathered) * 0.5),
+            );
+            s.wave.time = 0.75;
+            near(sabrina_pose_phase(&s), 1.0);
+            near(sabrina_cast_rotation(&s).1, 0.0);
+        }
+    }
+}
+
+#[test]
+fn cancelling_charge_preserves_released_wave_pose_and_contacts() {
+    for charge_time in [0.1, 3.0] {
+        let mut s = SabrinaEntity::default();
+        s.wave.active = true;
+        s.wave.time = 0.1;
+        s.wave.charge_time = charge_time;
+        let phase = sabrina_pose_phase(&s);
+        let rotation = sabrina_cast_rotation(&s);
+        let palm = sabrina_palm(&s);
+        for _ in 0..3 {
+            s.wave.cancel_charge();
+            assert!(s.wave.active);
+            near(s.wave.charge_time, charge_time);
+            near(sabrina_pose_phase(&s), phase);
+            assert_eq!(sabrina_cast_rotation(&s), rotation);
+            near(sabrina_palm(&s).offset.x, palm.offset.x);
+            near(sabrina_palm(&s).offset.y, palm.offset.y);
+        }
+        s.wave.active = false;
+        s.wave.charging = true;
+        s.wave.cancel_charge();
+        assert!(!s.wave.charging);
+        near(s.wave.charge_time, 0.0);
+    }
+}
+
+#[test]
 fn three_quarter_view_faces_camera_on_both_sides_without_flipping_turns() {
     let mut s = SabrinaEntity::default();
     for yaw in [0.0, std::f32::consts::PI] {

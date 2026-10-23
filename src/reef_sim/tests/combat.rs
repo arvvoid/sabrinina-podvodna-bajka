@@ -24,11 +24,97 @@ fn encounter(gentle: bool) -> World {
 }
 
 #[test]
+fn departing_stings_and_fish_losses_are_counted_before_round_finalization() {
+    for score in [50, 200] {
+        let mut world = encounter(true);
+        world.points.total_score = 750;
+        world.points.best_score = 100;
+        world.points.score = score;
+        send_home(&mut world.jelly[0]);
+        let count = alive(&world);
+        let mut events = Events::default();
+        finish_visit(&mut world, &mut events);
+        assert!(!events.visit_ended);
+        assert_eq!(world.session.water, Water::Visit);
+        assert_eq!(world.points.total_score, 750);
+        assert_eq!(world.points.best_score, 100);
+        assert_eq!(world.points.last_score, 0);
+        world.sabrina.motion.pos = world.jelly[0].motion.pos;
+        world.fish[0].motion.pos = world.jelly[0].motion.pos;
+        world.fish[0].rescue.shield = 0.0;
+        jellyfish::jellyfish_and_contacts(&mut world, 0.01, &mut events);
+        assert!(events.hit);
+        assert_eq!(events.eaten, 1);
+        let penalized = (score - 100).max(0);
+        assert_eq!(current_total_score(&world), 750 + penalized);
+        recovery_and_scoring(&mut world, 0.01, &mut events);
+        assert!(!events.visit_ended);
+        world.jelly[0].behaviour.time = 9.0;
+        jellyfish::jellyfish_and_contacts(&mut world, 0.01, &mut events);
+        recovery_and_scoring(&mut world, 0.01, &mut events);
+        let finalized = penalized + (count - 1) * SURVIVOR_POINTS;
+        assert!(events.visit_ended);
+        assert_eq!(world.session.water, Water::Calm);
+        assert_eq!(world.points.last_survivors, count - 1);
+        assert_eq!(world.points.last_score, finalized);
+        assert_eq!(world.points.best_score, finalized.max(100));
+        assert_eq!(current_total_score(&world), 750 + finalized);
+        finish_visit(&mut world, &mut Events::default());
+        begin_visit(&mut world);
+        assert_eq!(current_total_score(&world), 750 + finalized);
+    }
+}
+
+#[test]
+fn final_round_stays_playable_until_departures_finish_and_defeat_still_wins() {
+    for outcome in ["survive", "lose_health", "lose_fish"] {
+        let mut world = encounter(true);
+        world.session.cycle = FINAL_ROUND;
+        damage_jelly(&mut world, 0, 100.0, true, &mut Events::default());
+        let events = step(&mut world, 1.0 / 60.0, Input::default());
+        assert!(!events.victory && !events.visit_ended);
+        assert!(!world.session.finished());
+        if outcome == "lose_health" {
+            world.sabrina.motion.pos = world.jelly[0].motion.pos;
+            world.sabrina.vitality.health = 1.0;
+        } else if outcome == "lose_fish" {
+            for fish in &mut world.fish {
+                fish.life.active = false;
+            }
+            world.fish[0].life.active = true;
+            world.fish[0].motion.pos = world.jelly[0].motion.pos;
+            world.fish[0].rescue.shield = 0.0;
+        }
+        let mut ended = 0;
+        for _ in 0..600 {
+            let events = step(&mut world, 1.0 / 60.0, Input::default());
+            ended += i32::from(events.visit_ended);
+        }
+        if outcome == "survive" {
+            assert!(world.session.victory);
+            assert!(!world.session.game_over);
+            assert_eq!(ended, 1);
+            assert_eq!(world.jelly[0].behaviour.state, JellyState::Hidden);
+            assert_eq!(
+                world.points.total_score,
+                200 + alive(&world) * SURVIVOR_POINTS
+            );
+        } else {
+            assert!(world.session.game_over);
+            assert!(!world.session.victory);
+            assert_eq!(ended, 0);
+            assert_eq!(world.points.total_score, 0);
+        }
+    }
+}
+
+#[test]
 fn running_score_accumulates_across_rounds_without_counting_completed_round_twice() {
     let mut world = encounter(true);
     world.points.total_score = 750;
     damage_jelly(&mut world, 0, 100.0, true, &mut Events::default());
     assert_eq!(current_total_score(&world), 950);
+    world.jelly[0].behaviour.state = JellyState::Hidden;
     finish_visit(&mut world, &mut Events::default());
     let total = 950 + alive(&world) * SURVIVOR_POINTS;
     assert_eq!(current_total_score(&world), total);
@@ -980,7 +1066,7 @@ fn wave_rescue_waits_for_survival_and_real_separation() {
 }
 
 #[test]
-fn survivor_bonus_requires_every_visitor_defeated_and_never_pays_twice() {
+fn survivor_bonus_requires_every_visitor_gone_and_never_pays_twice() {
     let mut world = encounter(true);
     let count = alive(&world);
     let mut events = Events::default();
@@ -988,6 +1074,9 @@ fn survivor_bonus_requires_every_visitor_defeated_and_never_pays_twice() {
     assert!(!events.visit_ended);
     assert_eq!(world.points.score, 0);
     damage_jelly(&mut world, 0, 100.0, true, &mut events);
+    recovery_and_scoring(&mut world, 0.01, &mut events);
+    assert!(!events.visit_ended);
+    world.jelly[0].behaviour.state = JellyState::Hidden;
     recovery_and_scoring(&mut world, 0.01, &mut events);
     assert!(events.visit_ended);
     assert_eq!(world.points.last_score, 200 + count * SURVIVOR_POINTS);
@@ -1009,7 +1098,7 @@ fn survivor_bonus_requires_every_visitor_defeated_and_never_pays_twice() {
 }
 
 #[test]
-fn multiple_visitors_must_all_be_defeated_before_survivor_bonus() {
+fn multiple_visitors_must_all_disappear_before_survivor_bonus() {
     let mut world = encounter(true);
     world.jelly[1].behaviour.state = JellyState::Hungry;
     let mut events = Events::default();
@@ -1018,6 +1107,10 @@ fn multiple_visitors_must_all_be_defeated_before_survivor_bonus() {
     assert!(!events.visit_ended);
     assert_eq!(world.points.score, 200);
     damage_jelly(&mut world, 1, 100.0, true, &mut events);
+    world.jelly[0].behaviour.state = JellyState::Hidden;
+    recovery_and_scoring(&mut world, 0.01, &mut events);
+    assert!(!events.visit_ended);
+    world.jelly[1].behaviour.state = JellyState::Hidden;
     recovery_and_scoring(&mut world, 0.01, &mut events);
     assert!(events.visit_ended);
     assert_eq!(world.points.score, 400 + alive(&world) * SURVIVOR_POINTS);
@@ -1282,6 +1375,11 @@ fn tenth_round_always_spawns_four_and_finishes_in_victory_once() {
             for index in 0..4 {
                 damage_jelly(&mut world, index, 100.0, true, &mut events);
                 recovery_and_scoring(&mut world, 0.0, &mut events);
+                assert!(!world.session.victory);
+            }
+            for index in 0..4 {
+                world.jelly[index].behaviour.state = JellyState::Hidden;
+                recovery_and_scoring(&mut world, 0.0, &mut events);
                 assert_eq!(world.session.victory, index == 3);
             }
             assert!(events.victory && events.visit_ended && !events.game_over);
@@ -1374,6 +1472,7 @@ fn complete_game_has_exactly_ten_rounds_and_accumulates_each_score() {
         let mut events = Events::default();
         for index in 0..JELLY_COUNT {
             damage_jelly(&mut world, index, 100.0, true, &mut events);
+            world.jelly[index].behaviour.state = JellyState::Hidden;
         }
         recovery_and_scoring(&mut world, 0.0, &mut events);
         total += visitors * 200 + alive(&world) * SURVIVOR_POINTS;

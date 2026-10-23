@@ -453,6 +453,14 @@ fn drive(
             }
             events.0.push(result);
         }
+        492 => {
+            assert_eq!(ui.screen, Screen::Playing);
+            assert!(!simulation.0.session.victory);
+            for jellyfish in &mut simulation.0.jelly {
+                assert_eq!(jellyfish.behaviour.state, reef_sim::JellyState::Leaving);
+                jellyfish.behaviour.time = 9.0;
+            }
+        }
         495 => {
             assert_eq!(ui.screen, Screen::Victory);
             assert!(simulation.0.session.victory);
