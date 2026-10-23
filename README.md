@@ -1,6 +1,5 @@
 # Sabrinina podvodna bajka
-
-**Sabrina’s Underwater Fairy Tale**
+# Sabrina's Underwater Fairy Tale
 
 [![Test](https://github.com/arvvoid/sabrinina-podvodna-bajka/actions/workflows/rust.yml/badge.svg)](https://github.com/arvvoid/sabrinina-podvodna-bajka/actions/workflows/rust.yml)
 [![CodeQL](https://github.com/arvvoid/sabrinina-podvodna-bajka/actions/workflows/github-code-scanning/codeql/badge.svg)](https://github.com/arvvoid/sabrinina-podvodna-bajka/actions/workflows/github-code-scanning/codeql)
@@ -8,7 +7,7 @@
 [![Bevy 0.20.0](https://img.shields.io/badge/Bevy-0.20.0-blue)](https://bevy.org/)
 [![Code: Apache 2.0](https://img.shields.io/badge/Code-Apache%202.0-green.svg)](LICENSE)
 
-This is a little underwater game I am making with my daughter Sabrina. You swim around the reef as a mermaid, look after the fish and deal with hungry jellyfish using a magic crystal, waves and song. There is also an aquarium mode if you just want to watch the fish and relax.
+A small underwater game I am making with my daughter Sabrina.
 
 ![Sabrina swimming among tropical fish in the underwater reef](docs/screenshots/gameplay.png)
 
@@ -24,7 +23,7 @@ This is a little underwater game I am making with my daughter Sabrina. You swim 
 
 This started as a [Scratch game](https://scratch.mit.edu/projects/1203591608/) I made together with my daughter Sabrina when she was four. The idea and game design were hers. I was there as dad, explaining things, helping her learn and doing the technical parts with her. We ended up with an underwater world full of fish, a hungry jellyfish and Sabrina the mermaid protecting everyone with magic.
 
-I then tried turning it into a 3D game in Godot, before deciding to remake the whole thing in Rust and Bevy. The point was not to turn it into some completely different game. I wanted to keep the things Sabrina came up with: the side view, the voices, the crystal, the magic and the peaceful parts between attacks. It is still our little project, just a lot more ambitious now.
+I then tried turning it into a 3D game in Godot and C++ (it works there is a branch containing that legacy version), before deciding to remake the whole thing in Rust and Bevy. The point was not to turn it into some completely different game. I wanted to keep the things Sabrina came up with: the side view, the voices, the crystal, the magic and the peaceful parts between attacks. It is still our little project, just a lot more ambitious now.
 
 **Development:** Luka Dežulović
 
@@ -32,273 +31,341 @@ I then tried turning it into a 3D game in Godot, before deciding to remake the w
 
 The Godot prototype is preserved on [`legacy_godot`](https://github.com/arvvoid/sabrinina-podvodna-bajka/tree/legacy_godot). `main` contains the Bevy game.
 
-## Current status and release plans
+## Current status
 
-The game is playable already, but I am still working on it. There are animations to improve, balance to tweak and plenty of testing left. I would like to release it on **Steam**, and later on **Android and iOS**. Those releases are planned, not available yet, and I am not setting a date until it is ready.
+The game is already playable, but it is still under development. There are animations to improve, gameplay to balance and plenty of testing left.
 
-## Playing
+I plan to release it on Steam and eventually Android and iOS. I am not setting release dates until I am happy with the result.
 
-**Startup update check:** before loading game models, audio and the full asset
-set, the splash checks this repository's latest public GitHub release over HTTPS.
-A newer stable version offers **View release and exit** or **Skip for now**, using
-mouse, keyboard or controller. Viewing opens the release page in the OS default
-browser and exits the game normally; nothing is downloaded or installed by the
-game. If the browser cannot open, the prompt stays available to retry or skip.
-Offline, rate-limited or invalid responses are logged and startup continues;
-the check has a short timeout and never blocks play indefinitely. Release tags
-are compared as semantic versions, with an optional `v` prefix. Development
-builds compare against the package version. Capture and input-verification runs
-skip the network check.
+For now, Linux and Windows are the main tested platforms. macOS builds are also planned, but I still need to properly test them.
 
-**Ability HUD:** three clickable square icons at the bottom center activate
-Wave, Song and Crystal, from left to right. Keyboard/mouse bindings appear below
-each icon, switching to the active controller's labels and colors. Unavailable
-abilities are muted; cooldowns reveal the icon's color clockwise, with remaining
-time shown over it. Song uses the same sweep for its remaining/recharging energy.
-The sweep is shader-rendered: only small progress uniforms change, not textures.
+## Gameplay
 
-The compact top-left status panel groups phase, fish count and cumulative score,
-with a heart, numeric health and a slim health bar on one row.
+The idea is simple. Sabrina is a mermaid protecting an underwater reef full of tropical fish.
 
-**Tail color:** open Settings → Tail color and choose **None**, **Natural green**,
-**Violet**, **Pink**, **Lagoon blue**, **Coral**, **Gold**, or **Magic** using the
-mouse, keyboard or controller. **None** keeps the original texture colors and
-standard PBR lighting without recoloring. **Magic** creates a subtle,
-continuous twirl of violet, pink and turquoise with a restrained colored sheen,
-without pulsing brightness, white gleams or pastel glare.
-One shared model-space pattern flows across the tail and fins without restarting
-at texture seams. It runs entirely in the shader: no extra textures, texture
-uploads or per-frame material changes. Reduced motion keeps the colors and
-flow still. The choice is saved
-locally and applies only to the tail and fins; hair and bikini retain their
-original colors. Previously saved custom RGB colors remain intact until you
-choose a preset.
+During peaceful periods, fish swim around naturally and the game feels like a virtual aquarium. Every now and then jellyfish appear and try to eat the fish. Sabrina can protect them using three magical abilities.
 
-Sabrina's skin, costume, tail and hair use a softer satin finish. Roughness is
-limited after sampling the material maps, with normal-variation filtering to
-reduce tiny sparkling white reflections without changing the scene lighting.
-Only Magic gives the tail a shinier finish; the rest of Sabrina stays satin.
+You can play through 10 rounds, try to get a good score and defeat the jellyfish, or simply switch to Aquarium mode and enjoy the underwater world without enemies or competition.
 
-The fish swim around during the quieter parts. Every now and then jellyfish show up and try to eat them. Each jellyfish has **100 health** and only retreats after you bring that down to zero. There is no timeout or limit to the number of fish it can eat. If you lose all the fish during a round, or Sabrina loses all her health, it is game over. Jellyfish get bigger as they eat, and Sabrina slowly recovers if she stays safe for a while.
+Jellyfish grow as they eat fish. Each has 100 health and must be defeated before it retreats. They can still sting Sabrina or harm fish on accidental contact while leaving the scene.
 
-Retreating jellyfish still sting Sabrina and harm unprotected fish on accidental
-contact until they disappear. They keep leaving rather than chasing.
+Sabrina slowly recovers health when she stays out of danger. If she loses all her health or all the fish are eaten, the game ends.
 
-The goal is to protect the reef for **10 rounds**. Round 10 always sends **four jellyfish**, regardless of the visitor limit or whether you selected Gentle or Lively. Defeat all four with Sabrina still alive and at least one fish left, and you win. The end screen shows your score and surviving fish. There is no round 11. Aquarium mode keeps going indefinitely.
+The final round always has four jellyfish. Defeat all four while keeping Sabrina and at least one fish alive to win. There is no round 11, although Aquarium mode can continue indefinitely.
 
-- **Crystal:** 40 damage and a 3-second air bubble. After a hit, press Crystal again within **1.5 seconds** to fly to the nearest unhit jellyfish anywhere in the scene. Each hit opens a fresh follow-up window, up to **four different targets**: **40 → 20 → 10 → 5 damage**, each surviving target bubbled for the full 3 seconds. Follow-ups home continuously across the scene in both difficulties; no repeated hits on the same target. The HUD shows the follow-up window. Without a follow-up, it returns like a boomerang. Recharge starts at launch: **12 seconds**, plus **2 seconds per additional successful hit** (maximum 18 seconds from the original launch). Missed or unavailable follow-ups add no penalty. Once returned, it resumes orbiting without glow or particles until ready. Gentle auto-aims the first throw; Lively starts with a straight skillshot aimed by swimming (horizontal while stationary).
+### Magic abilities
 
-- **Wave:** tap and release for a normal wave, pushing fish and **all jellyfish in its path**. Fish and jellyfish share the same expanding wave hitbox, including bell/tentacle contacts and point-blank visitors. Normal travel is **5.5 world units from the wave origin**, with **10 damage per visitor, once per cast**, and a **3-second cooldown**. Hold the keyboard, mouse, controller button or Wave HUD icon for **3 seconds** to auto-release a charged wave: **double travel (11 units) and double width**, still 10 damage per visitor, with a **9-second cooldown** from release. Releasing early casts a normal wave; continuing to hold after auto-release never repeats it. The HUD and a growing blue energy ball at her outstretched hand show charging. Pausing, focus loss or being stunned cancels charging without consuming a cooldown. Bubbled jellyfish cannot swim, sting or eat, but waves can still push them.
+**Crystal**
 
-- **Song:** gathers nearby fish and reliably lures all active jellyfish inside the **same radius as fish**, overriding their fish-chasing direction so you can lead them away. There is no random attraction or hearing outside the ring; the lure stops as soon as Song stops or a jellyfish leaves its shrinking radius (existing swimming momentum eases out normally). Bubbled jellyfish remain immobilized and defeated visitors keep leaving. Its reach shrinks with energy; exhausting it requires a complete recharge.
+Sabrina has a magical crystal orbiting around her. She can throw it at jellyfish, dealing 40 damage and trapping them in an air bubble for three seconds.
 
-- **Progression:** each round slightly increases visitor speed and the probability of multiple visitors, up to the selected visitor limit. Speed growth is bounded; health and damage stay consistent.
+After a successful hit, you have 1.5 seconds to send the crystal toward another jellyfish. You can chain up to four different targets, dealing 40, 20, 10 and 5 damage. Each target gets its own three-second bubble.
 
-I wanted the score to mean you actually did something, not that you left the game running. You get: **1 point per actual damage**, **100 per defeated visitor**, **50 per genuine fish rescue**, and **25 per surviving fish** after every visitor is defeated. A fish can earn only one rescue reward per round across all abilities. Crystal collection only scores for threatened fish; wave rescues require surviving and reaching clear water; song requires escorting a threatened fish to safety. Safe fish collection, missed attacks and passive waiting earn nothing. A sting still subtracts up to 100 points. Hit, rescue and survivor rewards appear immediately, and each visitor has a health bar.
+The crystal returns like a boomerang when you stop chaining attacks. Its cooldown starts when thrown and lasts 12 seconds, with two additional seconds for each successful chained hit, up to 18 seconds.
 
-You can choose Gentle or Lively, adjust how often jellyfish appear, or turn the whole thing into a peaceful aquarium without any competition. The visitor-limit setting applies to rounds 1–9 only. Best scores from the old scoring rules are reset once; the saved best remains a local single-round record, not a normalized leaderboard across custom settings. The obsolete spoken instructions have been removed; the localized written guide describes the current rules. Character voices and song remain.
+In Gentle mode the first throw uses automatic aiming. In Lively mode you have to aim by positioning Sabrina.
 
-| Action | Mouse / keyboard | Xbox | PlayStation |
+**Wave**
+
+Sabrina can create a magical wave that pushes fish and jellyfish away.
+
+A normal wave travels 5.5 world units, deals 10 damage to each jellyfish it hits and has a three-second cooldown.
+
+Holding the button for three seconds charges a much larger wave with double the range and width. It still deals 10 damage but has a nine-second cooldown.
+
+The wave can also push jellyfish trapped inside bubbles, although they cannot move, sting or eat while trapped.
+
+**Song**
+
+Sabrina can sing to gather nearby fish and attract jellyfish toward her.
+
+This makes it possible to lead jellyfish away from the fish or bring scattered fish together. The ability consumes energy, and its range becomes smaller as energy runs out.
+
+Once completely exhausted, it needs to recharge before being used again.
+
+### Scoring and progression
+
+I wanted the score to reflect what you actually accomplish rather than reward leaving the game running.
+
+You get one point for each point of actual damage, 100 points for defeating a jellyfish, 50 points for rescuing a fish that was genuinely in danger and 25 points for each surviving fish at the end of an encounter.
+
+A fish can only give one rescue reward per round. Simply collecting fish that were already safe gives no points. A successful rescue requires actually getting the fish out of danger.
+
+Getting stung can cost up to 100 points.
+
+Jellyfish become a little faster as rounds progress, and multiple jellyfish become more likely to appear. Their health and damage remain the same.
+
+You can select Gentle or Lively difficulty and adjust the number of jellyfish. The visitor limit applies to rounds 1 through 9, since round 10 always has four.
+
+Best scores are stored locally. They are currently single-round records and are not normalized across different difficulty settings.
+
+## Controls
+
+The game supports keyboard, mouse and controllers. It automatically changes the on-screen button hints depending on the controller being used.
+
+| Action | Keyboard / Mouse | Xbox | PlayStation |
 |---|---|---|---|
-| Swim | Pointer, WASD / arrows | Left stick | Left stick |
-| Wave | Left click (hold to charge), F or HUD button | A (green) | × (blue) |
-| Song | Q or HUD button | B (red) | ○ (red) |
-| Crystal | Right click, Space or HUD button | X (blue), or right shoulder | □ (pink), or right shoulder |
-| Pause | Escape | Start / Menu | Options |
-| Fullscreen | F11 or Settings | Settings | Settings |
+| Swim | Mouse, WASD or arrows | Left stick | Left stick |
+| Wave | Left click or F | A | × |
+| Song | Q | B | ○ |
+| Crystal | Right click or Space | X or RB | □ or R1 |
+| Pause | Escape | Start | Options |
+| Fullscreen | F11 | Settings | Settings |
 
-The game changes its button hints to match whichever controller you are using, including the button colours. With multiple controllers, hints follow the one most recently used; disconnecting all controllers restores keyboard/mouse hints. Unrecognized controllers use neutral bottom/left/right button labels. Detection uses the device name and USB vendor ID reported by the OS; remappers such as Steam Input may expose a different controller type. Keyboard/mouse input remains available while a controller is connected.
+You can also activate the three abilities directly from the icons at the bottom of the screen. Their cooldowns and remaining energy are displayed there.
 
-**Windows controllers:** the default backend is native **XInput**, for Xbox-compatible controllers and Steam Input's Xbox gamepad emulation. With Steam Input enabled, a DualShock/DualSense or other supported controller is intentionally presented with Xbox hints. Use Steam's **Gamepad** layout, not a keyboard/mouse-only layout. Input is polled on a separate thread at a requested 4 ms interval so observed short button taps are retained between rendered frames. XInput supports up to four controller slots; it does not directly recognize unconverted Sony/generic HID devices.
+Holding Wave charges it, while pressing Crystal again shortly after hitting a jellyfish chains the attack.
 
-Use **`--wgi`** in the executable's arguments or Steam launch options to select the previous **Windows Gaming Input (Bevy/GilRs)** backend for direct Sony/generic controllers or comparison testing. Only one backend runs at a time. Direct-device input and vibration support depend on the driver and connection; seeing PlayStation hints is not a guarantee of vibration support. Linux and macOS keep Bevy/GilRs. The new Windows path has automated transport tests and a Windows cross-target type-check, but physical Windows/Steam Input playtesting is still required.
+Menus can be navigated entirely with a controller, including the D-pad and analog stick.
 
-Menus support the **D-pad and left stick in all four directions**, following the on-screen layout. Holding a direction repeats after a short delay; stick hysteresis prevents jitter around the threshold. Left/right adjusts a selected slider. **A / × confirms, B / ○ goes back**, and Start / Options pauses or resumes. Release the stick after opening a menu before navigating. Tab / Shift+Tab still cycles through controls. Input and hints use the same active controller; a fresh button press or new deliberate stick movement switches controllers, not a continuously held stick on another device.
+Controller vibration is supported with Off, Gentle and Normal settings. It is used for magic attacks, hits and damage, not continuously while swimming around.
 
-**Controller rumble** has saved **Off, Gentle and Normal** settings. Supported controllers receive brief, restrained pulses for crystal launches, hits, waves and damage to Sabrina—not continuous vibration while swimming or singing. Simultaneous effects do not stack; damage takes priority. Rumble stops on pause, focus loss, controller changes or exit. Support depends on the controller, driver and connection; unsupported devices remain playable without vibration.
+### Windows controllers
 
-On Windows's default XInput path, both motors are driven through `XInputSetState` on the same slot used for input. Pulse deadlines run independently of rendering, so a slow frame cannot prolong a pulse. Steam Input must provide a vibration-capable emulated gamepad and permit rumble. With `--wgi`, GilRs uses WGI vibration only for devices exposed as mapped WGI Gamepads; raw-controller detection alone is insufficient. See [Valve's gamepad-emulation guidance](https://partner.steamgames.com/doc/features/steam_controller/steam_input_gamepad_emulation_bestpractices), [GilRs's platform notes](https://docs.rs/gilrs/0.11.2/gilrs/#windows) and [Bevy's rumble contract](https://docs.rs/bevy/0.20.0/bevy/input/gamepad/enum.GamepadRumbleRequest.html).
+On Windows I use native XInput by default. It works with Xbox controllers and Steam Input's Xbox controller emulation.
 
-HUD backgrounds and progress fills are semi-transparent. The lower-left foreground reef fades only slightly around Sabrina when it covers her (at most 25% transparent), leaving the rest of the scenery solid.
+Steam Input users should select a Gamepad layout. PlayStation controllers running through Steam Input will normally display Xbox button hints because that is how Steam presents the emulated controller.
 
-Enable **Show FPS counter** in Settings to display a small, smoothed frames-per-second counter in the upper-right corner, below the HUD buttons. It is off by default, works in menus and during play, and is saved with your preferences.
+XInput supports up to four controllers. Input is polled separately from rendering to avoid missing short button presses at lower frame rates.
 
-English, Croatian and Italian are available through the main menu's **Language… / Jezik… / Lingua…** button. Select a language by name in the chooser; a checkmark identifies the selected language. Graphics, sound, controls and best score are saved locally. The loading screen uses localized text and asset-loading progress, then waits for character instances before opening the menu. The first launch uses fullscreen and Balanced graphics.
+For direct Sony or generic controllers, the game also supports Bevy/GilRs through Windows Gaming Input. Start the executable with `--wgi` to use that backend instead.
 
-| Graphics | Antialiasing | Shadows |
+Linux and macOS use Bevy/GilRs.
+
+Vibration depends on the controller, connection and driver. I still need to do more testing with physical controllers and Steam Input on Windows.
+
+## Customization
+
+The game supports English, Croatian and Italian. You can change the language directly from the main menu.
+
+Graphics, sound, controls, controller vibration and best scores are saved locally.
+
+### Tail colors
+
+Sabrina's tail can be customized in Settings.
+
+Available colors are None, Natural Green, Violet, Pink, Lagoon Blue, Coral, Gold and Magic.
+
+None keeps the original texture colors. Magic adds a subtle animated combination of violet, pink and turquoise that flows continuously across the tail and fins.
+
+The effect is done entirely in a shader, without extra textures or material updates every frame. Reduced motion settings keep the colors static.
+
+The tail, hair, skin and costume have a softer satin material finish to avoid excessive shiny reflections underwater.
+
+### Graphics
+
+There are three graphics presets.
+
+| Preset | Antialiasing | Shadows |
 |---|---|---|
 | Light | Off | Off |
-| Balanced | Lightweight FXAA | Soft, single 1024×1024 map |
-| High | 4× MSAA | More defined, soft single 2048×2048 map, including fish casters |
+| Balanced | FXAA | Soft 1024×1024 shadows |
+| High | 4× MSAA | Soft 2048×2048 shadows, including fish |
 
-Shadowed sunlight has visible contrast, with neutral fill keeping shaded faces readable.
-High enables fish-cast shadows; Balanced omits those extra skinned shadow draws.
-The crystal and transparent jellyfish remain shadow-free.
-**V-sync** is on by default. Bevy's `AutoVsync` selects relaxed FIFO when the surface supports it, otherwise standard FIFO. Relaxed FIFO presents late frames without waiting for another refresh, but those frames may tear; neither mode guarantees a frame rate. Turn V-sync off in Settings to request uncapped presentation and potentially reduce input latency (may tear; falls back to supported modes).
+Balanced is the default. The first launch starts in fullscreen.
 
-## Build and run
+V-sync is enabled by default and can be turned off to reduce input latency or allow uncapped frame rates, although this can introduce tearing.
 
-Install [Rust](https://rustup.rs/) first. I pin the toolchain and dependencies in `rust-toolchain.toml` and `Cargo.lock`, currently Rust 1.99.1 and Bevy 0.20.0, so everyone builds against the same versions.
+An optional FPS counter is available in Settings.
 
-On Debian/Ubuntu, install the native dependencies:
+The interface uses a small status panel for health, fish count, round and score. Ability icons show cooldowns and keyboard or controller bindings.
+
+## Building from source
+
+The game is written in Rust and currently uses Bevy 0.20.0 with Rust 1.99.1.
+
+The toolchain and dependencies are pinned through `rust-toolchain.toml` and `Cargo.lock` so builds use consistent versions.
+
+First install Rust from https://rustup.rs/.
+
+On Debian or Ubuntu, install the required native dependencies and run the build scripts.
 
 ```sh
 sudo apt install build-essential pkg-config libasound2-dev libudev-dev libx11-dev libxrandr-dev libxi-dev libgl1-mesa-dev libwayland-dev libxkbcommon-dev
+
 ./tools/build.sh
 ./tools/run.sh
 ```
 
-The scripts use an optimized release build. Set `SABRINA_BUILD_JOBS=4` to limit compilation parallelism. On Windows, install Visual Studio C++ Build Tools; on macOS, install Xcode Command Line Tools. Build and run with:
+The scripts create and run an optimized release build.
+
+On Windows, install Rust and Visual Studio C++ Build Tools with the Windows SDK and ATL components.
+
+On macOS, install Xcode Command Line Tools.
+
+You can also build and run directly with Cargo.
 
 ```sh
 cargo run --locked --release -p sabrina
 ```
 
-### Graphics backend and testing matrix
+Compilation parallelism can be limited using `SABRINA_BUILD_JOBS=4`.
 
-| OS / target | Graphics backend | Build / distribution status | Runtime testing |
-|---|---|---|---|
-| Linux x86_64 | Vulkan | Desktop release workflow target; Ubuntu 24.04 baseline | Established tested desktop platform; gameplay and visual checks |
-| Windows x86_64 (MSVC) | Direct3D 12 with embedded DXC | Desktop release workflow target; local release build verified | Tested on Windows 11 with an RTX 3070 Laptop GPU: rendered captures, live input/animation/effects checks and a 1080p 72-fish stress scene |
-| macOS Apple Silicon | Metal | Desktop release workflow target; unsigned and not notarized | Not runtime-tested yet |
-| Android (planned) | Vulkan | No mobile export available yet | Not tested |
-| iOS (planned) | Metal | No mobile export available yet | Not tested |
+Blender is only needed if you want to edit the original models or artwork.
 
-#### Manual hardware testing
+### Graphics backends
 
-Additional playtesting results reported on 20 October 2026:
+The default rendering backends are Direct3D 12 on Windows, Vulkan on Linux and Metal on macOS.
 
-| System | CPU | GPU | Reported result |
-|---|---|---|---|
-| Intel Core i7-11800H | Intel UHD Graphics (Tiger Lake-H GT1) | Works well; 50-60 FPS, 60+ FPS lower graphics |
-| Intel Core i7-11800H | NVIDIA GeForce RTX 3070 Laptop GPU, 8 GiB VRAM | Works well; 400+ FPS |
-| Intel Core i7-2600K (older desktop) | NVIDIA GeForce GTX 1060 | Works well; stable 60+ FPS |
+Windows builds contain the DXC shader compiler, so there is no need to install a separate shader compiler or Windows SDK just to play the game.
 
-These are just results from machines I have tested, not proper comparable benchmarks and definitely not minimum requirements. Resolution, graphics quality, frame-limit settings and test scene were not recorded for these results. Development, fine tuning and requirement assessment still in progress.
+Linux supports native Wayland and X11. The game automatically selects the appropriate window system, although you can force either one using `--wayland` or `--x11`.
 
-Defaults are Direct3D 12 on Windows, Vulkan on Linux and Metal on macOS. See the runtime-options table for supported overrides. An unsupported flag warns and uses the platform default; if a selected backend cannot initialize, the game does not silently switch. OpenGL requires a compatible driver and, on Unix-like systems, an available EGL implementation.
+I have included a few command-line options mainly for development, performance comparisons and debugging.
 
-Linux builds support both native Wayland and X11. By default, the window library automatically prefers Wayland when `WAYLAND_DISPLAY` or `WAYLAND_SOCKET` is nonempty, including when Xwayland also provides `DISPLAY`; otherwise it uses X11 when `DISPLAY` is available. Use `--x11` or `--wayland` to force a choice (`--X11` and `--Wayland` are accepted too). `--x11` requires `DISPLAY` and ignores Wayland session variables; `--wayland` requires a Wayland session and never falls back to X11. These flags select the window system independently of the Vulkan/OpenGL renderer and GPU. The loading screen shows the detected window system alongside the resolution and graphics-device details.
-
-
-Windows x86_64 MSVC builds embed the modern DXC shader compiler in the executable. No separate `dxcompiler.dll` or installed Windows SDK is needed to play. This avoids the legacy FXC rendering path, which produced dark silhouettes on the tested NVIDIA Windows machine. To build on Windows, install Rust and Visual Studio's **Desktop development with C++** workload, including a Windows SDK and the **C++ ATL for latest build tools** component, then run the Cargo command above in PowerShell.
-
-
-Blender is needed only to edit artwork.
-
-
-
-#### Measured memory (20 October 2026 development build)
-
-Linux x86_64 release build, Vulkan, NVIDIA RTX 3070 Laptop GPU / driver 595.99.02, Balanced graphics, V-sync on, embedded assets and default preferences:
-
-| Scene | Resolution | Steady process RAM (RSS) | Peak process RAM | Sampled per-process GPU memory |
-|---|---|---|---|---|
-| Main menu | 1280×720 | 1435–1438 MiB | 1516 MiB | 837 MiB |
-| Combat | 1920×1080 | 1437–1442 MiB | 1508 MiB | 851 MiB |
-| 72-fish stress scene | 1920×1080 | 1384–1393 MiB | 1456 MiB | 851 MiB |
-
-These are one measured run per scene, not requirements or allocation budgets. RAM was sampled from Linux `/proc/<pid>/status` after loading and before screenshot/teardown, with its high-water mark for the peak; GPU memory came from NVIDIA's per-process framebuffer samples. RSS includes resident mapped executable/assets and driver allocations, not just game-owned heap memory. Repeated runs varied: an earlier stress run reached about 1541 MiB peak RSS and 1105 MiB sampled GPU memory. OS, graphics driver/cache, settings and capture diagnostics affect the results; Windows and mobile memory have not been measured.
-
-`./tools/package-bevy.sh` creates a portable directory under `dist/` containing the executable and accompanying documentation/license notices. The game is **asset-self-contained, not fully statically linked**: Linux still needs system libraries such as glibc, ALSA and libudev, and all platforms need their graphics drivers and OS windowing/audio support. Keep the accompanying notices when redistributing.
-
-### Runtime options
-
-Pass flags after the executable name, for example `./tools/run.sh --vulkan --capture-school --fullhd`.
-
-| Flag / setting | Explanation |
+| Option | Purpose |
 |---|---|
-| `--dx12` | Use Direct3D 12 on Windows (the default); ignored elsewhere. |
-| `--vulkan` | Use Vulkan on Linux (default), or as a test override on Windows and macOS. |
-| `--metal` | Use Metal on macOS (the default); ignored elsewhere. |
-| `--opengl` | Use wgpu's GL/GLES backend on Windows, Linux and macOS for testing; requires a compatible driver and, on Unix-like systems, EGL. |
-| `--x11`, `--wayland` | Linux only: force the X11 or Wayland window system instead of automatic desktop detection. Uppercase `--X11` and `--Wayland` spellings are also accepted. |
-| `--direct-draw` | Force regular draw calls instead of Bevy's indirect drawing (the default on DX12). |
-| `--indirect-draw` | Force Bevy's indirect drawing, overriding the DX12 direct-draw default. Indirect drawing remains the default on other backends. If both draw flags are passed, the last one wins. |
-| `--wgi` | Windows only: use Bevy/GilRs Windows Gaming Input instead of native XInput. Allows direct-device testing; native XInput is the default for Xbox and Steam Input. |
-| `--fullhd` | Use 1920×1080 instead of the default 1280×720 window resolution. |
-| `--verify-input` | Use a fixed 60 Hz time step for deterministic input verification; opens windowed. |
-| `--capture-game`, `--capture-visit`, `--capture-crystal`, `--capture-throw`, `--capture-wave`, `--capture-song`, `--capture-combat`, `--capture-finale` | Capture gameplay scenes; `finale` shows the final four-visitor round. |
-| `--capture-school` | Run the 72-fish stress scene and report frame times and per-pass CPU/GPU timings. Add `--fullhd` for 1080p. |
-| `--capture-boot`, `--capture-menu`, `--capture-settings`, `--capture-tail-color`, `--capture-language`, `--capture-help`, `--capture-credits`, `--capture-victory` | Capture the named screen. |
-| `--capture-graphics-low`, `--capture-graphics-balanced`, `--capture-graphics-high` | Capture graphics-quality settings. |
-| `--capture-pose-idle`, `--capture-pose-<name>`, `--capture-rig` | Capture Sabrina's idle pose, a named animation pose, or the character rig. |
-| `--capture-pose-wave`, `--capture-pose-throw`, `--capture-pose-throw-gather` | Close-up push, crystal release, or wind-up. Append `-left`, `-climb`, `-dive` or `-upright` to check casting alignment. |
-| `--capture-pose-stroke` | Run 20 seconds of close-up swimming cycles, holding Sabrina in frame for motion inspection. |
-| `--capture-xbox`, `--capture-playstation`, `--capture-generic-pad` | Preview controller hints using a synthetic controller. |
-| `--capture-occlusion`, `--capture-occlusion-solid` | Compare the foreground reef reveal with the solid-reef view. |
-| `--capture-hr-<name>`, `--capture-it-<name>` | Capture any supported scene in Croatian or Italian. |
-| `--capture-demo` | Run a seeded, scripted 20-second gameplay scene for recording. |
-| `SABRINA_CAPTURE_FRAMES=/path` | Save 15 fps PNG frames while running `--capture-demo`. |
-| `SABRINA_ASSETS=/path/to/assets` | Load an external asset directory instead of embedded assets. |
-| `SABRINA_CAPTURE_AA=fxaa` | Enable FXAA in captures. |
-| `SABRINA_BUILD_JOBS=4` | Limit build-script compilation parallelism. |
+| `--dx12` | Direct3D 12 on Windows |
+| `--vulkan` | Vulkan renderer |
+| `--metal` | Metal on macOS |
+| `--opengl` | OpenGL/GLES testing |
+| `--x11` | Force X11 on Linux |
+| `--wayland` | Force Wayland on Linux |
+| `--direct-draw` | Force regular draw calls |
+| `--indirect-draw` | Force indirect drawing |
+| `--wgi` | Alternative Windows controller backend |
+| `--fullhd` | Start at 1920×1080 |
+| `--verify-input` | Deterministic input testing |
+| `--capture-school` | Run the 72-fish stress scene |
+| `--capture-demo` | Run a scripted gameplay demo |
 
-Captures are saved to the system temporary directory and do not save preferences.
+There are additional capture modes for gameplay, menus, animations, character poses, controllers and different languages.
 
-## Tagged releases
+The complete capture and runtime options are available in the source code and development scripts.
 
-Push a version tag to build and publish a GitHub release:
+For example:
+
+```sh
+./tools/run.sh --vulkan --capture-school --fullhd
+```
+
+An unsupported renderer option falls back to the platform default. If an explicitly selected backend cannot initialize, the game reports the failure rather than silently switching renderers.
+
+## Performance and testing
+
+One of my goals is to keep the game playable on reasonably old hardware, including integrated graphics.
+
+The game uses shared meshes and materials, GPU skinning and other optimizations to reduce unnecessary work. There is still room for improvement, especially with animated fish and CPU overhead.
+
+Some results from machines I tested on 20 October 2026:
+
+| Hardware | Result |
+|---|---|
+| Intel i7-11800H, Intel UHD Graphics | 50–60 FPS, over 60 FPS with lower settings |
+| Intel i7-11800H, NVIDIA RTX 3070 Laptop | Over 400 FPS |
+| Intel i7-2600K, NVIDIA GTX 1060 | Stable 60+ FPS |
+
+These are observations from my development machines, not controlled benchmarks or minimum system requirements. Resolutions, quality settings and test conditions were not identical.
+
+Linux with Vulkan has been the main development environment and is working well.
+
+Windows 11 with Direct3D 12 has also been tested, including gameplay, animations, effects and a stress scene containing 72 fish.
+
+macOS Apple Silicon builds are part of the release workflow but have not yet been tested on actual hardware.
+
+Android and iOS have not been ported or tested yet.
+
+### Memory usage
+
+I also measured memory usage on Linux with an RTX 3070 Laptop GPU, Vulkan, Balanced graphics and embedded assets.
+
+| Scene | RAM | GPU memory |
+|---|---|---|
+| Main menu, 720p | About 1.4 GiB | 837 MiB |
+| Combat, 1080p | About 1.4 GiB | 851 MiB |
+| 72-fish stress test, 1080p | About 1.35 GiB | 851 MiB |
+
+These are measurements from one development build, not memory requirements. The RAM measurements include mapped executable data and driver allocations. Different drivers, operating systems and settings can produce different results.
+
+There is still plenty of optimization work I can do, particularly with model geometry, textures and animation.
+
+## Releases and packaging
+
+I prefer keeping distribution simple.
+
+The game assets are embedded in the executable, so there is no separate directory full of models, textures and audio files that needs to be shipped with every build.
+
+It is not a fully statically linked application. Linux still needs its normal system libraries, graphics drivers and audio support.
+
+The packaging script creates a portable directory with the executable and required documentation.
+
+```sh
+./tools/package-bevy.sh
+```
+
+GitHub Actions builds release packages for Linux x86_64, Windows x86_64 and macOS Apple Silicon when a version tag is pushed.
+
+For example:
 
 ```sh
 git tag v0.1.0
 git push origin v0.1.0
 ```
 
-The release workflow builds Linux x86_64 (Ubuntu 24.04 baseline), Windows x86_64 and macOS Apple Silicon packages. Archives include the asset-embedded executable, instructions, documentation and license notices, with a separate SHA-256 checksum for each download. Assets are not duplicated beside the executable. macOS packages are unsigned and not notarized. These are portable desktop packages, not Steam uploads or Android/iOS builds.
+The release workflow supports regular versions and prereleases such as `v0.1.0-beta.1`.
 
-Tags must use `vMAJOR.MINOR.PATCH`, optionally followed by a prerelease suffix such as `v0.1.0-beta.1`. Tags with a suffix publish as prereleases. All platform builds and checks must succeed before publication. Release notes include installation guidance and GitHub's automatically generated changelog since the previous release. Creating a release does not replace platform playtesting or artwork-permission review.
+All platform builds and checks must succeed before the release is published. Each package includes a separate SHA-256 checksum.
 
-## Music
+macOS builds are currently unsigned and not notarized.
 
-I keep the original MIDI arrangements in `art/music/`. The game plays
+These are normal portable desktop builds, not Steam or mobile releases.
 
-stereo Ogg renders: underwater exploration at 96 BPM during calm play and menus,
+### Update checking
 
-jellyfish combat at 144 BPM during visits, and a short reveal stinger at the
+Non-Steam builds check the latest public GitHub release when starting.
 
-start of each visit. Music crossfades between states and ducks beneath voices
+If a newer stable version exists, the game offers to open the release page or continue playing.
 
-and Sabrina's song. The stinger uses the music volume setting and is independent
+There is no automatic updater, installer or self-modifying executable. Clicking View release opens GitHub in the default browser and exits the game.
 
-of magic effects.
+If the computer is offline or GitHub cannot be reached, the game simply continues starting normally. The check has a short timeout and does not prevent playing.
 
-The two loops are padded to complete musical bars, with a warm-up pass retaining
+Development and automated capture runs skip the network check.
 
-notes and reverb across the seam. A 30 ms phase blend smooths the loop boundary
+## Music and sound
 
-without shortening the bar. The stinger plays once with its release tail.
+I made separate music for peaceful underwater exploration and jellyfish encounters.
 
-To regenerate the checked-in audio on Debian/Ubuntu:
+The calmer music runs at 96 BPM and the combat music at 144 BPM. A short musical cue plays when jellyfish appear.
+
+The music transitions between states and automatically lowers its volume when Sabrina speaks or sings.
+
+I keep the original MIDI arrangements in `art/music/`, while the actual game uses rendered Ogg audio.
+
+The loops have been prepared to transition smoothly without obvious gaps or interrupted reverb.
+
+If you want to regenerate the music on Debian or Ubuntu:
 
 ```sh
 sudo apt install libfluidsynth3 fluid-soundfont-gm ffmpeg python3-venv
+
 python3 -m venv /tmp/sabrina-music-env
 /tmp/sabrina-music-env/bin/pip install -r tools/requirements-music.txt
 /tmp/sabrina-music-env/bin/python -m tools.render_music \
   --soundfont /usr/share/sounds/sf2/FluidR3_GM.sf2
-/tmp/sabrina-music-env/bin/python -m unittest discover -s tests -v
 ```
 
-Rendering dependencies are authoring-only; players need neither MIDI software
+None of these tools are needed to play the game. They are only used when generating the audio assets.
 
-nor a soundfont. See [asset licensing](ASSET_LICENSE.md) for the compositions and
+## Project structure
 
-the included instrument-sample notice.
+I have tried to keep the project reasonably simple and avoid unnecessary dependencies or abstractions.
 
-## Working on the game
+The actual game rules and simulation are separated from the rendering engine where it makes sense. I want to be able to replace parts of the implementation without having to rewrite everything around them.
 
-- `src/reef_sim/`: engine-independent components, game rules and fixed-step simulation.
+`src/reef_sim/` contains the game rules and fixed-step simulation independently of Bevy.
 
-- `src/sabrina/`: Bevy input, presentation, animation, rendering, audio and UI.
+`src/sabrina/` contains the Bevy application, rendering, animations, input, audio and interface.
 
-- `assets/`: runtime models, embedded textures, audio, fonts, UI and WESL shaders.
+`assets/` contains the runtime artwork, models, textures, audio, fonts and shaders.
 
-- `art/`: maintained Blender sources and contact samples.
+`art/` contains the original Blender files and other artwork sources.
 
-- `tools/`: build, export, packaging and validation scripts.
+`tools/` contains scripts for building, packaging, exporting and testing.
 
-See [architecture](docs/ARCHITECTURE.md) and [art workflow](docs/CHARACTER_PIPELINE.md).
+There is also more detailed documentation in [ARCHITECTURE.md](docs/ARCHITECTURE.md) and [CHARACTER_PIPELINE.md](docs/CHARACTER_PIPELINE.md).
+
+To run the main project checks:
 
 ```sh
 cargo test --locked --workspace
@@ -310,20 +377,34 @@ python3 tools/export_rust_contacts.py --check
 ./tools/run.sh --verify-input
 ```
 
-## Next steps
+## What is next
 
-- Refine animation, underwater lighting and encounter balance through playtesting.
+For now I am mostly working on improving the animations, underwater lighting, performance and gameplay balance.
 
-- Broaden Windows hardware testing; test macOS and physical controllers.
+I also want to test the game on more Windows hardware, properly test macOS, improve controller support and eventually add touch controls for mobile devices.
 
-- Add touch input and measure mobile hardware before Android/iOS/TV releases.
+Steam is the first planned store release. Android and iOS should follow when the desktop version is in good shape and I have had time to test actual mobile hardware.
 
-- Prepare store releases on Steam, Android and iOS once the game is ready.
+I am not particularly interested in rushing it. This started as something fun to make with Sabrina, and I would rather keep it that way.
 
 ## License
 
-I release the source code, shaders, scripts, tests, configuration and technical documentation under [Apache 2.0](LICENSE). See [NOTICE](NOTICE) for authorship. The code may be reused and redistributed, including commercially, under that license.
+The source code, shaders, scripts, tests, configuration and technical documentation are released under the [Apache License 2.0](LICENSE).
 
-The important distinction is that the code and the game content do **not** share the same license: Sabrina's characters, story and world, 3D models, textures, UI artwork, music and recordings are **all rights reserved**, to the extent held by their respective rights holders. The title and logo are reserved branding; the code license grants no trademark rights. Third-party assets retain their own licenses. See [ASSET_LICENSE.md](ASSET_LICENSE.md).
+You are free to use, modify and redistribute the code, including commercially, as long as you follow the license terms.
 
-Official builds combine Apache-licensed code with separately licensed game content; selling them does not make the code proprietary or grant permission to redistribute the reserved content. Any future Steamworks or mobile-platform SDK files remain subject to their own terms and must not be published without permission.
+The artwork and game content are different.
+
+Sabrina's characters, story, world, 3D models, textures, user interface artwork, music and recordings are not covered by the Apache license. They remain all rights reserved to their respective rights holders.
+
+The game title and logo are also reserved. Third-party assets retain their original licenses.
+
+See [ASSET_LICENSE.md](ASSET_LICENSE.md) and [NOTICE](NOTICE) for the details.
+
+I wanted to make the code open source because I believe software should be something people can learn from, improve and build upon.
+
+At the same time, the characters, artwork and story are part of the little world Sabrina and I created together, and I want to keep those separate from the code license.
+
+The game might eventually be sold on Steam, but that does not change the fact that the source code is open source.
+
+Most importantly, I hope Sabrina will still be able to find, build and play this game many years from now, even if all the original platforms and stores are long gone.
