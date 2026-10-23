@@ -800,6 +800,8 @@ struct ReadingCheck {
     saved: Option<reef_sim::World>,
     pose: reef_sim::V2,
     offset: f32,
+    bones: Vec<(Entity, Transform)>,
+    reduced_motion: bool,
 }
 
 fn verify_reading(
@@ -816,6 +818,7 @@ fn verify_reading(
     mut window: Single<&mut Window, With<PrimaryWindow>>,
     content: Query<(&Node, &ComputedNode, &TextFont), With<crate::ui::CrawlText>>,
     viewport: Query<(&Node, &ComputedNode), With<crate::ui::CrawlViewport>>,
+    bones: Query<(Entity, &Transform, Option<&Name>), With<bevy::animation::AnimationTargetId>>,
     mut exit: MessageWriter<AppExit>,
 ) {
     if !options.verify || check.ability_stage != 3 {
@@ -833,6 +836,11 @@ fn verify_reading(
         1 => {
             reading.saved = Some(simulation.0.clone());
             reading.pose = rendered.0.sabrina.motion.pos;
+            reading.reduced_motion = preferences.reduced_motion;
+            reading.bones = bones
+                .iter()
+                .map(|(entity, transform, _)| (entity, *transform))
+                .collect();
             preferences.reduced_motion = false;
             preferences.language = 1;
             ui.screen = Screen::Credits;
@@ -893,6 +901,7 @@ fn verify_reading(
         364 => keys.press(KeyCode::Home),
         365 => {
             assert_eq!(offset(), 0.0);
+            preferences.reduced_motion = reading.reduced_motion;
             keys.press(KeyCode::Escape);
         }
         368 | 505 => {
@@ -905,6 +914,17 @@ fn verify_reading(
                 saved.sabrina.vitality.health
             );
             assert_eq!(rendered.0.sabrina.motion.pos, reading.pose);
+            for &(entity, before) in &reading.bones {
+                let (_, after, name) = bones.get(entity).unwrap();
+                assert!(before.translation.distance(after.translation) < 0.00001);
+                assert!(
+                    before.rotation.dot(after.rotation).abs() > 0.99999,
+                    "Reading screen changed paused bone {entity:?} {name:?}: {:?} -> {:?}",
+                    before.rotation,
+                    after.rotation
+                );
+                assert!(before.scale.distance(after.scale) < 0.00001);
+            }
             for i in 0..reef_sim::FISH_COUNT {
                 assert_eq!(simulation.0.fish[i].motion.pos, saved.fish[i].motion.pos);
             }
@@ -940,6 +960,7 @@ fn verify_reading(
                 reading.offset,
                 "Reduced motion must not auto-scroll"
             );
+            preferences.reduced_motion = reading.reduced_motion;
             pads.single_mut()
                 .unwrap()
                 .digital_mut()
