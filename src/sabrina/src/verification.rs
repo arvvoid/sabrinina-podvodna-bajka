@@ -537,6 +537,16 @@ fn drive(
             ui.return_to = Screen::Playing;
             ui.screen = Screen::Settings;
         }
+        556 | 557 => {
+            keys.press(KeyCode::ArrowDown);
+        }
+        558 => {
+            commands
+                .spawn(bevy::render::view::screenshot::Screenshot::primary_window())
+                .observe(bevy::render::view::screenshot::save_to_disk(
+                    std::env::temp_dir().join("sabrina-bevy-slider-focus.png"),
+                ));
+        }
         560 | 570 => {
             let position = pixel(&window, Vec2::new(1045.0, 650.0));
             window.set_cursor_position(Some(position));

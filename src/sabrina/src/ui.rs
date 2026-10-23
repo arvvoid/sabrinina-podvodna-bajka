@@ -203,12 +203,18 @@ struct ButtonLabel {
     action: Action,
 }
 
-const FOCUS_COLOR: Color = Color::srgb(1.0, 0.86, 0.35);
+const FOCUS_COLOR: Color = Color::srgb(1.0, 0.95, 0.80);
+const FOCUSED_SLIDER_COLOR: Color = Color::srgb(0.48, 0.98, 0.88);
 const SLIDER_COLOR: Color = Color::srgb(0.25, 0.87, 0.87);
+const PEARL_COLOR: Color = Color::srgb(0.65, 0.84, 0.82);
+const PEARL_SIZE: f32 = 18.0;
 const LABEL_COLOR: Color = Color::srgb(0.87, 0.97, 1.0);
 
 #[derive(Component)]
 struct SliderFill(usize);
+
+#[derive(Component)]
+struct SliderPearl(usize);
 
 #[derive(Component)]
 struct SliderLabel(usize);
@@ -370,30 +376,68 @@ impl Plugin for ReefUiPlugin {
     }
 }
 
+fn focus_glow(seconds: f32, reduced_motion: bool) -> BoxShadow {
+    let strength = if reduced_motion {
+        0.9
+    } else {
+        0.9 + 0.1 * (seconds * std::f32::consts::TAU / 3.8).sin()
+    };
+    BoxShadow(vec![
+        ShadowStyle {
+            color: Color::srgba(0.12, 0.90, 0.83, 0.6 * strength),
+            x_offset: px(0.0),
+            y_offset: px(0.0),
+            spread_radius: px(3.0),
+            blur_radius: px(20.0),
+        },
+        ShadowStyle {
+            color: Color::srgba(0.65, 1.0, 0.90, 0.5 * strength),
+            x_offset: px(0.0),
+            y_offset: px(0.0),
+            spread_radius: px(1.0),
+            blur_radius: px(6.0),
+        },
+    ])
+}
+
 fn update_focus(
     ui: Res<SessionUi>,
     focus: Res<Focus>,
-    mut outlines: Query<(&Hit, &mut Outline)>,
-    mut fills: Query<(&SliderFill, &mut BackgroundColor)>,
+    preferences: Res<Preferences>,
+    time: Res<Time<Real>>,
+    mut controls: Query<(&Hit, &mut BoxShadow), Without<SliderPearl>>,
+    mut fills: Query<(&SliderFill, &mut BackgroundColor), Without<SliderPearl>>,
+    mut pearls: Query<(&SliderPearl, &mut BackgroundColor, &mut BoxShadow)>,
     mut labels: Query<(&SliderLabel, &mut TextColor)>,
 ) {
     let focused = |index| ui.screen != Screen::Playing && index == focus.index;
-    for (hit, mut outline) in &mut outlines {
-        let color = if focused(hit.index) {
-            FOCUS_COLOR
+    let glow = focus_glow(time.elapsed_secs(), preferences.reduced_motion);
+    for (hit, mut shadow) in &mut controls {
+        shadow.set_if_neq(if focused(hit.index) {
+            glow.clone()
         } else {
-            Color::NONE
-        };
-        if outline.color != color {
-            outline.color = color;
-        }
+            BoxShadow::default()
+        });
     }
     for (fill, mut color) in &mut fills {
         color.set_if_neq(BackgroundColor(if focused(fill.0) {
-            FOCUS_COLOR
+            FOCUSED_SLIDER_COLOR
         } else {
             SLIDER_COLOR
         }));
+    }
+    for (pearl, mut color, mut shadow) in &mut pearls {
+        let active = focused(pearl.0);
+        color.set_if_neq(BackgroundColor(if active {
+            FOCUS_COLOR
+        } else {
+            PEARL_COLOR
+        }));
+        shadow.set_if_neq(if active {
+            glow.clone()
+        } else {
+            BoxShadow::default()
+        });
     }
     for (label, mut color) in &mut labels {
         color.set_if_neq(TextColor(if focused(label.0) {
@@ -588,7 +632,11 @@ impl Builder<'_, '_, '_> {
                 index: self.index,
                 slider: false,
             },
-            Outline::new(px(3.0), px(3.0), Color::NONE),
+            Node {
+                border_radius: BorderRadius::MAX,
+                ..r.node()
+            },
+            BoxShadow::default(),
         ));
         self.index += 1;
         let label = self.label(
@@ -774,9 +822,12 @@ impl Builder<'_, '_, '_> {
         let e = self
             .commands
             .spawn((
-                r.node(),
+                Node {
+                    border_radius: BorderRadius::MAX,
+                    ..r.node()
+                },
                 BackgroundColor(Color::srgb(0.05, 0.25, 0.30)),
-                Outline::new(px(3.0), px(3.0), Color::NONE),
+                BoxShadow::default(),
                 Hit {
                     rect: r,
                     action,
@@ -790,12 +841,43 @@ impl Builder<'_, '_, '_> {
         let f = self
             .commands
             .spawn((
-                rect(r.x, r.y, r.w * amount, r.h).node(),
+                Node {
+                    border_radius: BorderRadius::MAX,
+                    ..rect(r.x, r.y, r.w * amount, r.h).node()
+                },
                 BackgroundColor(SLIDER_COLOR),
                 SliderFill(index),
             ))
             .id();
         self.commands.entity(self.root).add_child(f);
+        let pearl = self
+            .commands
+            .spawn((
+                Node {
+                    border_radius: BorderRadius::MAX,
+                    ..rect(
+                        r.x + (r.w * amount - PEARL_SIZE / 2.0).clamp(0.0, r.w - PEARL_SIZE),
+                        r.y + (r.h - PEARL_SIZE) / 2.0,
+                        PEARL_SIZE,
+                        PEARL_SIZE,
+                    )
+                    .node()
+                },
+                BackgroundColor(PEARL_COLOR),
+                BoxShadow::default(),
+                SliderPearl(index),
+            ))
+            .with_children(|parent| {
+                parent.spawn((
+                    Node {
+                        border_radius: BorderRadius::MAX,
+                        ..rect(4.0, 3.0, 4.0, 4.0).node()
+                    },
+                    BackgroundColor(Color::WHITE.with_alpha(0.8)),
+                ));
+            })
+            .id();
+        self.commands.entity(self.root).add_child(pearl);
     }
 }
 
@@ -2802,27 +2884,46 @@ mod tests {
     }
 
     fn assert_focus_visuals(app: &mut App, focused: Option<usize>) {
+        let glow = focus_glow(
+            app.world().resource::<Time<Real>>().elapsed_secs(),
+            app.world().resource::<Preferences>().reduced_motion,
+        );
         let world = app.world_mut();
-        for (hit, outline, node) in world.query::<(&Hit, &Outline, &Node)>().iter(world) {
+        assert_eq!(world.query::<&Outline>().iter(world).count(), 0);
+        for (hit, shadow, node) in world.query::<(&Hit, &BoxShadow, &Node)>().iter(world) {
             assert_eq!(
-                outline.color,
+                *shadow,
                 if Some(hit.index) == focused {
-                    FOCUS_COLOR
+                    glow.clone()
                 } else {
-                    Color::NONE
+                    BoxShadow::default()
                 }
             );
-            assert_eq!(outline.width, px(3.0));
-            assert_eq!(outline.offset, px(3.0));
+            assert_eq!(node.border_radius, BorderRadius::MAX);
             assert_eq!(node.width, px(hit.rect.w));
         }
         for (fill, color) in world.query::<(&SliderFill, &BackgroundColor)>().iter(world) {
             assert_eq!(
                 color.0,
                 if Some(fill.0) == focused {
-                    FOCUS_COLOR
+                    FOCUSED_SLIDER_COLOR
                 } else {
                     SLIDER_COLOR
+                }
+            );
+        }
+        for (pearl, color, shadow) in world
+            .query::<(&SliderPearl, &BackgroundColor, &BoxShadow)>()
+            .iter(world)
+        {
+            let active = Some(pearl.0) == focused;
+            assert_eq!(color.0, if active { FOCUS_COLOR } else { PEARL_COLOR });
+            assert_eq!(
+                *shadow,
+                if active {
+                    glow.clone()
+                } else {
+                    BoxShadow::default()
                 }
             );
         }
@@ -2836,6 +2937,20 @@ mod tests {
                 }
             );
         }
+    }
+
+    #[test]
+    fn focus_glow_stays_visible_and_reduced_motion_is_static() {
+        for step in 0..=100 {
+            let time = step as f32 * 3.8 / 100.0;
+            let glow = focus_glow(time, false);
+            assert_eq!(glow.0.len(), 2);
+            assert!((0.47..=0.61).contains(&glow.0[0].color.to_srgba().alpha));
+            assert_eq!(glow.0[0].blur_radius, px(20.0));
+            assert_eq!(glow.0[1].blur_radius, px(6.0));
+            assert_eq!(focus_glow(time, true), focus_glow(0.0, true));
+        }
+        assert_ne!(focus_glow(0.95, false), focus_glow(2.85, false));
     }
 
     #[test]
@@ -2865,8 +2980,27 @@ mod tests {
             let world = app.world_mut();
             assert_eq!(world.query::<&SliderLabel>().iter(world).count(), 4);
             assert_eq!(world.query::<&SliderFill>().iter(world).count(), 4);
+            assert_eq!(world.query::<&SliderPearl>().iter(world).count(), 4);
             for (_, node) in world.query::<(&SliderFill, &Node)>().iter(world) {
                 assert_eq!(node.width, px(400.0 * amount));
+                assert_eq!(node.border_radius, BorderRadius::MAX);
+            }
+            let tracks: HashMap<_, _> = world
+                .query::<&Hit>()
+                .iter(world)
+                .filter(|hit| hit.slider)
+                .map(|hit| (hit.index, hit.rect))
+                .collect();
+            for (pearl, node) in world.query::<(&SliderPearl, &Node)>().iter(world) {
+                let track = tracks[&pearl.0];
+                assert_eq!(node.width, px(PEARL_SIZE));
+                assert_eq!(node.height, px(PEARL_SIZE));
+                assert_eq!(
+                    node.left,
+                    px(track.x
+                        + (track.w * amount - PEARL_SIZE / 2.0).clamp(0.0, track.w - PEARL_SIZE))
+                );
+                assert_eq!(node.border_radius, BorderRadius::MAX);
             }
             let indices: Vec<_> = world
                 .query::<&Hit>()
@@ -2886,6 +3020,10 @@ mod tests {
             app.world_mut().run_system_once(update_focus).unwrap();
             assert_focus_visuals(&mut app, Some(index));
         }
+        app.world_mut().resource_mut::<Preferences>().reduced_motion = true;
+        app.world_mut().run_system_once(update_focus).unwrap();
+        let index = app.world().resource::<Focus>().index;
+        assert_focus_visuals(&mut app, Some(index));
         app.world_mut().resource_mut::<SessionUi>().screen = Screen::Playing;
         app.world_mut().run_system_once(update_focus).unwrap();
         assert_focus_visuals(&mut app, None);
