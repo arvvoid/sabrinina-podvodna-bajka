@@ -4,6 +4,9 @@ version = "0.2.6"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
+[features]
+steam = []
+
 [dependencies]
 reef_sim = { path = "../reef_sim" }
 bevy = { version = "=0.20.0", default-features = false, features = ["std", "default_app", "3d_bevy_render", "pbr_anisotropy_texture", "ui_bevy_render", "scene", "bevy_winit", "x11", "wayland", "bevy_gilrs", "multi_threaded", "default_font", "audio", "wav", "jpeg"] }
@@ -12,7 +15,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 semver = "1"
 ureq = "3"
-webbrowser = "1"
+fastrand = "2"
 winit = { version = "0.30", default-features = false }
 
 [target.'cfg(target_os = "windows")'.dependencies]

@@ -42,13 +42,13 @@ impl Plugin for VerificationPlugin {
             )
             .add_systems(
                 Update,
-                prepare_update_prompt
+                prepare_update_notice
                     .in_set(crate::loading::LoadResources)
                     .after(crate::updates::start),
             )
             .add_systems(
                 PreUpdate,
-                verify_update_prompt
+                verify_update_notice
                     .after(bevy::input::InputSystems)
                     .before(crate::app::input),
             )
@@ -95,57 +95,42 @@ fn verify_splash(
     *checked = true;
 }
 
-fn prepare_update_prompt(options: Res<Options>, mut check: ResMut<crate::updates::UpdateCheck>) {
+fn prepare_update_notice(options: Res<Options>, mut check: ResMut<crate::updates::UpdateCheck>) {
     if options.verify {
-        check.status = crate::updates::Status::Available {
-            tag: "v9999.0.0".into(),
-            url: "https://github.com/arvvoid/sabrinina-podvodna-bajka/releases/tag/v9999.0.0"
-                .into(),
-        };
+        check.latest_version = Some("v9999.0.0".into());
     }
 }
 
-fn verify_update_prompt(
+fn verify_update_notice(
+    mut commands: Commands,
     options: Res<Options>,
     check: Res<crate::updates::UpdateCheck>,
     loading: Res<crate::loading::Loading>,
     ui: Res<SessionUi>,
     library: Res<crate::assets::Library>,
     texts: Query<&Text>,
-    mut keys: ResMut<ButtonInput<KeyCode>>,
-    mut frame: Local<u8>,
+    mut captured: Local<bool>,
+    mut finished: Local<bool>,
 ) {
-    if !options.verify || *frame >= 5 || !loading.splash_presented {
+    if !options.verify || *finished || !loading.splash_presented {
         return;
     }
-    *frame += 1;
-    if *frame < 5 {
-        assert!(matches!(
-            check.status,
-            crate::updates::Status::Available { .. }
-        ));
-        assert!(!ui.loaded);
-        assert!(loading.assets_total > 0);
-        assert!(!library.handles.is_empty());
-        assert!(loading.progress >= 0.05 && loading.progress < 1.0);
+    assert_eq!(check.latest_version.as_deref(), Some("v9999.0.0"));
+    assert!(loading.assets_total > 0);
+    assert!(!library.handles.is_empty());
+    if !*captured && texts.iter().any(|text| text.0.contains("v9999.0.0")) {
+        commands
+            .spawn(bevy::render::view::screenshot::Screenshot::primary_window())
+            .observe(bevy::render::view::screenshot::save_to_disk(
+                std::env::temp_dir().join("sabrina-bevy-update-notice.png"),
+            ));
+        *captured = true;
     }
-    match *frame {
-        3 => {
-            assert!(texts.iter().any(|text| text.0.contains("v9999.0.0")));
-            keys.press(KeyCode::Tab);
-        }
-        4 => {
-            keys.release(KeyCode::Tab);
-            keys.press(KeyCode::Enter);
-        }
-        5 => {
-            keys.release(KeyCode::Enter);
-            assert_eq!(check.status, crate::updates::Status::Continue);
-            println!(
-                "BEVY CHECK OK: update prompt shares loading progress; resources load behind it; keyboard skip continues"
-            );
-        }
-        _ => {}
+    if ui.loaded {
+        assert!(*captured);
+        assert_eq!(loading.progress, 1.0);
+        println!("BEVY CHECK OK: update notice never blocks loading or requires an action");
+        *finished = true;
     }
 }
 

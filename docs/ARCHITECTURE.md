@@ -23,7 +23,9 @@ Sabrina combines authored clips with runtime pose corrections, facial morphs and
 
 Textures receive mipmaps during loading. Water, reef and crystal effects use embedded WESL shaders. Quality settings control shadows, antialiasing and effect detail. Pooled effects avoid unnecessary transform and material updates.
 
-Startup requests only the splash background, localized title and font before bulk loading. A dedicated 2D UI camera renders independently of the 3D scene. Render-world feedback confirms uploaded splash images and ready pipelines across two frames before the `LoadResources` set starts model/audio preloads, scene/effect setup and the concurrent update check. The loading screen stays on top during graphics warmup; readiness still requires eight settled render frames and a completed update check or user choice.
+Startup requests only the splash background, localized title and font before bulk loading. A dedicated 2D UI camera renders independently of the 3D scene. Render-world feedback confirms uploaded splash images and ready pipelines across two frames before the `LoadResources` set starts model/audio preloads, scene/effect setup and the concurrent update check. The loading screen stays on top during graphics warmup; readiness requires eight settled render frames but never waits for the update check.
+
+Standalone desktop update notices use a worker thread and a persisted release cache. The first request is deferred by 1–3 days, then attempts are separated by 30 days plus 0–3 days of jitter. Saved deadlines survive restarts, including failed requests. Cached release versions only appear as passive loading-screen text and are compared against the installed version each launch. The `steam` feature and mobile targets disable this path.
 
 Default graphics backends are DX12 on Windows, Vulkan on Linux and Metal on macOS. Command-line overrides are available for testing.
 

@@ -186,8 +186,6 @@ enum Action {
     Effects,
     Voice,
     Rest,
-    ViewRelease,
-    SkipUpdate,
 }
 
 #[derive(Component)]
@@ -308,7 +306,7 @@ impl UiMaterial for AbilityIcon {
 struct Focus {
     index: usize,
     key: Option<LayoutKey>,
-    update_status: Option<crate::updates::Status>,
+    update_version: Option<String>,
     last_screen: Option<Screen>,
     count: usize,
     navigation: MenuNavigation,
@@ -320,7 +318,7 @@ struct LayoutKey {
     screen: Screen,
     language: usize,
     quality: u8,
-    flags: [bool; 7],
+    flags: [bool; 6],
     visitors: i32,
     sliders: [f32; 4],
     best: i32,
@@ -818,6 +816,11 @@ fn draw(
 ) {
     let zoom = (window.width() / CANVAS_WIDTH).min(window.height() / CANVAS_HEIGHT);
     scale.0 = zoom;
+    let update_version = if ui.screen == Screen::Loading {
+        update_check.latest_version.as_ref()
+    } else {
+        None
+    };
     // Rebuild only when layout or settings change; HUD values update separately.
     let key = LayoutKey {
         screen: ui.screen,
@@ -830,7 +833,6 @@ fn draw(
             preferences.gentle,
             preferences.show_fps,
             ui.loaded && options.capture.is_none(),
-            update_check.browser_error,
         ],
         visitors: preferences.visitors,
         sliders: [
@@ -845,13 +847,11 @@ fn draw(
         rumble: preferences.rumble,
         tail: preferences.tail_color,
     };
-    if focus.key.as_ref() == Some(&key)
-        && focus.update_status.as_ref() == Some(&update_check.status)
-    {
+    if focus.key.as_ref() == Some(&key) && focus.update_version.as_ref() == update_version {
         return;
     }
     focus.key = Some(key);
-    focus.update_status = Some(update_check.status.clone());
+    focus.update_version = update_version.cloned();
     if focus.last_screen != Some(ui.screen) {
         focus.index = 0;
         focus.last_screen = Some(ui.screen);
@@ -916,36 +916,8 @@ fn draw(
             .id();
         builder.commands.entity(root).add_child(title);
         let scale = image.w / LOADING_ART_WIDTH;
-        if let crate::updates::Status::Available { tag, .. } = &update_check.status {
-            builder.panel(rect(370.0, 510.0, 860.0, 265.0));
-            let title = tr("A new underwater adventure awaits!", preferences.language);
-            let message = format!(
-                "{} {}\n{}",
-                tr("New version available:", preferences.language),
-                tag,
-                tr(
-                    if update_check.browser_error {
-                        "Could not open your browser. Try again or skip for now."
-                    } else {
-                        "View the GitHub release to download it, or keep playing this version."
-                    },
-                    preferences.language
-                )
-            );
-            builder.label(rect(410.0, 538.0, 780.0, 42.0), 29.0, title, None);
-            builder.label(rect(410.0, 590.0, 780.0, 75.0), 21.0, message, None);
-            builder.button(
-                rect(410.0, 687.0, 370.0, 58.0),
-                "View release and exit",
-                Action::ViewRelease,
-                true,
-            );
-            builder.button(
-                rect(810.0, 687.0, 370.0, 58.0),
-                "Skip for now",
-                Action::SkipUpdate,
-                false,
-            );
+        if let Some(version) = &update_check.latest_version {
+            draw_update_notice(&mut builder, version, viewport_width, viewport_height, zoom);
         }
         let halo = loading_ready_overlay(image);
         let halo = builder
@@ -1102,6 +1074,54 @@ fn draw_loading_stats(
             color: Color::BLACK,
         },
         TextLayout::justify(Justify::Left),
+    ));
+}
+
+fn update_notice_rect(viewport_width: f32, viewport_height: f32, zoom: f32) -> Rect {
+    let scale = (0.8 / zoom).max(1.0);
+    let margin = 20.0 * scale;
+    let width = (340.0 * scale).min(viewport_width - 2.0 * margin);
+    let x = (CANVAS_WIDTH + viewport_width) / 2.0 - margin - width;
+    let mut y = (CANVAS_HEIGHT - viewport_height) / 2.0 + margin;
+    let title = loading_title_rect(
+        loading_image_rect(viewport_width, viewport_height),
+        viewport_width,
+        viewport_height,
+    );
+    if x < title.x + title.w + margin {
+        y = y.max(title.y + title.h + margin);
+    }
+    rect(x, y, width, 0.0)
+}
+
+fn draw_update_notice(
+    builder: &mut Builder<'_, '_, '_>,
+    version: &str,
+    viewport_width: f32,
+    viewport_height: f32,
+    zoom: f32,
+) {
+    let scale = (0.8 / zoom).max(1.0);
+    let area = update_notice_rect(viewport_width, viewport_height, zoom);
+    let notice = builder.label(
+        area,
+        18.0 * scale,
+        format!("{}\n{version}", tr("New version available:", builder.lang)),
+        None,
+    );
+    builder.commands.entity(notice).insert((
+        Node {
+            height: Val::Auto,
+            padding: UiRect::all(px(12.0 * scale)),
+            border_radius: BorderRadius::all(px(10.0 * scale)),
+            ..area.node()
+        },
+        BackgroundColor(Color::srgba(0.01, 0.07, 0.13, 0.72)),
+        TextColor(Color::srgb(1.0, 0.95, 0.80)),
+        TextShadow {
+            offset: Vec2::splat(1.0 / zoom),
+            color: Color::BLACK,
+        },
     ));
 }
 
@@ -1811,9 +1831,8 @@ fn actions(
     options: Res<Options>,
     mut exit: MessageWriter<AppExit>,
     time: Res<Time<Real>>,
-    startup: (Local<bool>, Option<ResMut<crate::updates::UpdateCheck>>),
+    mut wave_pointer: Local<bool>,
 ) {
-    let (mut wave_pointer, update_check) = startup;
     if options.capture.is_some() {
         return;
     }
@@ -2042,25 +2061,6 @@ fn actions(
                 .args(["/C", "start", "", url])
                 .spawn();
         }
-        Action::SkipUpdate => {
-            if let Some(mut check) = update_check {
-                check.status = crate::updates::Status::Continue;
-                check.browser_error = false;
-            }
-        }
-        Action::ViewRelease => {
-            if let Some(mut check) = update_check {
-                match crate::updates::open_release(&mut check) {
-                    Ok(()) => {
-                        exit.write(AppExit::Success);
-                    }
-                    Err(error) => {
-                        error!("{error}");
-                        check.browser_error = true;
-                    }
-                }
-            }
-        }
         Action::Music => {
             if let Some(f) = fraction {
                 preferences.music = f
@@ -2085,12 +2085,7 @@ fn actions(
     }
     if !matches!(
         action,
-        Action::Crystal
-            | Action::Song
-            | Action::Wave
-            | Action::Pause
-            | Action::SkipUpdate
-            | Action::ViewRelease
+        Action::Crystal | Action::Song | Action::Wave | Action::Pause
     ) {
         preferences.save();
     }
@@ -2142,7 +2137,6 @@ fn update(
     library: Res<crate::assets::Library>,
     loading: Res<crate::loading::Loading>,
     server: Res<AssetServer>,
-    update_check: Res<crate::updates::UpdateCheck>,
     mut button_images: Local<Option<ButtonImages>>,
 ) {
     let sabrina = &simulation.0.sabrina;
@@ -2204,15 +2198,6 @@ fn update(
                 tr(
                     if !loading.splash_presented {
                         "Preparing the loading screen…"
-                    } else if update_check.status == crate::updates::Status::Checking {
-                        "Checking for updates…"
-                    } else if loading.warming
-                        && matches!(
-                            update_check.status,
-                            crate::updates::Status::Available { .. }
-                        )
-                    {
-                        "Choose whether to update or continue"
                     } else if loading.warming {
                         "Preparing graphics…"
                     } else if library.ready {
@@ -3106,62 +3091,90 @@ mod tests {
     }
 
     #[test]
-    fn controller_can_skip_update_without_starting_gameplay() {
-        let (mut app, pad) = input_app();
+    fn update_notice_does_not_block_leaving_the_loading_screen() {
+        use bevy::ecs::system::RunSystemOnce;
+        let (mut app, _) = input_app();
         let mut check = crate::updates::UpdateCheck::default();
-        check.status = crate::updates::Status::Available {
-            tag: "v0.3.0".into(),
-            url: "https://github.com/arvvoid/sabrinina-podvodna-bajka/releases/tag/v0.3.0".into(),
-        };
-        check.browser_error = true;
+        check.latest_version = Some("v0.3.0".into());
         app.insert_resource(check);
         app.world_mut().resource_mut::<SessionUi>().screen = Screen::Loading;
-        app.world_mut().resource_mut::<Focus>().last_screen = Some(Screen::Loading);
-        for mut hit in app
-            .world_mut()
-            .query::<&mut Hit>()
-            .iter_mut(app.world_mut())
-        {
-            hit.action = if hit.index == 0 {
-                Action::ViewRelease
-            } else {
-                Action::SkipUpdate
-            };
-        }
-        button(&mut app, pad, GamepadButton::DPadRight, 1.0);
-        button(&mut app, pad, GamepadButton::DPadRight, 0.0);
-        app.update();
-        assert_eq!(app.world().resource::<Focus>().index, 1);
-        button(&mut app, pad, GamepadButton::South, 1.0);
-        button(&mut app, pad, GamepadButton::South, 0.0);
-        app.update();
-        let check = app.world().resource::<crate::updates::UpdateCheck>();
-        assert_eq!(check.status, crate::updates::Status::Continue);
-        assert!(!check.browser_error);
+        app.world_mut().resource_mut::<SessionUi>().loaded = true;
+        app.world_mut()
+            .resource_mut::<ButtonInput<KeyCode>>()
+            .press(KeyCode::Enter);
+        app.world_mut()
+            .run_system_once(continue_from_loading)
+            .unwrap();
         let ui = app.world().resource::<SessionUi>();
-        assert_eq!(ui.screen, Screen::Loading);
-        assert!(!ui.loaded);
+        assert_eq!(ui.screen, Screen::Menu);
+        assert_eq!(
+            app.world()
+                .resource::<crate::updates::UpdateCheck>()
+                .latest_version
+                .as_deref(),
+            Some("v0.3.0")
+        );
         assert!(!app.world().resource::<PendingInput>().0.cast);
         assert!(app.world().resource::<Messages<AppExit>>().is_empty());
     }
 
     #[test]
-    fn update_prompt_has_all_three_translations() {
-        for key in [
-            "Checking for updates…",
-            "Just a moment before we dive in.",
-            "A new underwater adventure awaits!",
-            "New version available:",
-            "View the GitHub release to download it, or keep playing this version.",
-            "Could not open your browser. Try again or skip for now.",
-            "View release and exit",
-            "Skip for now",
-        ] {
-            assert!(table().contains_key(key));
-            for language in 0..3 {
-                assert!(!tr(key, language).is_empty());
-            }
+    fn update_notice_is_localized_and_stays_clear_of_the_title() {
+        for language in 0..3 {
+            assert!(!tr("New version available:", language).is_empty());
         }
+        for (width, height) in [
+            (640.0, 360.0),
+            (1280.0, 720.0),
+            (1920.0, 1080.0),
+            (2560.0, 1080.0),
+            (720.0, 1280.0),
+        ] {
+            let zoom = (width / CANVAS_WIDTH).min(height / CANVAS_HEIGHT);
+            let viewport_width = width / zoom;
+            let viewport_height = height / zoom;
+            let notice = update_notice_rect(viewport_width, viewport_height, zoom);
+            let title = loading_title_rect(
+                loading_image_rect(viewport_width, viewport_height),
+                viewport_width,
+                viewport_height,
+            );
+            assert!(notice.x >= title.x + title.w || notice.y >= title.y + title.h);
+            assert!(notice.x + notice.w < (CANVAS_WIDTH + viewport_width) / 2.0);
+            assert!(notice.y >= (CANVAS_HEIGHT - viewport_height) / 2.0);
+        }
+    }
+
+    #[test]
+    fn update_notice_has_no_focus_targets_or_actions() {
+        fn build(mut commands: Commands, server: Res<AssetServer>) {
+            let root = commands.spawn_empty().id();
+            let mut builder = Builder {
+                commands: &mut commands,
+                server: &server,
+                root,
+                lang: 0,
+                index: 0,
+                font: default(),
+                background_alpha: 1.0,
+                controls: Style::Keyboard,
+            };
+            draw_update_notice(&mut builder, "v0.3.0", CANVAS_WIDTH, CANVAS_HEIGHT, 0.8);
+            assert_eq!(builder.index, 0);
+        }
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, AssetPlugin::default()))
+            .add_systems(Startup, build);
+        app.update();
+        let world = app.world_mut();
+        assert_eq!(world.query::<&Hit>().iter(world).count(), 0);
+        assert_eq!(world.query::<&ButtonLabel>().iter(world).count(), 0);
+        assert!(
+            world
+                .query::<&Text>()
+                .iter(world)
+                .any(|text| text.0 == "New version available:\nv0.3.0")
+        );
     }
 
     #[test]

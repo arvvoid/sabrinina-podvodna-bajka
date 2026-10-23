@@ -312,15 +312,17 @@ These are normal portable desktop builds, not Steam or mobile releases.
 
 ### Update checking
 
-Non-Steam builds check the latest public GitHub release when starting.
+Standalone desktop builds check GitHub Releases in the background, never blocking loading or gameplay. Steam builds (`--features steam`) and Android/iOS builds do not read the update cache or contact GitHub.
 
-If a newer stable version exists, the game offers to open the release page or continue playing.
+A fresh installation schedules its first check for a random 1–3 days later. After each attempt, the next check is scheduled for 30 days plus a random 0–3 days later. Checks only run on a launch after the saved deadline; there is no background timer or service while the game is closed.
 
-There is no automatic updater, installer or self-modifying executable. Clicking View release opens GitHub in the default browser and exits the game.
+The last attempt, next check time and latest stable version are saved in `update-check.json` beside the local settings. Restarting does not reset the schedule. The saved version can display a small localized notice in the loading screen's upper-right corner without another request. The notice disappears after installing that version or a newer one.
 
-If the computer is offline or GitHub cannot be reached, the game simply continues starting normally. The check has a short timeout and does not prevent playing.
+The notice has no buttons, links or modal dialog and never exits the game. There is no automatic updater, installer or download.
 
-Development and automated capture runs skip the network check.
+Offline and failed attempts preserve the cached version and wait until the next 30–33-day deadline. Failures only go to the diagnostic log, with no error shown to the player. The attempt is saved before contacting GitHub, and simultaneous launches cannot make duplicate requests. Unreadable/unwritable history or a clock moved behind the last attempt safely skips the check.
+
+Automated input verification and capture runs skip the cache and network check.
 
 ## Music and sound
 

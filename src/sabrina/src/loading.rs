@@ -220,23 +220,14 @@ fn report(
 }
 
 impl Loading {
-    fn advance(
-        &mut self,
-        status: RenderStatus,
-        assets_ready: bool,
-        rigs_ready: bool,
-        update_ready: bool,
-    ) -> bool {
-        let graphics_ready = self.observe(status, assets_ready, rigs_ready);
-        let done = graphics_ready && update_ready;
-        let update_progress = if update_ready { 0.01 } else { 0.0 };
+    fn advance(&mut self, status: RenderStatus, assets_ready: bool, rigs_ready: bool) -> bool {
+        let done = self.observe(status, assets_ready, rigs_ready);
         let progress = if done {
             1.0
         } else if self.warming {
-            0.9 + update_progress + 0.08 * self.settled.min(8) as f32 / 8.0
+            0.9 + 0.09 * self.settled.min(8) as f32 / 8.0
         } else if self.assets_total > 0 {
-            0.05 + update_progress
-                + 0.75 * self.assets_loaded as f32 / self.assets_total as f32
+            0.05 + 0.75 * self.assets_loaded as f32 / self.assets_total as f32
                 + if rigs_ready { 0.1 } else { 0.0 }
         } else {
             0.0
@@ -275,7 +266,6 @@ pub(crate) fn ready(
     server: Res<AssetServer>,
     library: Res<crate::assets::Library>,
     rigs: Query<&crate::assets::RigPlayer>,
-    check: Res<crate::updates::UpdateCheck>,
 ) {
     if loading.progress == 1.0 {
         return;
@@ -300,8 +290,7 @@ pub(crate) fn ready(
     loading.assets_total = total;
     loading.pipelines_ready = status.ready;
     loading.pipelines_total = status.total;
-    let update_ready = check.status == crate::updates::Status::Continue;
-    let done = loading.advance(status, assets_ready, rigs_ready, update_ready);
+    let done = loading.advance(status, assets_ready, rigs_ready);
     if done {
         feedback
             .0
@@ -366,7 +355,7 @@ mod tests {
     }
 
     #[test]
-    fn progress_advances_while_checking_but_cannot_finish_before_update_choice() {
+    fn progress_finishes_with_resources_and_graphics_without_waiting_for_network() {
         let mut loading = Loading {
             splash_presented: true,
             assets_total: 10,
@@ -381,17 +370,17 @@ mod tests {
             loading.assets_loaded = loaded;
             status.frame += 1;
             let previous = loading.progress;
-            assert!(!loading.advance(status, loaded == 10, false, false));
+            assert!(!loading.advance(status, loaded == 10, false));
             assert!(loading.progress > previous);
             assert!(loading.progress < 1.0);
         }
-        for _ in 0..12 {
+        for _ in 0..7 {
             status.frame += 1;
-            assert!(!loading.advance(status, true, true, false));
+            assert!(!loading.advance(status, true, true));
         }
-        assert!((loading.progress - 0.98).abs() < 0.0001);
         assert!(loading.progress < 1.0);
-        assert!(loading.advance(status, true, true, true));
+        status.frame += 1;
+        assert!(loading.advance(status, true, true));
         assert_eq!(loading.progress, 1.0);
     }
 
