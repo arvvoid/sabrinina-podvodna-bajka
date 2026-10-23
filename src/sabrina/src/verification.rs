@@ -194,17 +194,17 @@ fn drive(
         }
         54 => {
             assert_eq!(simulation.0.crystal.magic.state, reef_sim::Spell::Resting);
-            println!("BEVY CHECK OK: scene click and E do not cast crystal");
+            println!("BEVY CHECK OK: left-click Wave and E do not cast crystal");
         }
         55 => {
             assert!(simulation.0.sabrina.wave.active);
             println!("BEVY CHECK OK: keyboard wave");
             simulation.0.sabrina.wave.active = false;
-            keys.press(KeyCode::Space);
+            mouse.press(MouseButton::Right);
         }
         60 => {
             assert_eq!(simulation.0.crystal.magic.state, reef_sim::Spell::Charging);
-            println!("BEVY CHECK OK: crystal hand wind-up");
+            println!("BEVY CHECK OK: right-click crystal hand wind-up");
         }
         150 => {
             assert!(simulation.0.sabrina.cooldown > 9.0 && simulation.0.sabrina.cooldown <= 12.0);
@@ -672,14 +672,14 @@ fn drive(
                 }
                 1 => {
                     if simulation.0.sabrina.wave.cast_id == 1 {
-                        let position = pixel(&window, Vec2::new(656.0, 800.0));
+                        let position = pixel(&window, Vec2::new(1350.0, 300.0));
                         window.set_cursor_position(Some(position));
                         mouse.press(MouseButton::Left);
                     } else {
                         assert!(simulation.0.session.time - check.ability_time >= 3.0);
                         assert_eq!(simulation.0.sabrina.wave.scale, 2.0);
                         println!(
-                            "BEVY CHECK OK: held HUD Wave auto-releases charged after 3 seconds"
+                            "BEVY CHECK OK: held scene left-click Wave auto-releases charged after 3 seconds"
                         );
                         simulation.0.sabrina.wave.active = false;
                         simulation.0.sabrina.motion.pos = reef_sim::v(-8.0, 8.0);

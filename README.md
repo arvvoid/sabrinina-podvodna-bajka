@@ -101,9 +101,9 @@ You can choose Gentle or Lively, adjust how often jellyfish appear, or turn the 
 | Action | Mouse / keyboard | Xbox | PlayStation |
 |---|---|---|---|
 | Swim | Pointer, WASD / arrows | Left stick | Left stick |
-| Wave | Right click, F or HUD button | A (green) | × (blue) |
+| Wave | Left click (hold to charge), F or HUD button | A (green) | × (blue) |
 | Song | Q or HUD button | B (red) | ○ (red) |
-| Crystal | Space or HUD button | X (blue), or right shoulder | □ (pink), or right shoulder |
+| Crystal | Right click, Space or HUD button | X (blue), or right shoulder | □ (pink), or right shoulder |
 | Pause | Escape | Start / Menu | Options |
 | Fullscreen | F11 or Settings | Settings | Settings |
 

@@ -364,9 +364,9 @@ pub fn input(
     }
     let mut pausing = keys.just_pressed(KeyCode::Escape);
     let mut toggle = keys.just_pressed(KeyCode::KeyQ);
-    let mut wave = keys.just_pressed(KeyCode::KeyF) || mouse.just_pressed(MouseButton::Right);
-    let mut wave_held = keys.pressed(KeyCode::KeyF) || mouse.pressed(MouseButton::Right);
-    let mut cast = keys.just_pressed(KeyCode::Space);
+    let mut wave = keys.just_pressed(KeyCode::KeyF) || mouse.just_pressed(MouseButton::Left);
+    let mut wave_held = keys.pressed(KeyCode::KeyF) || mouse.pressed(MouseButton::Left);
+    let mut cast = keys.just_pressed(KeyCode::Space) || mouse.just_pressed(MouseButton::Right);
     let mut movement = Vec2::new(
         (keys.pressed(KeyCode::KeyD) || keys.pressed(KeyCode::ArrowRight)) as u8 as f32
             - (keys.pressed(KeyCode::KeyA) || keys.pressed(KeyCode::ArrowLeft)) as u8 as f32,

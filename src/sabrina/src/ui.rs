@@ -1765,12 +1765,30 @@ fn actions(
     if menu || !mouse.pressed(MouseButton::Left) {
         *wave_pointer = false;
     }
-    if !menu && mouse.just_pressed(MouseButton::Left) && mouse.pressed(MouseButton::Left) {
-        *wave_pointer = hits.iter().any(|hit| {
-            matches!(hit.action, Action::Wave) && pointer.is_some_and(|pos| hit.rect.contains(pos))
+    if !menu && mouse.just_pressed(MouseButton::Left) {
+        *wave_pointer = !hits.iter().any(|hit| {
+            !matches!(hit.action, Action::Wave) && pointer.is_some_and(|pos| hit.rect.contains(pos))
         });
+        if !*wave_pointer {
+            pending.0.wave = keys.just_pressed(KeyCode::KeyF)
+                || pad.is_some_and(|pad| pad.just_pressed(GamepadButton::South));
+        }
     }
-    pending.0.wave_held |= *wave_pointer;
+    pending.0.wave_held = keys.pressed(KeyCode::KeyF)
+        || pad.is_some_and(|pad| pad.pressed(GamepadButton::South))
+        || (*wave_pointer && mouse.pressed(MouseButton::Left));
+    if !menu
+        && mouse.just_pressed(MouseButton::Right)
+        && hits
+            .iter()
+            .any(|hit| pointer.is_some_and(|pos| hit.rect.contains(pos)))
+    {
+        pending.0.cast = keys.just_pressed(KeyCode::Space)
+            || pad.is_some_and(|pad| {
+                pad.just_pressed(GamepadButton::West)
+                    || pad.just_pressed(GamepadButton::RightTrigger)
+            });
+    }
     let activate = menu
         && (keys.just_pressed(KeyCode::Enter)
             || keys.just_pressed(KeyCode::Space)
@@ -2635,7 +2653,8 @@ mod tests {
             app.world_mut()
                 .resource_mut::<ButtonInput<MouseButton>>()
                 .press(MouseButton::Left);
-            app.world_mut().run_system_once(actions).unwrap();
+            app.world_mut().run_system_once(app::input).unwrap();
+            app.world_mut().run_system_cached(actions).unwrap();
             let input = &app.world().resource::<PendingInput>().0;
             assert_eq!(input.cast, matches!(action, Action::Crystal));
             assert_eq!(input.toggle_song, matches!(action, Action::Song));
@@ -2643,10 +2662,94 @@ mod tests {
             assert_eq!(input.wave_held, matches!(action, Action::Wave));
             app.world_mut()
                 .resource_mut::<ButtonInput<MouseButton>>()
+                .clear();
+            app.world_mut().run_system_once(app::input).unwrap();
+            app.world_mut().run_system_cached(actions).unwrap();
+            assert_eq!(
+                app.world().resource::<PendingInput>().0.wave_held,
+                matches!(action, Action::Wave),
+                "Holding another HUD icon must not charge Wave"
+            );
+            app.world_mut()
+                .resource_mut::<ButtonInput<MouseButton>>()
                 .release(MouseButton::Left);
             app.world_mut().resource_mut::<PendingInput>().0.wave_held = false;
-            app.world_mut().run_system_once(actions).unwrap();
+            app.world_mut().run_system_cached(actions).unwrap();
             assert!(!app.world().resource::<PendingInput>().0.wave_held);
+            app.world_mut().resource_mut::<PendingInput>().0 = default();
+            app.world_mut()
+                .resource_mut::<ButtonInput<MouseButton>>()
+                .reset_all();
+            app.world_mut()
+                .resource_mut::<ButtonInput<MouseButton>>()
+                .press(MouseButton::Right);
+            app.world_mut().run_system_once(app::input).unwrap();
+            app.world_mut().run_system_cached(actions).unwrap();
+            let input = &app.world().resource::<PendingInput>().0;
+            assert!(
+                !input.cast,
+                "Right-clicking HUD must not throw into the scene"
+            );
+            assert!(!input.wave);
+            assert!(!input.wave_held);
+            assert!(!input.toggle_song);
+        }
+    }
+
+    #[test]
+    fn scene_mouse_buttons_map_to_wave_and_crystal_without_changing_keyboard() {
+        use bevy::ecs::system::RunSystemOnce;
+
+        let (mut app, _) = input_app();
+        app.world_mut().resource_mut::<SessionUi>().screen = Screen::Playing;
+        app.world_mut().resource_mut::<Focus>().last_screen = Some(Screen::Playing);
+        for (mouse_button, key, wave, crystal) in [
+            (Some(MouseButton::Left), None, true, false),
+            (Some(MouseButton::Right), None, false, true),
+            (None, Some(KeyCode::KeyF), true, false),
+            (None, Some(KeyCode::Space), false, true),
+            (None, Some(KeyCode::KeyE), false, false),
+        ] {
+            app.world_mut().resource_mut::<PendingInput>().0 = default();
+            app.world_mut()
+                .resource_mut::<ButtonInput<MouseButton>>()
+                .reset_all();
+            app.world_mut()
+                .resource_mut::<ButtonInput<KeyCode>>()
+                .reset_all();
+            if let Some(button) = mouse_button {
+                app.world_mut()
+                    .resource_mut::<ButtonInput<MouseButton>>()
+                    .press(button);
+            }
+            if let Some(key) = key {
+                app.world_mut()
+                    .resource_mut::<ButtonInput<KeyCode>>()
+                    .press(key);
+            }
+            app.world_mut().run_system_once(app::input).unwrap();
+            app.world_mut().run_system_cached(actions).unwrap();
+            let pending = &app.world().resource::<PendingInput>().0;
+            assert_eq!(pending.wave, wave);
+            assert_eq!(pending.wave_held, wave);
+            assert_eq!(pending.cast, crystal);
+            assert!(!pending.toggle_song);
+            app.world_mut()
+                .resource_mut::<ButtonInput<MouseButton>>()
+                .clear();
+            app.world_mut()
+                .resource_mut::<ButtonInput<KeyCode>>()
+                .clear();
+            app.world_mut().resource_mut::<PendingInput>().0 = default();
+            app.world_mut().run_system_once(app::input).unwrap();
+            app.world_mut().run_system_cached(actions).unwrap();
+            let pending = &app.world().resource::<PendingInput>().0;
+            assert!(!pending.wave);
+            assert_eq!(pending.wave_held, wave);
+            assert!(
+                !pending.cast,
+                "Holding RMB or Space must not repeat Crystal"
+            );
         }
     }
 

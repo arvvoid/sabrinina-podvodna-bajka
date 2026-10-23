@@ -49,9 +49,9 @@ impl Style {
     pub fn binding(self, control: Control) -> Binding {
         let label = match (self, control) {
             (Self::Keyboard, Control::Swim) => "Mouse / WASD",
-            (Self::Keyboard, Control::Crystal) => "Space",
+            (Self::Keyboard, Control::Crystal) => "RMB / Space",
             (Self::Keyboard, Control::Song) => "Q",
-            (Self::Keyboard, Control::Wave) => "RMB / F",
+            (Self::Keyboard, Control::Wave) => "LMB / F",
             (Self::Keyboard, Control::Pause) => "Esc",
             (_, Control::Swim) => "Left stick",
             (Self::Xbox, Control::Crystal) => "X",
@@ -339,7 +339,7 @@ mod tests {
             Style::Generic
         );
         for (style, labels) in [
-            (Style::Keyboard, ["Space", "Q", "RMB / F"]),
+            (Style::Keyboard, ["RMB / Space", "Q", "LMB / F"]),
             (Style::Xbox, ["X", "B", "A"]),
             (Style::PlayStation, ["□", "○", "×"]),
             (Style::Generic, ["West", "East", "South"]),
